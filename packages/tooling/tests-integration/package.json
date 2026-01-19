@@ -1,0 +1,17 @@
+{
+  "name": "@sui-amm/tooling-tests-integration",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest --config ./vitest.integration.config.ts --poolOptions.threads.singleThread=true"
+  },
+  "devDependencies": {
+    "@mysten/sui": "^1.45.2",
+    "@sui-amm/domain-core": "workspace:*",
+    "@sui-amm/tooling-core": "workspace:*",
+    "@sui-amm/tooling-node": "workspace:*",
+    "@types/node": "^22.19.2",
+    "vitest": "^3.2.4"
+  }
+}

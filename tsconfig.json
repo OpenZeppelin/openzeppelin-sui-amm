@@ -1,0 +1,29 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/tooling/core"
+    },
+    {
+      "path": "./packages/tooling/node"
+    },
+    {
+      "path": "./packages/domain/core"
+    },
+    {
+      "path": "./packages/domain/node"
+    },
+    {
+      "path": "./packages/tooling/tests-integration"
+    },
+    {
+      "path": "./packages/dapp"
+    },
+    {
+      "path": "./packages/ui"
+    },
+    {
+      "path": "./packages/learn"
+    }
+  ]
+}

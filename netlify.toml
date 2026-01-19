@@ -1,0 +1,9 @@
+[build]
+  base = "."
+  command = "pnpm --filter ui run build"
+  publish = "packages/ui/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PNPM_VERSION = "9"
+  NEXT_TELEMETRY_DISABLED = "1"

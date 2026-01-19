@@ -1,0 +1,71 @@
+import type { SuiObjectChangeCreated, SuiObjectData } from "@mysten/sui/client"
+
+import type { ToolingCoreContext } from "./context.ts"
+import type { WrappedSuiObject } from "./object.ts"
+import { getSuiObject, normalizeVersion } from "./object.ts"
+
+/**
+ * Extracts the initial shared version from a shared object or object change.
+ * Shared (consensus) objects carry `initial_shared_version`, which must be
+ * supplied when building PTBs that touch them.
+ */
+export const extractInitialSharedVersion = (
+  created: SuiObjectChangeCreated | SuiObjectData
+): string | undefined => {
+  if (
+    created.owner &&
+    typeof created.owner === "object" &&
+    "Shared" in created.owner
+  )
+    return normalizeVersion(created.owner.Shared.initial_shared_version)
+
+  if ("initialSharedVersion" in created)
+    return normalizeVersion(
+      (created as unknown as { initialSharedVersion?: number | string })
+        .initialSharedVersion
+    )
+
+  return undefined
+}
+
+export type WrappedSuiSharedObject = WrappedSuiObject & {
+  sharedRef: {
+    objectId: string
+    mutable: boolean
+    initialSharedVersion: string
+  }
+}
+
+/**
+ * Fetches a shared object and returns the shared reference fields needed for Move calls.
+ * Shared object refs require the object ID, mutability, and initial shared version.
+ */
+export const getSuiSharedObject = async (
+  { objectId, mutable = false }: { objectId: string; mutable?: boolean },
+  context: ToolingCoreContext
+): Promise<WrappedSuiSharedObject> => {
+  const suiObject = await getSuiObject({ objectId }, context)
+
+  //@ts-expect-error Shared do exist on owner if a shared object
+  const sharedProperty = suiObject.owner?.Shared as {
+    initial_shared_version: string
+  }
+
+  if (!sharedProperty)
+    throw new Error(`Object ${objectId} is not shared or missing metadata`)
+
+  const initialSharedVersion = normalizeVersion(
+    sharedProperty.initial_shared_version
+  )
+  if (!initialSharedVersion)
+    throw new Error(`Shared object ${objectId} missing initial shared version.`)
+
+  return {
+    ...suiObject,
+    sharedRef: {
+      objectId: suiObject.object.objectId,
+      mutable,
+      initialSharedVersion
+    }
+  }
+}

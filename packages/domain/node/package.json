@@ -1,0 +1,15 @@
+{
+  "name": "@sui-amm/domain-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@mysten/sui": "^1.45.2",
+    "@sui-amm/domain-core": "workspace:*",
+    "@sui-amm/tooling-core": "workspace:*",
+    "@sui-amm/tooling-node": "workspace:*"
+  }
+}

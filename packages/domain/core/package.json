@@ -1,0 +1,20 @@
+{
+  "name": "@sui-amm/domain-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./models/*": "./src/models/*.ts",
+    "./ptb/*": "./src/ptb/*.ts",
+    "./flows/*": "./src/flows/*.ts"
+  },
+  "dependencies": {
+    "@mysten/sui": "^1.45.2",
+    "@pythnetwork/pyth-sui-js": "^2.4.0",
+    "@sui-amm/tooling-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.2",
+    "vitest": "^3.2.4"
+  }
+}
