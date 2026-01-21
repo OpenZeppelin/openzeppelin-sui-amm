@@ -16,12 +16,6 @@ export default defineConfig({
       ),
       "@sui-amm/tooling-node": resolveWorkspacePackage(
         "packages/tooling/node/src"
-      ),
-      "@sui-amm/domain-core": resolveWorkspacePackage(
-        "packages/domain/core/src"
-      ),
-      "@sui-amm/domain-node": resolveWorkspacePackage(
-        "packages/domain/node/src"
       )
     }
   },

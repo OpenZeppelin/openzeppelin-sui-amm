@@ -44,6 +44,7 @@ import {
   withArtifactsRoot
 } from "../artifacts.ts"
 import type { SuiResolvedConfig } from "../config.ts"
+import { loadSuiConfig } from "../config.ts"
 import { DEFAULT_TX_GAS_BUDGET } from "../constants.ts"
 import {
   buildKeystoreEntry,
@@ -51,6 +52,7 @@ import {
   readKeystoreEntries
 } from "../keypair.ts"
 import { probeRpcHealth } from "../localnet.ts"
+import { resolveChainIdentifier } from "../move-toml.ts"
 import {
   buildMoveEnvironmentFlags,
   buildMovePackage,
@@ -62,7 +64,6 @@ import { signAndExecute } from "../transactions.ts"
 import { getErrnoCode } from "../utils/fs.ts"
 import { parseBooleanEnv } from "./booleans.ts"
 import { parseNonNegativeInteger, parsePositiveInteger } from "./numbers.ts"
-import { resolveDappMoveRoot } from "./paths.ts"
 import { pollWithTimeout } from "./poll.ts"
 
 export type LocalnetStartOptions = {
@@ -134,6 +135,10 @@ export type TestContext = {
   queryEventsByTransaction: (digest: string) => Promise<SuiEvent[]>
   queryEventsByType: (eventType: string) => Promise<SuiEvent[]>
   cleanup: () => Promise<void>
+}
+
+export type TestContextOptions = {
+  moveSourceRootPath?: string
 }
 
 const DEFAULT_RPC_PORT = 9000
@@ -240,6 +245,71 @@ const shouldUseRandomPorts = () => {
 
 const resolveSkipLocalnetEnvKey = () =>
   LOCALNET_SKIP_ENV_KEYS.find((key) => parseBooleanEnv(process.env[key]))
+
+const shouldDebugMove = () => parseBooleanEnv(process.env.SUI_IT_DEBUG_MOVE)
+
+const logMoveDebug = (message: string) => {
+  if (!shouldDebugMove()) return
+
+  console.warn(`[move-debug] ${message}`)
+}
+
+const extractMoveEnvironmentBlock = (contents: string) => {
+  const lines = contents.split(/\r?\n/)
+  const headerIndex = lines.findIndex((line) =>
+    /^\s*\[environments\]\s*(#.*)?$/.test(line)
+  )
+
+  if (headerIndex < 0) return "missing [environments] section"
+
+  const blockLines: string[] = []
+  for (let index = headerIndex; index < lines.length; index += 1) {
+    const line = lines[index] ?? ""
+    if (index !== headerIndex && /^\s*\[[^\]]+\]\s*(#.*)?$/.test(line)) {
+      break
+    }
+    blockLines.push(line)
+  }
+
+  return blockLines.join("\n")
+}
+
+const logMovePackageDebug = async (label: string, packagePath: string) => {
+  if (!shouldDebugMove()) return
+
+  const moveTomlPath = path.join(packagePath, "Move.toml")
+  const moveLockPath = path.join(packagePath, "Move.lock")
+
+  logMoveDebug(`${label} packagePath=${packagePath}`)
+
+  try {
+    const moveTomlContents = await readFile(moveTomlPath, "utf8")
+    const environmentBlock = extractMoveEnvironmentBlock(moveTomlContents)
+    const hasLocalnetEnvironment = /^\s*localnet\s*=\s*"[^"]*"/m.test(
+      moveTomlContents
+    )
+    logMoveDebug(`${label} Move.toml environments:\n${environmentBlock}`)
+    logMoveDebug(
+      `${label} Move.toml localnet entry=${hasLocalnetEnvironment ? "present" : "missing"}`
+    )
+  } catch (error) {
+    logMoveDebug(
+      `${label} Move.toml read failed (${formatErrorMessage(error)})`
+    )
+  }
+
+  try {
+    const moveLockContents = await readFile(moveLockPath, "utf8")
+    const hasLocalnetPinned = /\[pinned\.localnet\./.test(moveLockContents)
+    logMoveDebug(
+      `${label} Move.lock localnet pinned sections=${hasLocalnetPinned ? "present" : "missing"}`
+    )
+  } catch (error) {
+    logMoveDebug(
+      `${label} Move.lock read failed (${formatErrorMessage(error)})`
+    )
+  }
+}
 
 const assertLocalnetEnabled = () => {
   const skipKey = resolveSkipLocalnetEnvKey()
@@ -1137,10 +1207,92 @@ const withKeystoreConfig = (
   }
 }
 
-const copyMoveSources = async (destinationRoot: string) => {
-  const sourceRoot = resolveDappMoveRoot()
-  await cp(sourceRoot, destinationRoot, { recursive: true })
+const resolveMoveSourceRootPath = async (sourceRoot?: string) => {
+  if (sourceRoot) return sourceRoot
+  const suiConfig = await loadSuiConfig()
+  return suiConfig.paths.move
+}
+
+const copyMoveSources = async (
+  destinationRoot: string,
+  sourceRoot?: string
+) => {
+  const resolvedSourceRoot = await resolveMoveSourceRootPath(sourceRoot)
+  await cp(resolvedSourceRoot, destinationRoot, { recursive: true })
   await removeMoveBuildArtifacts(destinationRoot)
+}
+
+const listMoveTomlFiles = async (rootDir: string): Promise<string[]> => {
+  const entries = await readdir(rootDir, { withFileTypes: true })
+  const files: string[] = []
+
+  await Promise.all(
+    entries.map(async (entry) => {
+      const fullPath = path.join(rootDir, entry.name)
+      if (entry.isDirectory()) {
+        files.push(...(await listMoveTomlFiles(fullPath)))
+      } else if (entry.isFile() && entry.name === "Move.toml") {
+        files.push(fullPath)
+      }
+    })
+  )
+
+  return files
+}
+
+const ensureLocalnetEnvironmentEntry = async (
+  moveRootPath: string,
+  chainId: string
+) => {
+  const moveTomlFiles = await listMoveTomlFiles(moveRootPath)
+
+  await Promise.all(
+    moveTomlFiles.map(async (moveTomlPath) => {
+      const contents = await readFile(moveTomlPath, "utf8")
+      if (/^\s*\[environments\]\s*$/m.test(contents)) {
+        if (/^\s*localnet\s*=\s*"[^"]*"/m.test(contents)) {
+          return
+        }
+        const updated = contents.replace(
+          /^\s*\[environments\]\s*$/m,
+          `[environments]\nlocalnet = "${chainId}"`
+        )
+        if (updated !== contents) {
+          await writeFile(moveTomlPath, updated, "utf8")
+        }
+        return
+      }
+
+      const suffix = contents.endsWith("\n") ? "" : "\n"
+      const updated = `${contents}${suffix}\n[environments]\nlocalnet = "${chainId}"\n`
+      await writeFile(moveTomlPath, updated, "utf8")
+    })
+  )
+}
+
+const ensureLocalnetEnvironmentEntryForPackage = async (
+  packagePath: string,
+  chainId: string
+) => {
+  const moveTomlPath = path.join(packagePath, "Move.toml")
+  const contents = await readFile(moveTomlPath, "utf8")
+
+  if (/^\s*localnet\s*=\s*"[^"]*"/m.test(contents)) return
+
+  if (/^\s*\[environments\]\s*$/m.test(contents)) {
+    const updated = contents.replace(
+      /^\s*\[environments\]\s*$/m,
+      `[environments]\nlocalnet = "${chainId}"`
+    )
+    if (updated !== contents) {
+      await writeFile(moveTomlPath, updated, "utf8")
+    }
+    return
+  }
+
+  const suffix = contents.endsWith("\n") ? "" : "\n"
+  const updated = `${contents}${suffix}\n[environments]\nlocalnet = "${chainId}"\n`
+  await writeFile(moveTomlPath, updated, "utf8")
 }
 
 const removeMoveBuildArtifacts = async (rootDir: string) => {
@@ -1548,14 +1700,15 @@ export const createLocalnetHarness = () => {
 
 export const createTestContext = async (
   localnet: LocalnetInstance,
-  testId: string
+  testId: string,
+  options?: TestContextOptions
 ): Promise<TestContext> => {
   const tempDir = await createTempDir(buildTempPrefix(testId))
   const moveRootPath = path.join(tempDir, "move")
   const artifactsDir = path.join(tempDir, "artifacts")
 
   await ensureDirectory(artifactsDir)
-  await copyMoveSources(moveRootPath)
+  await copyMoveSources(moveRootPath, options?.moveSourceRootPath)
 
   const suiConfig = buildSuiConfig({
     rpcUrl: localnet.rpcUrl,
@@ -1565,6 +1718,13 @@ export const createTestContext = async (
   const buildEnvironmentFlags = buildMoveEnvironmentFlags({
     environmentName: suiConfig.network.networkName
   })
+
+  const localnetChainId =
+    (await resolveChainIdentifier(
+      { environmentName: "localnet" },
+      { suiClient: localnet.suiClient, suiConfig }
+    )) ?? "00000000"
+  await ensureLocalnetEnvironmentEntry(moveRootPath, localnetChainId)
 
   await clearPublishedMetadataForNetwork(
     moveRootPath,
@@ -1623,11 +1783,18 @@ export const createTestContext = async (
         SUI_CONFIG_DIR: localnet.configDir,
         SUI_LOCALNET_CONFIG_DIR: localnet.configDir
       },
-      () =>
-        buildMovePackage(
-          resolvePackagePath(moveRootPath, packageRelativePath),
-          buildEnvironmentFlags
+      async () => {
+        const packagePath = resolvePackagePath(
+          moveRootPath,
+          packageRelativePath
         )
+        await ensureLocalnetEnvironmentEntryForPackage(
+          packagePath,
+          localnetChainId
+        )
+        await logMovePackageDebug("build", packagePath)
+        return buildMovePackage(packagePath, buildEnvironmentFlags)
+      }
     )
 
   const publishPackage = async (
@@ -1656,6 +1823,11 @@ export const createTestContext = async (
             moveRootPath,
             packageRelativePath
           )
+          await ensureLocalnetEnvironmentEntryForPackage(
+            packagePath,
+            localnetChainId
+          )
+          await logMovePackageDebug("publish", packagePath)
           await clearPublishedEntryForNetwork({
             packagePath,
             networkName: suiConfig.network.networkName
@@ -1758,9 +1930,10 @@ export const createTestContext = async (
 export const withTestContext = async <T>(
   localnet: LocalnetInstance,
   testId: string,
-  action: (context: TestContext) => Promise<T>
+  action: (context: TestContext) => Promise<T>,
+  options?: TestContextOptions
 ): Promise<T> => {
-  const context = await createTestContext(localnet, testId)
+  const context = await createTestContext(localnet, testId, options)
   try {
     return await action(context)
   } finally {

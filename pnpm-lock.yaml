@@ -164,9 +164,6 @@ importers:
       '@mysten/sui':
         specifier: ^1.45.2
         version: 1.45.2(typescript@5.9.3)
-      '@sui-amm/domain-core':
-        specifier: workspace:*
-        version: link:../../domain/core
       '@sui-amm/tooling-core':
         specifier: workspace:*
         version: link:../core

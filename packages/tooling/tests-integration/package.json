@@ -8,7 +8,6 @@
   },
   "devDependencies": {
     "@mysten/sui": "^1.45.2",
-    "@sui-amm/domain-core": "workspace:*",
     "@sui-amm/tooling-core": "workspace:*",
     "@sui-amm/tooling-node": "workspace:*",
     "@types/node": "^22.19.2",

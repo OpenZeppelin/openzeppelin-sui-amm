@@ -75,14 +75,14 @@ const buildPublishPlan = (
       url: "http://localhost:9000",
       account: { accountIndex: 0 }
     },
-    packagePath: "/tmp/move/amm",
+    packagePath: "/tmp/move/oracle-market",
     fullNodeUrl: "http://localhost:9000",
     keypair: Ed25519Keypair.generate(),
     gasBudget: 1000,
     shouldUseUnpublishedDependencies: false,
     unpublishedDependencies: [],
     buildFlags: [],
-    packageNames: { root: "amm", dependencies: [] },
+    packageNames: { root: "oracle-market", dependencies: [] },
     useCliPublish: true,
     suiCliVersion: "1.2.3",
     ...overrides
@@ -207,7 +207,7 @@ describe("publishPackage", () => {
 
         expect(artifacts).toHaveLength(1)
         expect(artifacts[0]?.packageId).toBe("0x1")
-        expect(artifacts[0]?.packageName).toBe("amm")
+        expect(artifacts[0]?.packageName).toBe("oracle-market")
 
         const deploymentPath = getDeploymentArtifactPath("localnet")
         const persisted = JSON.parse(
@@ -323,7 +323,7 @@ describe("publishPackage", () => {
         expect(artifacts[0]?.packageId).toBe("0x1")
         expect(artifacts[0]?.upgradeCap).toBe("0xcap")
         expect(artifacts[0]?.publisherId).toBe("0xpublisher")
-        expect(artifacts[0]?.packageName).toBe("amm")
+        expect(artifacts[0]?.packageName).toBe("oracle-market")
         expect(artifacts[0]?.dependencies).toEqual(["dep"])
         expect(artifacts[0]?.dependencyAddresses).toEqual({ Dep: "0x9" })
 

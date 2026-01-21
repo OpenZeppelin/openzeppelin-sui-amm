@@ -26,7 +26,7 @@ export const toolingVitestPlugin = (
   name: string
   config: (config: UserConfig) => Pick<UserConfig, "test">
 } => ({
-  name: "openzeppelin-sui-amm:tooling-vitest",
+  name: "sui-oracle-market:tooling-vitest",
   config: (config: UserConfig) => ({
     test: mergeTestOptions(config.test, options?.test)
   })

@@ -127,8 +127,8 @@ describe("artifact path helpers", () => {
         const deploymentArtifacts = [
           {
             packageId: "0x5",
-            packageName: "amm",
-            packagePath: "/tmp/move/amm",
+            packageName: "oracle-market",
+            packagePath: "/tmp/move/oracle-market",
             publishedAt: "2024-01-01T00:00:00Z"
           }
         ]
@@ -149,7 +149,7 @@ describe("artifact path helpers", () => {
         const latestObject =
           await getLatestObjectFromArtifact("::Struct")(networkName)
         const latestDeployment =
-          await getLatestDeploymentFromArtifact("amm")(networkName)
+          await getLatestDeploymentFromArtifact("oracle-market")(networkName)
 
         expect(latestObject?.objectId).toBe(normalizeSuiObjectId("0x4"))
         expect(latestDeployment?.packageId).toBe(normalizeSuiObjectId("0x5"))
@@ -160,12 +160,12 @@ describe("artifact path helpers", () => {
 
 describe("isPublishArtifactNamed", () => {
   it("matches by normalized package name or path", () => {
-    const matcher = isPublishArtifactNamed("amm")
+    const matcher = isPublishArtifactNamed("oracle-market")
 
     expect(
       matcher({
-        packageName: "AMM",
-        packagePath: "/tmp/move/amm"
+        packageName: "Oracle-Market",
+        packagePath: "/tmp/move/oracle-market"
       } as PublishArtifact)
     ).toBe(true)
   })

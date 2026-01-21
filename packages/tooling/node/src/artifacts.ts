@@ -266,6 +266,7 @@ export const isPublishArtifactNamed =
   (artifact: PublishArtifact): boolean => {
     const normalizedPackageName = artifact.packageName?.trim().toLowerCase()
     if (normalizedPackageName === artifactName) return true
+
     return false
   }
 
