@@ -1,0 +1,6 @@
+[package]
+name = "mock_coin"
+edition = "2024"
+
+[environments]
+localnet = "bec50ac7"
