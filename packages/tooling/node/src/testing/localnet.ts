@@ -45,7 +45,7 @@ import {
 } from "../artifacts.ts"
 import type { SuiResolvedConfig } from "../config.ts"
 import { loadSuiConfig } from "../config.ts"
-import { DEFAULT_TX_GAS_BUDGET } from "../constants.ts"
+import { DEFAULT_PUBLISH_GAS_BUDGET, DEFAULT_TX_GAS_BUDGET } from "../constants.ts"
 import {
   buildKeystoreEntry,
   loadKeypair,
@@ -145,7 +145,7 @@ const DEFAULT_RPC_PORT = 9000
 const DEFAULT_WEBSOCKET_PORT = 9001
 const DEFAULT_FAUCET_PORT = 9123
 const DEFAULT_MINIMUM_COIN_OBJECTS = 2
-const DEFAULT_MINIMUM_GAS_COIN_BALANCE = 500_000_000n
+const DEFAULT_MINIMUM_GAS_COIN_BALANCE = BigInt(DEFAULT_PUBLISH_GAS_BUDGET)
 const DEFAULT_FAUCET_REQUEST_ATTEMPTS = 1
 const DEFAULT_FAUCET_REQUEST_DELAY_MS = 50
 

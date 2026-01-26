@@ -24,6 +24,7 @@
     "./testing/scripts": "./src/testing/scripts.ts",
     "./testing/objects": "./src/testing/objects.ts",
     "./testing/observability": "./src/testing/observability.ts",
+    "./testing/paths": "./src/testing/paths.ts",
     "./testing/vitest-plugin": "./src/testing/vitest-plugin.ts",
     "./move": "./src/move.ts",
     "./move-lock": "./src/move-lock.ts",

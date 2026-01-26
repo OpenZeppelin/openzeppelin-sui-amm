@@ -10,4 +10,4 @@ deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "pac
 pyth = { local = "../pyth-mock", override = true, rename-from = "Pyth" }
 
 [environments]
-localnet = "bec50ac7"
+localnet = "43bd0c5c"

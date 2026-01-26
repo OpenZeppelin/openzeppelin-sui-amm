@@ -190,6 +190,11 @@ fun apply_amm_config_updates(
     config.pyth_price_feed_id = pyth_price_feed_id;
 }
 
+/// Shares a configuration object.
+public fun share_amm_config(config: AMMConfig) {
+    transfer::share_object(config);
+}
+
 /// Emits a configuration created event.
 fun emit_config_created(config: &AMMConfig) {
     event::emit(AMMConfigCreatedEvent {
@@ -219,12 +224,6 @@ fun assert_valid_feed_id(pyth_price_feed_id: &vector<u8>) {
 }
 
 // === Test-Only Helpers ===
-
-#[test_only]
-/// Shares a configuration object.
-public fun share_amm_config(config: AMMConfig) {
-    transfer::share_object(config);
-}
 
 #[test_only]
 /// Creates the package witness and runs init for tests.
