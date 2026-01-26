@@ -114,6 +114,22 @@ jobs:
             /tmp/sui-it-*/logs/**
           if-no-files-found: ignore
 
+  move-tests:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - prop_amm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/setup-sui
+      - name: Run Move tests (${{ matrix.package }})
+        run: sui move test --path ./packages/dapp/move/prop_amm --environment localnet
+
   security-audit:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
