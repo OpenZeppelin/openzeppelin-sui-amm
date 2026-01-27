@@ -17,7 +17,7 @@ describe("transaction summary helpers", () => {
           {
             type: "created",
             objectId: "0x2",
-            objectType: "0x3::shop::Shop"
+            objectType: "0x3::counter::Counter"
           }
         ],
         balanceChanges: [

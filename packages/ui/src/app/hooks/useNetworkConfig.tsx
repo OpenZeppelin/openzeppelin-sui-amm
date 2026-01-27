@@ -4,16 +4,16 @@ import { createNetworkConfig } from "@mysten/dapp-kit"
 import { getFullnodeUrl } from "@mysten/sui/client"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import {
-    CONTRACT_PACKAGE_VARIABLE_NAME,
-    DEVNET_CONTRACT_PACKAGE_ID,
-    DEVNET_EXPLORER_URL,
-    EXPLORER_URL_VARIABLE_NAME,
-    LOCALNET_CONTRACT_PACKAGE_ID,
-    LOCALNET_EXPLORER_URL,
-    MAINNET_CONTRACT_PACKAGE_ID,
-    MAINNET_EXPLORER_URL,
-    TESTNET_CONTRACT_PACKAGE_ID,
-    TESTNET_EXPLORER_URL
+  CONTRACT_PACKAGE_VARIABLE_NAME,
+  DEVNET_CONTRACT_PACKAGE_ID,
+  DEVNET_EXPLORER_URL,
+  EXPLORER_URL_VARIABLE_NAME,
+  LOCALNET_CONTRACT_PACKAGE_ID,
+  LOCALNET_EXPLORER_URL,
+  MAINNET_CONTRACT_PACKAGE_ID,
+  MAINNET_EXPLORER_URL,
+  TESTNET_CONTRACT_PACKAGE_ID,
+  TESTNET_EXPLORER_URL
 } from "../config/network"
 import useCustomNetworks from "./useCustomNetworks"
 import useHostNetworkPolicy from "./useHostNetworkPolicy"

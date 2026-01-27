@@ -18,32 +18,35 @@ const testEnv = createToolingIntegrationTestEnv()
 const eventTypeEndsWith = (eventType: string, suffix: string) =>
   eventType.toLowerCase().endsWith(suffix.toLowerCase())
 
-const encodeShopName = (name: string) => {
-  if (!name.trim()) throw new Error("Shop name cannot be empty.")
-  return new TextEncoder().encode(name)
+const encodeCounterLabel = (label: string) => {
+  if (!label.trim()) throw new Error("Counter label cannot be empty.")
+  return new TextEncoder().encode(label)
 }
 
-const buildCreateShopTransaction = (packageId: string, shopName: string) => {
+const buildCreateCounterTransaction = (
+  packageId: string,
+  counterLabel: string
+) => {
   const transaction = newTransaction()
   transaction.moveCall({
-    target: `${packageId}::shop::create_shop`,
-    arguments: [transaction.pure.vector("u8", encodeShopName(shopName))]
+    target: `${packageId}::counter::create_counter`,
+    arguments: [transaction.pure.vector("u8", encodeCounterLabel(counterLabel))]
   })
   return transaction
 }
 
-const buildUpdateShopOwnerTransaction = (
+const buildUpdateCounterOwnerTransaction = (
   packageId: string,
-  shop: WrappedSuiSharedObject,
+  counter: WrappedSuiSharedObject,
   ownerCapId: string,
   newOwner: string
 ) => {
   const transaction = newTransaction()
-  const shopArgument = transaction.sharedObjectRef(shop.sharedRef)
+  const counterArgument = transaction.sharedObjectRef(counter.sharedRef)
   transaction.moveCall({
-    target: `${packageId}::shop::update_shop_owner`,
+    target: `${packageId}::counter::update_counter_owner`,
     arguments: [
-      shopArgument,
+      counterArgument,
       transaction.object(ownerCapId),
       transaction.pure.address(newOwner)
     ]
@@ -52,9 +55,9 @@ const buildUpdateShopOwnerTransaction = (
 }
 
 describe("transactions and events", () => {
-  it("creates a shop and updates the owner with event assertions", async () => {
+  it("creates a counter and updates the owner with event assertions", async () => {
     await testEnv.withTestContext(
-      "transactions-create-shop",
+      "transactions-create-counter",
       async (context) => {
         const publisher = context.createAccount("publisher")
         await context.fundAccount(publisher, { minimumCoinObjects: 2 })
@@ -66,51 +69,51 @@ describe("transactions and events", () => {
         )
         const rootArtifact = pickRootNonDependencyArtifact(artifacts)
 
-        const createShopTransaction = buildCreateShopTransaction(
+        const createCounterTransaction = buildCreateCounterTransaction(
           rootArtifact.packageId,
-          "Integration Shop"
+          "Integration Counter"
         )
         const createResult = await context.signAndExecuteTransaction(
-          createShopTransaction,
+          createCounterTransaction,
           publisher
         )
         await context.waitForFinality(createResult.digest)
 
-        const shopId = requireCreatedObjectId(
+        const counterId = requireCreatedObjectId(
           createResult,
-          "::shop::Shop",
-          "Shop"
+          "::counter::Counter",
+          "Counter"
         )
         const ownerCapId = requireCreatedObjectId(
           createResult,
-          "::shop::ShopOwnerCap",
-          "ShopOwnerCap"
+          "::counter::CounterOwnerCap",
+          "CounterOwnerCap"
         )
 
         await assertObjectOwnerById({
           suiClient: context.suiClient,
           objectId: ownerCapId,
           expectedOwner: publisher.address,
-          label: "ShopOwnerCap"
+          label: "CounterOwnerCap"
         })
 
         await assertEventByDigest({
           suiClient: context.suiClient,
           digest: createResult.digest,
           predicate: (event) =>
-            eventTypeEndsWith(event.type, "::shop::ShopCreated"),
-          label: "ShopCreated"
+            eventTypeEndsWith(event.type, "::counter::CounterCreated"),
+          label: "CounterCreated"
         })
 
         const newOwner = context.createAccount("new-owner")
-        const shopShared = await getSuiSharedObject(
-          { objectId: shopId, mutable: true },
+        const counterShared = await getSuiSharedObject(
+          { objectId: counterId, mutable: true },
           { suiClient: context.suiClient }
         )
 
-        const updateOwnerTransaction = buildUpdateShopOwnerTransaction(
+        const updateOwnerTransaction = buildUpdateCounterOwnerTransaction(
           rootArtifact.packageId,
-          shopShared,
+          counterShared,
           ownerCapId,
           newOwner.address
         )
@@ -124,8 +127,8 @@ describe("transactions and events", () => {
           suiClient: context.suiClient,
           digest: updateResult.digest,
           predicate: (event) =>
-            eventTypeEndsWith(event.type, "::shop::ShopOwnerUpdated"),
-          label: "ShopOwnerUpdated"
+            eventTypeEndsWith(event.type, "::counter::CounterOwnerUpdated"),
+          label: "CounterOwnerUpdated"
         })
       }
     )

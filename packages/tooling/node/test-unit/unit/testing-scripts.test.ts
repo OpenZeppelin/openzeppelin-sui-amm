@@ -80,10 +80,12 @@ describe("testing script helpers", () => {
 
   it("resolves script paths", () => {
     const buyerPath = resolveBuyerScriptPath("buy.ts")
-    const ownerPath = resolveOwnerScriptPath("shop-create")
+    const ownerPath = resolveOwnerScriptPath("counter-create")
 
     expect(buyerPath.endsWith(path.join("buyer", "buy.ts"))).toBe(true)
-    expect(ownerPath.endsWith(path.join("owner", "shop-create.ts"))).toBe(true)
+    expect(ownerPath.endsWith(path.join("owner", "counter-create.ts"))).toBe(
+      true
+    )
   })
 
   it("runs scripts with resolved environment", async () => {
