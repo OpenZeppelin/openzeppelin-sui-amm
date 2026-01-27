@@ -5,7 +5,7 @@ import {
   getAmmConfigOverview,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 export type AmmConfigStatus = "idle" | "loading" | "success" | "error"
 
@@ -22,6 +22,15 @@ const emptyAmmConfigState = (): AmmConfigState => ({
 const useAmmConfigOverview = (ammConfigId?: string) => {
   const suiClient = useSuiClient()
   const [state, setState] = useState<AmmConfigState>(emptyAmmConfigState())
+  const [refreshIndex, setRefreshIndex] = useState(0)
+
+  const refreshAmmConfig = useCallback(() => {
+    setRefreshIndex((previous) => previous + 1)
+  }, [])
+
+  const applyAmmConfigUpdate = useCallback((ammConfig: AmmConfigOverview) => {
+    setState({ status: "success", ammConfig, error: undefined })
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -57,12 +66,14 @@ const useAmmConfigOverview = (ammConfigId?: string) => {
     return () => {
       active = false
     }
-  }, [ammConfigId, suiClient])
+  }, [ammConfigId, refreshIndex, suiClient])
 
   return {
     status: state.status,
     ammConfig: state.ammConfig,
-    error: state.error
+    error: state.error,
+    refreshAmmConfig,
+    applyAmmConfigUpdate
   }
 }
 

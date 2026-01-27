@@ -1,3 +1,5 @@
+import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
+
 export type TAmmConfigBadge = {
   label: string
   className: string
@@ -24,4 +26,12 @@ export type TAmmConfigCardViewModel = {
   explorerUrl?: string
   ammConfigId?: string
   content: TAmmConfigCardContent
+}
+
+export type TAmmConfigCardState = {
+  viewModel: TAmmConfigCardViewModel
+  ammConfig?: AmmConfigOverview
+  refreshAmmConfig: () => void
+  canUpdateConfig: boolean
+  applyAmmConfigUpdate: (ammConfig: AmmConfigOverview) => void
 }

@@ -40,11 +40,11 @@ import {
   logWarning
 } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
+import { waitForObjectState } from "@sui-amm/tooling-node/testing/objects"
 import {
   findCreatedObjectIds,
   newTransaction
 } from "@sui-amm/tooling-node/transactions"
-import { waitForObjectState } from "@sui-amm/tooling-node/testing/objects"
 import { DEFAULT_PYTH_PRICE_FEED_LABEL } from "../../utils/amm.ts"
 import type {
   CoinArtifact,
@@ -440,7 +440,6 @@ const ensureCoin = async (
   ])
   const mintedCoinObjectId = ownedCoins[0]?.coinObjectId
   const currencyObjectId = resolvedCurrencyObjectId ?? derivedCurrencyObjectId
-  const coinTypeSuffix = `<${seed.coinType}>`
 
   if (metadata || resolvedCurrencyObjectId) {
     // Already initialized; return discovered artifacts (may be partial).
@@ -870,9 +869,7 @@ const resolveTreasuryCoinSnapshot = async ({
       : undefined
 
     const preferredCoin = preferredCoinId
-      ? ownedCoins.find(
-          (coin) => coin.coinObjectId === preferredCoinId
-        )
+      ? ownedCoins.find((coin) => coin.coinObjectId === preferredCoinId)
       : undefined
 
     const selectedCoin = preferredCoin ?? selectRichestCoin(ownedCoins)

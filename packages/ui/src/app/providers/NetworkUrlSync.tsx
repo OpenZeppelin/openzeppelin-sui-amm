@@ -24,9 +24,7 @@ const NetworkUrlSync = () => {
   const pendingAppNetworkRef = useRef<string | undefined>(undefined)
 
   const networkFromUrl = useMemo(() => {
-    return normalizeNetworkKey(
-      searchParams.get(NETWORK_QUERY_PARAM)
-    )
+    return normalizeNetworkKey(searchParams.get(NETWORK_QUERY_PARAM))
   }, [searchParams])
 
   const normalizedCurrentNetwork = useMemo(() => {
@@ -65,7 +63,7 @@ const NetworkUrlSync = () => {
     if (!normalizedCurrentNetwork) return
 
     const currentUrlNetwork = normalizeNetworkKey(
-      searchParams.get(NETWORK_QUERY_PARAM) 
+      searchParams.get(NETWORK_QUERY_PARAM)
     )
 
     const pendingUrlNetwork = pendingUrlNetworkRef.current
@@ -93,7 +91,7 @@ const NetworkUrlSync = () => {
     // Nothing to do: correct canonical param is already present.
     if (
       currentUrlNetwork === normalizedCurrentNetwork &&
-      searchParams.has(NETWORK_QUERY_PARAM) 
+      searchParams.has(NETWORK_QUERY_PARAM)
     ) {
       return
     }

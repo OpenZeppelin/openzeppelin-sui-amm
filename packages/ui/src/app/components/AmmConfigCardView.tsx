@@ -5,6 +5,7 @@ import type {
   TAmmConfigCardContent,
   TAmmConfigCardViewModel
 } from "../types/TAmmConfigCard"
+import Button from "./Button"
 import CopyableId from "./CopyableId"
 import Loading from "./Loading"
 
@@ -91,11 +92,17 @@ const renderContent = (content: TAmmConfigCardContent) => {
 const AmmConfigCardView = ({
   title,
   description,
-  networkLabel,
   explorerUrl,
   ammConfigId,
-  content
-}: TAmmConfigCardViewModel) => {
+  content,
+  onOpenUpdateModal,
+  updateDisabled,
+  updateTooltip
+}: TAmmConfigCardViewModel & {
+  onOpenUpdateModal?: () => void
+  updateDisabled?: boolean
+  updateTooltip?: string
+}) => {
   return (
     <section className="w-full max-w-4xl px-4">
       <div className="rounded-2xl border border-slate-300/80 bg-white/90 shadow-[0_22px_65px_-45px_rgba(15,23,42,0.45)] backdrop-blur-md transition dark:border-slate-50/30 dark:bg-slate-950/70">
@@ -108,11 +115,19 @@ const AmmConfigCardView = ({
               {description}
             </p>
           </div>
-          <div className="ml-auto flex items-center">
-            <span className="bg-sds-blue/15 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-sds-dark dark:text-sds-light">
-              {networkLabel}
-            </span>
-          </div>
+          {onOpenUpdateModal ? (
+            <div className="ml-auto flex items-center">
+              <Button
+                variant="secondary"
+                size="compact"
+                onClick={onOpenUpdateModal}
+                disabled={updateDisabled}
+                tooltip={updateTooltip}
+              >
+                Update config
+              </Button>
+            </div>
+          ) : undefined}
         </div>
         <div className="space-y-4 px-6 py-5">
           <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">

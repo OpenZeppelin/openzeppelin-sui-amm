@@ -7,9 +7,11 @@ import { formatNetworkType } from "../helpers/network"
 import type {
   TAmmConfigBadge,
   TAmmConfigCardContent,
+  TAmmConfigCardState,
   TAmmConfigCardViewModel,
   TAmmConfigDetails
 } from "../types/TAmmConfigCard"
+import useAmmConfigUpdateEligibility from "./useAmmConfigUpdateEligibility"
 import useAmmConfigOverview, {
   type AmmConfigStatus
 } from "./useAmmConfigOverview"
@@ -17,7 +19,8 @@ import useExplorerUrl from "./useExplorerUrl"
 import useResolvedAmmConfigId from "./useResolvedAmmConfigId"
 
 const headerTitle = "AMM configuration"
-const headerDescription = "Snapshot of the on-chain AMM config for this environment."
+const headerDescription =
+  "Snapshot of the on-chain AMM config for this environment."
 const missingConfigMessage = "AMM config ID is not configured for this network."
 const defaultLoadErrorMessage = "Unable to load AMM config."
 const positiveToneClassName =
@@ -102,11 +105,13 @@ const resolveContentState = ({
   return { state: "ready", details: buildAmmConfigDetails(ammConfig) }
 }
 
-const useAmmConfigCardViewModel = (): TAmmConfigCardViewModel => {
+const useAmmConfigCardViewModel = (): TAmmConfigCardState => {
   const { network: currentNetwork } = useSuiClientContext()
   const explorerUrl = useExplorerUrl()
   const ammConfigId = useResolvedAmmConfigId()
-  const { status, ammConfig, error } = useAmmConfigOverview(ammConfigId)
+  const { status, ammConfig, error, refreshAmmConfig, applyAmmConfigUpdate } =
+    useAmmConfigOverview(ammConfigId)
+  const { canUpdateConfig } = useAmmConfigUpdateEligibility(ammConfigId)
 
   const networkLabel = useMemo(
     () => resolveNetworkLabel(currentNetwork),
@@ -124,13 +129,21 @@ const useAmmConfigCardViewModel = (): TAmmConfigCardViewModel => {
     [ammConfigId, status, ammConfig, error]
   )
 
-  return {
+  const viewModel: TAmmConfigCardViewModel = {
     title: headerTitle,
     description: headerDescription,
     networkLabel,
     explorerUrl,
     ammConfigId,
     content
+  }
+
+  return {
+    viewModel,
+    ammConfig,
+    refreshAmmConfig,
+    canUpdateConfig,
+    applyAmmConfigUpdate
   }
 }
 

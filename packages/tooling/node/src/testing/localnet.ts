@@ -45,7 +45,10 @@ import {
 } from "../artifacts.ts"
 import type { SuiResolvedConfig } from "../config.ts"
 import { loadSuiConfig } from "../config.ts"
-import { DEFAULT_PUBLISH_GAS_BUDGET, DEFAULT_TX_GAS_BUDGET } from "../constants.ts"
+import {
+  DEFAULT_PUBLISH_GAS_BUDGET,
+  DEFAULT_TX_GAS_BUDGET
+} from "../constants.ts"
 import {
   buildKeystoreEntry,
   loadKeypair,
