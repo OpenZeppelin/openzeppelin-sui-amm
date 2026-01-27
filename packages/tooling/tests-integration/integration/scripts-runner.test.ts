@@ -13,8 +13,8 @@ import { createToolingIntegrationTestEnv } from "../helpers/env.ts"
 const testEnv = createToolingIntegrationTestEnv()
 
 describe("script runner", () => {
-  it("runs owner shop-create script on localnet", async () => {
-    await testEnv.withTestContext("owner-shop-create", async (context) => {
+  it("runs owner counter-create script on localnet", async () => {
+    await testEnv.withTestContext("owner-counter-create", async (context) => {
       const publisher = context.createAccount("publisher")
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
 
@@ -26,20 +26,20 @@ describe("script runner", () => {
       const rootArtifact = pickRootNonDependencyArtifact(artifacts)
 
       const scriptRunner = createSuiScriptRunner(context)
-      const result = await scriptRunner.runOwnerScript("shop-create", {
+      const result = await scriptRunner.runOwnerScript("counter-create", {
         account: publisher,
         args: {
           json: true,
-          shopPackageId: rootArtifact.packageId,
-          name: "Script Shop"
+          counterPackageId: rootArtifact.packageId,
+          label: "Script Counter"
         }
       })
 
       expect(result.exitCode).toBe(0)
       const parsed = parseJsonFromScriptOutput<{
-        shopOverview?: { shopId?: string }
-      }>(result.stdout, "shop-create output")
-      expect(parsed.shopOverview?.shopId).toBeTruthy()
+        counterOverview?: { counterId?: string }
+      }>(result.stdout, "counter-create output")
+      expect(parsed.counterOverview?.counterId).toBeTruthy()
 
       const objectsPath = path.join(
         context.artifactsDir,
@@ -50,10 +50,10 @@ describe("script runner", () => {
         objectType?: string
       }>
 
-      const hasShopObject = objects.some((entry) =>
-        entry.objectType?.endsWith("::shop::Shop")
+      const hasCounterObject = objects.some((entry) =>
+        entry.objectType?.endsWith("::counter::Counter")
       )
-      expect(hasShopObject).toBe(true)
+      expect(hasCounterObject).toBe(true)
     })
   })
 })

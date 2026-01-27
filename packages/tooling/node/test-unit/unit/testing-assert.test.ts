@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  assertBalanceChange,
   assertEventByDigest,
   assertMoveAbort,
   assertObjectOwnerById,
-  assertBalanceChange,
   assertOwnerAddress,
   assertTransactionFailed,
   assertTransactionSucceeded,
@@ -44,46 +44,46 @@ describe("testing assert helpers", () => {
 
   it("asserts event by digest", async () => {
     const queryEvents = vi.fn().mockResolvedValue({
-      data: [{ type: "0x1::shop::Event", id: { txDigest: "0xabc" } }]
+      data: [{ type: "0x1::counter::Event", id: { txDigest: "0xabc" } }]
     })
 
     const event = await assertEventByDigest({
       suiClient: { queryEvents } as never,
       digest: "0xabc",
-      eventType: "0x1::shop::Event"
+      eventType: "0x1::counter::Event"
     })
 
-    expect(event.type).toBe("0x1::shop::Event")
+    expect(event.type).toBe("0x1::counter::Event")
   })
 
   it("asserts move abort details", () => {
     const error =
-      'MoveAbort(MoveLocation { module: "shop", function: 1, instruction: 0, function_name: "create_shop" }, 42)'
+      'MoveAbort(MoveLocation { module: "counter", function: 1, instruction: 0, function_name: "create_counter" }, 42)'
 
     const details = assertMoveAbort(
       {
         effects: { status: { status: "failure", error } }
       } as never,
-      { module: "shop", functionName: "create_shop", abortCode: 42 }
+      { module: "counter", functionName: "create_counter", abortCode: 42 }
     )
 
     expect(details.abortCode).toBe(42)
-    expect(details.functionName).toBe("create_shop")
+    expect(details.functionName).toBe("create_counter")
   })
 
   it("asserts move abort details with address-qualified modules", () => {
     const error =
-      "MoveAbort(AbortLocation { module: 0x2::shop, function: create_shop }, abort_code: 7)"
+      "MoveAbort(AbortLocation { module: 0x2::counter, function: create_counter }, abort_code: 7)"
 
     const details = assertMoveAbort(
       {
         effects: { status: { status: "failure", error } }
       } as never,
-      { module: "shop", functionName: "create_shop", abortCode: 7 }
+      { module: "counter", functionName: "create_counter", abortCode: 7 }
     )
 
     expect(details.abortCode).toBe(7)
-    expect(details.module).toBe("shop")
+    expect(details.module).toBe("counter")
   })
 
   it("requires created object ids", () => {
@@ -93,11 +93,11 @@ describe("testing assert helpers", () => {
           {
             type: "created",
             objectId: "0x1",
-            objectType: "0x2::shop::Shop"
+            objectType: "0x2::counter::Counter"
           }
         ]
       } as never,
-      "::shop::Shop"
+      "::counter::Counter"
     )
 
     expect(createdId).toBe("0x1")
