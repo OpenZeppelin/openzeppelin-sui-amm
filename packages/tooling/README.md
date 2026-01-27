@@ -261,34 +261,34 @@ import { createSuiLocalnetTestEnv } from "_root_package__/tooling-node/testing/e
 const testEnv = createSuiLocalnetTestEnv({ mode: "test", withFaucet: true })
 
 describe("owner scripts", () => {
-  it("runs shop-create and parses JSON output", async () => {
-    await testEnv.withTestContext("owner-shop-create", async (context) => {
+  it("runs amm-create and parses JSON output", async () => {
+    await testEnv.withTestContext("owner-amm-create", async (context) => {
       const publisher = context.createAccount("publisher")
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
 
       const artifacts = await context.publishPackage(
-        "simple-contract",
+        "prop_amm",
         publisher,
         { withUnpublishedDependencies: true }
       )
       const rootArtifact = pickRootNonDependencyArtifact(artifacts)
 
       const scriptRunner = createSuiScriptRunner(context)
-      const result = await scriptRunner.runOwnerScript("shop-create", {
+      const result = await scriptRunner.runOwnerScript("amm-create", {
         account: publisher,
         args: {
           json: true,
-          shopPackageId: rootArtifact.packageId,
-          name: "Script Shop"
+          ammPackageId: rootArtifact.packageId,
+          pythPriceFeedLabel: "MOCK_SUI_FEED"
         }
       })
 
       expect(result.exitCode).toBe(0)
-      const parsed = parseJsonFromScriptOutput<{ shopOverview?: { shopId?: string } }>(
+      const parsed = parseJsonFromScriptOutput<{ ammConfig?: { configId?: string } }>(
         result.stdout,
-        "shop-create output"
+        "amm-create output"
       )
-      expect(parsed.shopOverview?.shopId).toBeTruthy()
+      expect(parsed.ammConfig?.configId).toBeTruthy()
     })
   })
 })
