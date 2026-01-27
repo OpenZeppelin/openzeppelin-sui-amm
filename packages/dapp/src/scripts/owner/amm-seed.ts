@@ -33,6 +33,7 @@ import {
   logWarning
 } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
+import { waitForObjectState } from "@sui-amm/tooling-node/testing/objects"
 import { requireCreatedArtifactIdBySuffix } from "@sui-amm/tooling-node/transactions"
 import {
   logAmmConfigOverview,
@@ -62,6 +63,21 @@ type AmmSeedOutput = {
   transactionSummary?: { label?: string }
   didPublish: boolean
   didCreateAmmConfig: boolean
+}
+
+const waitForPackageAvailability = async (
+  packageId: string,
+  tooling: Pick<Tooling, "suiClient" | "network">
+) => {
+  if (tooling.network.networkName !== "localnet") return
+
+  await waitForObjectState({
+    suiClient: tooling.suiClient,
+    objectId: packageId,
+    label: "AMM package",
+    objectOptions: { showType: true, showContent: true },
+    predicate: (response) => response.data?.content?.dataType === "package"
+  })
 }
 
 const doesObjectExist = async ({
@@ -345,6 +361,10 @@ runSuiScript(
           tooling,
           cliArguments
         })
+
+      if (didPublish) {
+        await waitForPackageAvailability(ammPackageId, tooling)
+      }
 
       const {
         ammConfigSnapshot,
