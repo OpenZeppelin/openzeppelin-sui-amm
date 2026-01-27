@@ -68,9 +68,12 @@ public struct AMMConfigUpdatedEvent has copy, drop {
 
 // === Init ===
 
+/// One-time publisher witness created at publish time.
 public struct MANAGER has drop {}
 
 /// Initializes the package and transfers the admin capability to the publisher.
+///
+/// This is intended to run once at publish time via the one-time witness.
 fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
     package::claim_and_keep<MANAGER>(publisher_witness, ctx);
 
@@ -81,6 +84,8 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 // === Public Functions ===
 
 /// Creates a new AMM configuration object with validated inputs.
+///
+/// The returned object is owned; call `share_amm_config` to make it shared.
 public fun create_amm_config(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
@@ -104,6 +109,8 @@ public fun create_amm_config(
 }
 
 /// Updates a configuration object; requires the admin capability.
+///
+/// The admin capability is the authorization proof for config mutations.
 public fun update_amm_config(
     config: &mut AMMConfig,
     admin_cap: &AMMAdminCap,
@@ -191,6 +198,8 @@ fun apply_amm_config_updates(
 }
 
 /// Shares a configuration object.
+///
+/// Shared configs are readable by anyone; only the admin cap can update.
 public fun share_amm_config(config: AMMConfig) {
     transfer::share_object(config);
 }
@@ -218,6 +227,8 @@ fun emit_config_updated(config: &AMMConfig) {
 }
 
 /// Validates the Pyth price feed identifier.
+///
+/// Pyth feed IDs are 32-byte identifiers.
 fun assert_valid_feed_id(pyth_price_feed_id: &vector<u8>) {
     assert!(!pyth_price_feed_id.is_empty(), EEmptyFeedId);
     assert!(pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH, EInvalidFeedIdLength);

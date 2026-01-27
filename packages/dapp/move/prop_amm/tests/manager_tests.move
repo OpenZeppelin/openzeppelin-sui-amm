@@ -12,14 +12,17 @@ const PYTH_PRICE_FEED_ID_LENGTH_FOR_TESTS: u64 = 32;
 
 // === Helpers ===
 
+/// Builds a dummy Pyth feed ID with a consistent byte value.
 fun build_pyth_price_feed_id_for_tests(length: u64): vector<u8> {
     build_pyth_price_feed_id_with_byte_for_tests(length, 0)
 }
 
+/// Builds a dummy Pyth feed ID with a caller-provided byte value.
 fun build_pyth_price_feed_id_with_byte_for_tests(length: u64, byte_value: u8): vector<u8> {
     vector::tabulate!(length, |_| byte_value)
 }
 
+/// Runs package init in a scenario and advances to the next transaction.
 fun init_and_advance_scenario(
     scenario: &mut test_scenario::Scenario,
     sender: address,
@@ -28,6 +31,7 @@ fun init_and_advance_scenario(
     test_scenario::next_tx(scenario, sender)
 }
 
+/// Creates a config, shares it, and advances to the next transaction.
 fun create_and_share_amm_config_and_advance_scenario(
     scenario: &mut test_scenario::Scenario,
     sender: address,
@@ -47,6 +51,7 @@ fun create_and_share_amm_config_and_advance_scenario(
     test_scenario::next_tx(scenario, sender)
 }
 
+/// Updates a config, returns resources to the scenario, and advances.
 fun update_amm_config_and_advance_scenario(
     config: manager::AMMConfig,
     admin_cap: manager::AMMAdminCap,

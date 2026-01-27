@@ -6,12 +6,14 @@ use sui::table::Table;
 // === Structs ===
 
 /// Per-trader account state.
+///
+/// Uses a table to map each pool ID to the trader's active order IDs.
 public struct TraderAccount has key {
     /// Unique ID for the account object.
     id: UID,
     /// Account owner.
     owner: address,
-    /// Active order IDs keyed by pool ID.
+    /// Active order IDs keyed by pool ID (table entries are stored on-chain).
     active_orders: Table<ID, vector<ID>>,
 }
 
