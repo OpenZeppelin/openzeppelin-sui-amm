@@ -1,3 +1,4 @@
+import type * as ArtifactsModule from "@sui-amm/tooling-node/artifacts"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const artifactMocks = vi.hoisted(() => ({
@@ -14,7 +15,7 @@ const logMocks = vi.hoisted(() => ({
 }))
 
 vi.mock("@sui-amm/tooling-node/artifacts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@sui-amm/tooling-node/artifacts")>()),
+  ...(await importOriginal<typeof ArtifactsModule>()),
   readArtifact: artifactMocks.readArtifact
 }))
 

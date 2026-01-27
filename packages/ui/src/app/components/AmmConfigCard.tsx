@@ -6,12 +6,8 @@ import AmmConfigCardView from "./AmmConfigCardView"
 import UpdateAmmConfigModal from "./UpdateAmmConfigModal"
 
 const AmmConfigCard = () => {
-  const {
-    viewModel,
-    ammConfig,
-    canUpdateConfig,
-    applyAmmConfigUpdate
-  } = useAmmConfigCardViewModel()
+  const { viewModel, ammConfig, canUpdateConfig, applyAmmConfigUpdate } =
+    useAmmConfigCardViewModel()
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
   const handleOpenUpdateModal = canUpdateConfig
     ? () => setIsUpdateModalOpen(true)
