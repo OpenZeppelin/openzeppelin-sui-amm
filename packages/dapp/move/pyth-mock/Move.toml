@@ -1,0 +1,6 @@
+[package]
+name = "Pyth"
+edition = "2024"
+
+[environments]
+localnet = "43bd0c5c"

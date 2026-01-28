@@ -153,6 +153,7 @@ export const readArtifact = async <TArtifact>(
  */
 const resolveArtifactsRoot = () => {
   const scoped = artifactsRootStore.getStore()
+
   if (scoped) return scoped
 
   const override = process.env.SUI_ARTIFACTS_DIR?.trim()
@@ -265,7 +266,7 @@ export const isPublishArtifactNamed =
   (artifactName: string) =>
   (artifact: PublishArtifact): boolean => {
     const normalizedPackageName = artifact.packageName?.trim().toLowerCase()
-    if (normalizedPackageName === artifactName) return true
+    if (normalizedPackageName === artifactName.toLowerCase()) return true
 
     return false
   }

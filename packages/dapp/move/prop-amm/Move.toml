@@ -1,0 +1,13 @@
+[package]
+name = "PropAmm"
+edition = "2024"
+version = "0.0.1"
+
+[dependencies]
+deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/deepbook", rev = "main" }
+
+[dep-replacements.localnet]
+pyth = { local = "../pyth-mock", override = true, rename-from = "Pyth" }
+
+[environments]
+localnet = "43bd0c5c"
