@@ -77,7 +77,7 @@ describe("owner amm-create integration", () => {
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
 
       const publishArtifacts = await context.publishPackage(
-        "prop_amm",
+        "prop-amm",
         publisher,
         { withUnpublishedDependencies: true }
       )

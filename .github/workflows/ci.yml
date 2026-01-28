@@ -122,13 +122,13 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - prop_amm
+          - pro-amm
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/setup-sui
       - name: Run Move tests (${{ matrix.package }})
-        run: sui move test --path ./packages/dapp/move/prop_amm --environment localnet
+        run: sui move test --path ./packages/dapp/move/pro-amm --environment localnet
 
   security-audit:
     if: github.event_name != 'pull_request'

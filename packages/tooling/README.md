@@ -267,7 +267,7 @@ describe("owner scripts", () => {
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
 
       const artifacts = await context.publishPackage(
-        "prop_amm",
+        "pro-amm",
         publisher,
         { withUnpublishedDependencies: true }
       )

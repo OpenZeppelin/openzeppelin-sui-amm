@@ -1,6 +1,16 @@
-import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
+import type { SuiClient } from "@mysten/sui/client"
+import {
+  AMM_ADMIN_CAP_STORE_TYPE_SUFFIX,
+  type AmmConfigOverview
+} from "@sui-amm/domain-core/models/amm"
 import { findMockPriceFeedConfig } from "@sui-amm/domain-core/models/pyth"
-import { readArtifact } from "@sui-amm/tooling-node/artifacts"
+import type { PublishArtifact } from "@sui-amm/tooling-core/types"
+import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
+import {
+  findLatestArtifactThat,
+  loadDeploymentArtifacts,
+  readArtifact
+} from "@sui-amm/tooling-node/artifacts"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { logKeyValueGreen, logWarning } from "@sui-amm/tooling-node/log"
 import { resolveFullPackagePath } from "@sui-amm/tooling-node/move"
@@ -9,10 +19,66 @@ import { mockArtifactPath } from "./mocks.ts"
 
 export const DEFAULT_PYTH_PRICE_FEED_LABEL = "MOCK_SUI_FEED"
 
-const AMM_PACKAGE_FOLDER_NAME = "prop_amm"
+const AMM_PACKAGE_FOLDER_NAME = "prop-amm"
 
 export const resolveAmmPackagePath = (tooling: Tooling) =>
   resolveFullPackagePath(tooling.suiConfig.paths.move, AMM_PACKAGE_FOLDER_NAME)
+
+const resolveAmmPublishArtifact = async ({
+  networkName,
+  ammPackageId
+}: {
+  networkName: string
+  ammPackageId: string
+}): Promise<PublishArtifact | undefined> => {
+  const deploymentArtifacts = await loadDeploymentArtifacts(networkName)
+
+  return findLatestArtifactThat(
+    (artifact) => artifact.packageId === ammPackageId,
+    deploymentArtifacts
+  )
+}
+
+export const resolveAmmAdminCapStoreIdFromPublishDigest = async ({
+  publishDigest,
+  suiClient
+}: {
+  publishDigest: string
+  suiClient: SuiClient
+}): Promise<string> => {
+  const publishTransaction = await suiClient.getTransactionBlock({
+    digest: publishDigest,
+    options: { showObjectChanges: true }
+  })
+
+  return ensureCreatedObject(
+    AMM_ADMIN_CAP_STORE_TYPE_SUFFIX,
+    publishTransaction
+  ).objectId
+}
+
+export const resolveAmmAdminCapStoreId = async ({
+  tooling,
+  ammPackageId
+}: {
+  tooling: Pick<Tooling, "suiClient" | "network">
+  ammPackageId: string
+}): Promise<string> => {
+  const publishArtifact = await resolveAmmPublishArtifact({
+    networkName: tooling.network.networkName,
+    ammPackageId
+  })
+
+  if (!publishArtifact?.digest)
+    throw new Error(
+      "Unable to locate the latest AMM publish artifact; provide --admin-cap-id or re-run publish to refresh deployments."
+    )
+
+  return resolveAmmAdminCapStoreIdFromPublishDigest({
+    publishDigest: publishArtifact.digest,
+    suiClient: tooling.suiClient
+  })
+}
 
 const findPriceFeedIdFromMockArtifact = (
   mockArtifact: MockArtifact,

@@ -31,7 +31,7 @@ export const MAINNET_EXPLORER_URL = "https://suivision.xyz"
 export const CONTRACT_PACKAGE_VARIABLE_NAME = "contractPackageId"
 export const AMM_CONFIG_VARIABLE_NAME = "ammConfigId"
 
-export const CONTRACT_MODULE_NAME = "prop_amm"
+export const CONTRACT_MODULE_NAME = "PropAmm"
 
 export const EXPLORER_URL_VARIABLE_NAME = "explorerUrl"
 

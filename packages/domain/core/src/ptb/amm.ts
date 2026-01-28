@@ -52,6 +52,26 @@ export const buildCreateAmmConfigTransaction = ({
   return transaction
 }
 
+export const buildClaimAmmAdminCapTransaction = ({
+  packageId,
+  adminCapStore
+}: {
+  packageId: string
+  adminCapStore: WrappedSuiSharedObject
+}) => {
+  const transaction = newTransaction()
+  const adminCapStoreArgument = transaction.sharedObjectRef(
+    adminCapStore.sharedRef
+  )
+
+  transaction.moveCall({
+    target: `${packageId}::manager::claim_admin_cap`,
+    arguments: [adminCapStoreArgument]
+  })
+
+  return transaction
+}
+
 export const buildUpdateAmmConfigTransaction = ({
   packageId,
   adminCapId,

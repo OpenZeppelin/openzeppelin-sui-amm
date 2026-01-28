@@ -7,11 +7,13 @@ import {
 } from "@sui-amm/domain-core/models/amm"
 import { DEFAULT_MOCK_PRICE_FEED } from "@sui-amm/domain-core/models/pyth"
 import {
+  buildClaimAmmAdminCapTransaction,
   buildCreateAmmConfigTransaction,
   parsePythPriceFeedIdBytes
 } from "@sui-amm/domain-core/ptb/amm"
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
 import { getAllOwnedObjectsByFilter } from "@sui-amm/tooling-core/object"
+import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
 import { pickRootNonDependencyArtifact } from "@sui-amm/tooling-node/artifacts"
 import { createSuiLocalnetTestEnv } from "@sui-amm/tooling-node/testing/env"
@@ -21,6 +23,7 @@ import {
   parseJsonFromScriptOutput,
   resolveOwnerScriptPath
 } from "@sui-amm/tooling-node/testing/scripts"
+import { resolveAmmAdminCapStoreIdFromPublishDigest } from "../../../utils/amm.ts"
 
 type AmmUpdateOutput = {
   ammConfig?: AmmConfigOverview
@@ -51,12 +54,36 @@ describe("owner amm-update integration", () => {
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
 
       const publishArtifacts = await context.publishPackage(
-        "prop_amm",
+        "prop-amm",
         publisher,
         { withUnpublishedDependencies: true }
       )
       const rootArtifact = pickRootNonDependencyArtifact(publishArtifacts)
       const ammPackageId = rootArtifact.packageId
+
+      await context.waitForFinality(rootArtifact.digest)
+
+      const adminCapStoreId = await resolveAmmAdminCapStoreIdFromPublishDigest({
+        publishDigest: rootArtifact.digest,
+        suiClient: context.suiClient
+      })
+      const adminCapStore = await getSuiSharedObject(
+        {
+          objectId: adminCapStoreId,
+          mutable: true
+        },
+        { suiClient: context.suiClient }
+      )
+
+      const claimAdminCapTransaction = buildClaimAmmAdminCapTransaction({
+        packageId: ammPackageId,
+        adminCapStore
+      })
+      const claimResult = await context.signAndExecuteTransaction(
+        claimAdminCapTransaction,
+        publisher
+      )
+      await context.waitForFinality(claimResult.digest)
 
       const adminCaps = await getAllOwnedObjectsByFilter(
         {
@@ -71,7 +98,7 @@ describe("owner amm-update integration", () => {
       const adminCapId = adminCaps[0]?.objectId
       if (!adminCapId)
         throw new Error(
-          "Expected AMM admin cap to be minted for the publisher."
+          "Expected AMM admin cap to be claimed for the publisher."
         )
 
       const initialConfigTransaction = buildCreateAmmConfigTransaction({
