@@ -4,21 +4,21 @@
 [move]
 version = 4
 
-[pinned.localnet.MoveStdlib]
+[pinned.test-publish.MoveStdlib]
 source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "22f9fc9781732d651e18384c9a8eb1dabddf73a6" }
-use_environment = "localnet"
+use_environment = "test-publish"
 manifest_digest = "C4FE4C91DE74CBF223B2E380AE40F592177D21870DC2D7EB6227D2D694E05363"
 deps = {}
 
-[pinned.localnet.Sui]
+[pinned.test-publish.Sui]
 source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "22f9fc9781732d651e18384c9a8eb1dabddf73a6" }
-use_environment = "localnet"
+use_environment = "test-publish"
 manifest_digest = "CC15CB146CA1113370B03476BFF694B88F43F77D8DEE7C23CC0C78AB0634420D"
 deps = { MoveStdlib = "MoveStdlib" }
 
-[pinned.localnet.simple_contract]
+[pinned.test-publish.simple_contract]
 source = { root = true }
-use_environment = "localnet"
+use_environment = "test-publish"
 manifest_digest = "EAE83E4C2C7D5B4EF605145EE3703A5AF265593E686986BA5E58EE3F5D5E884F"
 deps = { std = "MoveStdlib", sui = "Sui" }
 

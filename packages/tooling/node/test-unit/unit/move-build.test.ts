@@ -116,7 +116,7 @@ describe("syncLocalnetMoveEnvironmentChainId", () => {
     })
 
     await withTempDir(async (dir) => {
-      const moveToml = `[package]\nname = "fixture"\nversion = "0.0.1"\n\n[dep-replacements.localnet]\nSui = { local = "../sui" }\n`
+      const moveToml = `[package]\nname = "fixture"\nversion = "0.0.1"\n\n[dep-replacements.test-publish]\nSui = { local = "../sui" }\n`
       await writeFileTree(dir, { "Move.toml": moveToml })
 
       const result = await syncLocalnetMoveEnvironmentChainId(
@@ -132,7 +132,7 @@ describe("syncLocalnetMoveEnvironmentChainId", () => {
 
       const updated = await readTextFile(path.join(dir, "Move.toml"))
       expect(updated).toContain("[environments]")
-      expect(updated).toContain('localnet = "0xabc"')
+      expect(updated).toContain('test-publish = "0xabc"')
     })
   })
 })

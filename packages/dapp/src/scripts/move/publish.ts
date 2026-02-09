@@ -1,6 +1,6 @@
 /**
  * Publishes a Move package and records deployment artifacts (package ID, UpgradeCap, Publisher).
- * Uses localnet dep-replacements when configured and can skip if already deployed.
+ * Uses test-publish dep-replacements for localnet when configured and can skip if already deployed.
  */
 import fs from "node:fs/promises"
 import os from "node:os"

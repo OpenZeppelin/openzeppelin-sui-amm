@@ -38,7 +38,7 @@ describe("move helpers", () => {
     expect(buildMoveEnvironmentFlags({})).toEqual([])
     expect(buildMoveEnvironmentFlags({ environmentName: "localnet" })).toEqual([
       "--environment",
-      "localnet"
+      "test-publish"
     ])
   })
 
@@ -60,7 +60,7 @@ describe("move helpers", () => {
     expect(args).toEqual([
       "/tmp/pkg",
       "--build-env",
-      "localnet",
+      "test-publish",
       "--pubfile-path",
       "/tmp/publish.json",
       "--with-unpublished-dependencies"
@@ -99,7 +99,7 @@ describe("syncMoveEnvironmentChainId", () => {
 
       const result = await syncMoveEnvironmentChainId({
         moveRootPath: dir,
-        environmentName: "localnet",
+        environmentName: "test-publish",
         chainId: "0xabc"
       })
 
@@ -107,7 +107,7 @@ describe("syncMoveEnvironmentChainId", () => {
 
       const updated = await readTextFile(path.join(dir, "Move.toml"))
       expect(updated).toContain("[environments]")
-      expect(updated).toContain('localnet = "0xabc"')
+      expect(updated).toContain('test-publish = "0xabc"')
     })
   })
 
@@ -119,7 +119,7 @@ describe("syncMoveEnvironmentChainId", () => {
 
       const result = await syncMoveEnvironmentChainId({
         moveRootPath: dir,
-        environmentName: "localnet",
+        environmentName: "test-publish",
         chainId: "0x123"
       })
 
