@@ -1,10 +1,18 @@
+import type { SuiClient } from "@mysten/sui/client"
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
+
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
+  AMM_ADMIN_CAP_STORE_TYPE_SUFFIX,
   AMM_CONFIG_TYPE_SUFFIX,
   getAmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
-import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
+import {
+  getAllOwnedObjectsByFilter,
+  normalizeIdOrThrow
+} from "@sui-amm/tooling-core/object"
+import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
 import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import {
   findLatestArtifactThat,
@@ -36,6 +44,88 @@ export const resolveAmmPackageId = async ({
     ammPackageId ?? latestAmmPublishArtifact?.packageId,
     "An AMM package id is required; publish the package or provide --amm-package-id."
   )
+}
+
+const resolveAmmPublishArtifactById = async ({
+  networkName,
+  ammPackageId
+}: {
+  networkName: string
+  ammPackageId: string
+}): Promise<PublishArtifact | undefined> => {
+  const normalizedPackageId = normalizeSuiObjectId(ammPackageId)
+  const deploymentArtifacts = await loadDeploymentArtifacts(networkName)
+
+  return findLatestArtifactThat(
+    (artifact) =>
+      normalizeSuiObjectId(artifact.packageId) === normalizedPackageId,
+    deploymentArtifacts
+  )
+}
+
+export const resolveAmmAdminCapStoreIdFromPublishDigest = async ({
+  publishDigest,
+  suiClient
+}: {
+  publishDigest: string
+  suiClient: SuiClient
+}): Promise<string> => {
+  const publishTransaction = await suiClient.getTransactionBlock({
+    digest: publishDigest,
+    options: { showObjectChanges: true }
+  })
+
+  return ensureCreatedObject(
+    AMM_ADMIN_CAP_STORE_TYPE_SUFFIX,
+    publishTransaction
+  ).objectId
+}
+
+export const resolveAmmAdminCapStoreId = async ({
+  networkName,
+  ammPackageId,
+  suiClient
+}: {
+  networkName: string
+  ammPackageId: string
+  suiClient: SuiClient
+}): Promise<string> => {
+  const publishArtifact = await resolveAmmPublishArtifactById({
+    networkName,
+    ammPackageId
+  })
+
+  if (!publishArtifact?.digest)
+    throw new Error(
+      "Unable to locate the latest AMM publish artifact; provide --admin-cap-id or re-run publish to refresh deployments."
+    )
+
+  return resolveAmmAdminCapStoreIdFromPublishDigest({
+    publishDigest: publishArtifact.digest,
+    suiClient
+  })
+}
+
+export const resolveOwnedAmmAdminCapId = async ({
+  ammPackageId,
+  ownerAddress,
+  suiClient
+}: {
+  ammPackageId: string
+  ownerAddress: string
+  suiClient: SuiClient
+}): Promise<string | undefined> => {
+  const adminCaps = await getAllOwnedObjectsByFilter(
+    {
+      ownerAddress,
+      filter: {
+        StructType: `${normalizeSuiObjectId(ammPackageId)}${AMM_ADMIN_CAP_TYPE_SUFFIX}`
+      }
+    },
+    { suiClient }
+  )
+
+  return adminCaps[0]?.objectId
 }
 
 export const resolveAmmConfigId = async ({
