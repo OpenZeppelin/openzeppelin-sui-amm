@@ -11,6 +11,7 @@ import {
   buildCreateAmmConfigTransaction,
   parsePythPriceFeedIdBytes
 } from "@sui-amm/domain-core/ptb/amm"
+import { resolveAmmAdminCapStoreIdFromPublishDigest } from "@sui-amm/domain-node/amm"
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
 import { getAllOwnedObjectsByFilter } from "@sui-amm/tooling-core/object"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
@@ -21,9 +22,8 @@ import { resolveDappMoveRoot } from "@sui-amm/tooling-node/testing/paths"
 import {
   createSuiScriptRunner,
   parseJsonFromScriptOutput,
-  resolveOwnerScriptPath
+  resolveScriptPathIn
 } from "@sui-amm/tooling-node/testing/scripts"
-import { resolveAmmAdminCapStoreIdFromPublishDigest } from "../../../utils/amm.ts"
 
 type AmmUpdateOutput = {
   ammConfig?: AmmConfigOverview
@@ -33,17 +33,11 @@ type AmmUpdateOutput = {
   transactionSummary?: { label?: string }
 }
 
-const resolveKeepTemp = () => process.env.SUI_IT_KEEP_TEMP === "1"
-
-const resolveWithFaucet = () => process.env.SUI_IT_WITH_FAUCET !== "0"
-
 const UPDATED_PYTH_PRICE_FEED_ID_HEX =
   "0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
 
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
-  keepTemp: resolveKeepTemp(),
-  withFaucet: resolveWithFaucet(),
   moveSourceRootPath: resolveDappMoveRoot()
 })
 
@@ -124,7 +118,7 @@ describe("owner amm-update integration", () => {
 
       const scriptRunner = createSuiScriptRunner(context)
       const result = await scriptRunner.runScript(
-        resolveOwnerScriptPath("amm-update"),
+        resolveScriptPathIn("owner", "amm-update"),
         {
           account: publisher,
           args: {

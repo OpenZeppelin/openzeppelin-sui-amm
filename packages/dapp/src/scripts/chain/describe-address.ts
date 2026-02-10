@@ -17,11 +17,11 @@ import { resolveOwnerAddress } from "@sui-amm/tooling-node/account"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import {
   logEachGreen,
-  logKeyValueBlue,
   logKeyValueGreen,
   logKeyValueYellow
 } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
+import { formatBigInt, logChainContext } from "./utils.ts"
 
 type GetAddressInfoCliArgs = {
   address?: string
@@ -62,10 +62,11 @@ runSuiScript<GetAddressInfoCliArgs>(
       tooling.network
     )
 
-    logInspectionContext({
-      address: addressToInspect,
+    logChainContext({
+      networkName: tooling.network.networkName,
       rpcUrl: tooling.network.url,
-      networkName: tooling.network.networkName
+      subjectLabel: "Inspecting",
+      subjectValue: addressToInspect
     })
 
     const addressInformation = await collectAddressInformation({
@@ -307,22 +308,4 @@ const logAddressInformation = (addressInformation: AddressInformation) => {
 /**
  * Logs the script execution context for clarity.
  */
-const logInspectionContext = ({
-  address,
-  rpcUrl,
-  networkName
-}: {
-  address: string
-  rpcUrl: string
-  networkName: string
-}) => {
-  logKeyValueBlue("Network")(networkName)
-  logKeyValueBlue("RPC")(rpcUrl)
-  logKeyValueBlue("Inspecting")(address)
-  console.log("")
-}
-
-/**
- * Formats bigint values for display.
- */
-const formatBigInt = (value: bigint) => value.toString()
+// formatBigInt provided by chain utils
