@@ -73,9 +73,7 @@ const resolveAmmAdminCapIdForUpdate = async ({
   cliArguments: UpdateAmmArguments
   ammPackageId: string
 }): Promise<string> => {
-  const adminCapIdFromCli = resolveAmmAdminCapIdFromCli(
-    cliArguments.adminCapId
-  )
+  const adminCapIdFromCli = resolveAmmAdminCapIdFromCli(cliArguments.adminCapId)
   if (adminCapIdFromCli) return adminCapIdFromCli
 
   return resolveAmmAdminCapIdFromArtifacts({

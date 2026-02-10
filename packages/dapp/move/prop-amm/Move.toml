@@ -10,4 +10,4 @@ deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "pac
 pyth = { local = "../pyth-mock", rename-from = "Pyth", override = true }
 
 [environments]
-test-publish = "43bd0c5c"
+test-publish = "8051a268"

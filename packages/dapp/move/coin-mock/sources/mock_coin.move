@@ -1,6 +1,5 @@
 module MockCoin::mock_coin;
 
-use sui::coin;
 use sui::coin_registry;
 
 // === Structs ===
