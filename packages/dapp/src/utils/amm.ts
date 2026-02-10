@@ -1,6 +1,6 @@
 import type { SuiClient } from "@mysten/sui/client"
 import {
-  AMM_ADMIN_CAP_STORE_TYPE_SUFFIX,
+  AMM_ADMIN_CAP_TYPE_SUFFIX,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
 import { findMockPriceFeedConfig } from "@sui-amm/domain-core/models/pyth"
@@ -39,7 +39,7 @@ const resolveAmmPublishArtifact = async ({
   )
 }
 
-export const resolveAmmAdminCapStoreIdFromPublishDigest = async ({
+export const resolveAmmAdminCapIdFromPublishDigest = async ({
   publishDigest,
   suiClient
 }: {
@@ -51,13 +51,11 @@ export const resolveAmmAdminCapStoreIdFromPublishDigest = async ({
     options: { showObjectChanges: true }
   })
 
-  return ensureCreatedObject(
-    AMM_ADMIN_CAP_STORE_TYPE_SUFFIX,
-    publishTransaction
-  ).objectId
+  return ensureCreatedObject(AMM_ADMIN_CAP_TYPE_SUFFIX, publishTransaction)
+    .objectId
 }
 
-export const resolveAmmAdminCapStoreId = async ({
+export const resolveAmmAdminCapIdFromArtifacts = async ({
   tooling,
   ammPackageId
 }: {
@@ -74,7 +72,7 @@ export const resolveAmmAdminCapStoreId = async ({
       "Unable to locate the latest AMM publish artifact; provide --admin-cap-id or re-run publish to refresh deployments."
     )
 
-  return resolveAmmAdminCapStoreIdFromPublishDigest({
+  return resolveAmmAdminCapIdFromPublishDigest({
     publishDigest: publishArtifact.digest,
     suiClient: tooling.suiClient
   })

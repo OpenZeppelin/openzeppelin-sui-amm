@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  AMM_ADMIN_CAP_TYPE_SUFFIX,
   AMM_CONFIG_TYPE_SUFFIX,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
 import { DEFAULT_MOCK_PRICE_FEED } from "@sui-amm/domain-core/models/pyth"
 import {
-  buildClaimAmmAdminCapTransaction,
   buildCreateAmmConfigTransaction,
   parsePythPriceFeedIdBytes
 } from "@sui-amm/domain-core/ptb/amm"
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
-import { getAllOwnedObjectsByFilter } from "@sui-amm/tooling-core/object"
-import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
 import { pickRootNonDependencyArtifact } from "@sui-amm/tooling-node/artifacts"
 import { createSuiLocalnetTestEnv } from "@sui-amm/tooling-node/testing/env"
@@ -23,7 +19,7 @@ import {
   parseJsonFromScriptOutput,
   resolveOwnerScriptPath
 } from "@sui-amm/tooling-node/testing/scripts"
-import { resolveAmmAdminCapStoreIdFromPublishDigest } from "../../../utils/amm.ts"
+import { resolveAmmAdminCapIdFromPublishDigest } from "../../../utils/amm.ts"
 
 type AmmUpdateOutput = {
   ammConfig?: AmmConfigOverview
@@ -63,43 +59,12 @@ describe("owner amm-update integration", () => {
 
       await context.waitForFinality(rootArtifact.digest)
 
-      const adminCapStoreId = await resolveAmmAdminCapStoreIdFromPublishDigest({
+      const adminCapId = await resolveAmmAdminCapIdFromPublishDigest({
         publishDigest: rootArtifact.digest,
         suiClient: context.suiClient
       })
-      const adminCapStore = await getSuiSharedObject(
-        {
-          objectId: adminCapStoreId,
-          mutable: true
-        },
-        { suiClient: context.suiClient }
-      )
-
-      const claimAdminCapTransaction = buildClaimAmmAdminCapTransaction({
-        packageId: ammPackageId,
-        adminCapStore
-      })
-      const claimResult = await context.signAndExecuteTransaction(
-        claimAdminCapTransaction,
-        publisher
-      )
-      await context.waitForFinality(claimResult.digest)
-
-      const adminCaps = await getAllOwnedObjectsByFilter(
-        {
-          ownerAddress: publisher.address,
-          filter: {
-            StructType: `${ammPackageId}${AMM_ADMIN_CAP_TYPE_SUFFIX}`
-          }
-        },
-        { suiClient: context.suiClient }
-      )
-
-      const adminCapId = adminCaps[0]?.objectId
       if (!adminCapId)
-        throw new Error(
-          "Expected AMM admin cap to be claimed for the publisher."
-        )
+        throw new Error("Expected AMM admin cap to be published.")
 
       const initialConfigTransaction = buildCreateAmmConfigTransaction({
         packageId: ammPackageId,

@@ -1,5 +1,5 @@
 [package]
-name = "fixture"
+name = "Fixture"
 version = "0.0.1"
 
 [dependencies]
@@ -7,9 +7,6 @@ Sui = { local = "../sui" }
 
 [dep-replacements.test-publish]
 Sui = { local = "../sui" }
-
-[addresses]
-fixture = "0x0"
 
 [dev-dependencies]
 Sui = { local = "../sui" }

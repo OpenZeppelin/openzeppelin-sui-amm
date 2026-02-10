@@ -1728,7 +1728,6 @@ export const createTestContext = async (
   const tempDir = await createTempDir(buildTempPrefix(testId))
   const moveRootPath = path.join(tempDir, "move")
   const artifactsDir = path.join(tempDir, "artifacts")
-
   await ensureDirectory(artifactsDir)
   await copyMoveSources(moveRootPath, options?.moveSourceRootPath)
 

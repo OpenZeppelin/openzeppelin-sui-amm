@@ -16,7 +16,6 @@ import { parsePythPriceFeedIdBytes } from "../ptb/amm.ts"
 
 export const AMM_CONFIG_TYPE_SUFFIX = "::manager::AMMConfig"
 export const AMM_ADMIN_CAP_TYPE_SUFFIX = "::manager::AMMAdminCap"
-export const AMM_ADMIN_CAP_STORE_TYPE_SUFFIX = "::manager::AdminCapStore"
 
 export type AmmConfigOverview = {
   configId: string

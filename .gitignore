@@ -12,7 +12,6 @@ packages/dapp/move/**/build/
 packages/dapp/move/**/.trace
 packages/dapp/move/**/.coverage*
 packages/dapp/move/**/Pub.localnet.toml
-packages/dapp/move/**/Move.lock
 packages/dapp/move/**/Published.toml
 
 patches/pyth-crosschain/
