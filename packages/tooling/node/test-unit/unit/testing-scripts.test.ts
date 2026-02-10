@@ -17,8 +17,7 @@ import {
   buildScriptArguments,
   createSuiScriptRunner,
   parseJsonFromScriptOutput,
-  resolveBuyerScriptPath,
-  resolveOwnerScriptPath
+  resolveScriptPathIn
 } from "../../src/testing/scripts.ts"
 
 class MockChildProcess extends EventEmitter {
@@ -79,8 +78,8 @@ describe("testing script helpers", () => {
   })
 
   it("resolves script paths", () => {
-    const buyerPath = resolveBuyerScriptPath("buy.ts")
-    const ownerPath = resolveOwnerScriptPath("counter-create")
+    const buyerPath = resolveScriptPathIn("buyer", "buy.ts")
+    const ownerPath = resolveScriptPathIn("owner", "counter-create")
 
     expect(buyerPath.endsWith(path.join("buyer", "buy.ts"))).toBe(true)
     expect(ownerPath.endsWith(path.join("owner", "counter-create.ts"))).toBe(

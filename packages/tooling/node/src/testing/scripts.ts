@@ -2,13 +2,23 @@ import { spawn } from "node:child_process"
 import { access, writeFile } from "node:fs/promises"
 import path from "node:path"
 
+import {
+  MINIMUM_ACCOUNT_BALANCE,
+  MINIMUM_GAS_COIN_BALANCE,
+  MINIMUM_GAS_COIN_OBJECTS
+} from "../constants.ts"
 import { parseJsonFromOutput } from "../json.ts"
 import type { TestAccount, TestContext } from "./localnet.ts"
+import {
+  ensureAccountKeystore,
+  ensureAccountRegisteredInLocalnetKeystore
+} from "./localnet.ts"
 import {
   resolveDappConfigPath,
   resolveDappRoot,
   resolveTsNodeEsmPath
 } from "./paths.ts"
+import { toKebabCase } from "../log.ts"
 
 export type ScriptRunResult = {
   exitCode: number
@@ -41,14 +51,6 @@ export type SuiScriptRunner = {
     scriptPath: string,
     options?: ScriptRunOptions
   ) => Promise<ScriptRunResult>
-  runBuyerScript: (
-    scriptName: string,
-    options?: ScriptRunOptions
-  ) => Promise<ScriptRunResult>
-  runOwnerScript: (
-    scriptName: string,
-    options?: ScriptRunOptions
-  ) => Promise<ScriptRunResult>
 }
 
 const normalizeScriptName = (scriptName: string) =>
@@ -57,17 +59,8 @@ const normalizeScriptName = (scriptName: string) =>
 const resolveScriptPath = (segments: string[]) =>
   path.join(resolveDappRoot(), "src", "scripts", ...segments)
 
-export const resolveBuyerScriptPath = (scriptName: string) =>
-  resolveScriptPath(["buyer", normalizeScriptName(scriptName)])
-
-export const resolveOwnerScriptPath = (scriptName: string) =>
-  resolveScriptPath(["owner", normalizeScriptName(scriptName)])
-
-const toKebabCase = (value: string) =>
-  value
-    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-    .replace(/_/g, "-")
-    .toLowerCase()
+export const resolveScriptPathIn = (scriptFolder: string, scriptName: string) =>
+  resolveScriptPath([scriptFolder, normalizeScriptName(scriptName)])
 
 const buildArgumentEntries = (key: string, value: ScriptArgumentValue) => {
   if (value === undefined) return []
@@ -163,11 +156,13 @@ const ensureTestSuiConfigPath = async (context: TestContext) => {
       "Test context is missing a configured network gas budget; unable to generate sui.config.ts for script runner."
     )
 
+  const faucetUrl = context.localnet.faucetHost
   const content = `export default {
   defaultNetwork: "localnet",
   networks: {
     localnet: {
       url: ${JSON.stringify(context.localnet.rpcUrl)},
+      faucetUrl: ${JSON.stringify(faucetUrl ?? undefined)},
       gasBudget: ${gasBudget},
       account: {}
     }
@@ -268,12 +263,33 @@ export const createSuiScriptRunner = (
     const scriptArguments = normalizeScriptArguments(options?.args)
     const command = resolveTsNodeEsmPath()
     const args = ["--transpile-only", scriptPath, ...scriptArguments]
+    if (options?.account) {
+      await context.fundAccount(options.account, {
+        minimumBalance: MINIMUM_ACCOUNT_BALANCE,
+        minimumCoinObjects: MINIMUM_GAS_COIN_OBJECTS,
+        minimumGasCoinBalance: MINIMUM_GAS_COIN_BALANCE
+      })
+    }
+    const accountKeystore =
+      options?.account !== undefined
+        ? await ensureAccountKeystore(context.artifactsDir, options.account)
+        : undefined
+    const localnetKeystorePath =
+      options?.account !== undefined && accountKeystore
+        ? await ensureAccountRegisteredInLocalnetKeystore(
+            context.localnet.configDir,
+            accountKeystore.entry
+          )
+        : undefined
     const env = resolveBaseEnvironment({
       context,
       account: options?.account,
       configPath: resolvedConfigPath,
       env: options?.env
     }) as NodeJS.ProcessEnv
+    if (localnetKeystorePath && !env.SUI_KEYSTORE_PATH) {
+      env.SUI_KEYSTORE_PATH = localnetKeystorePath
+    }
     const cwd = resolveWorkingDirectory(options?.cwd)
 
     return runCommand({
@@ -286,19 +302,7 @@ export const createSuiScriptRunner = (
     })
   }
 
-  const runBuyerScript = async (
-    scriptName: string,
-    options?: ScriptRunOptions
-  ) => runScript(resolveBuyerScriptPath(scriptName), options)
-
-  const runOwnerScript = async (
-    scriptName: string,
-    options?: ScriptRunOptions
-  ) => runScript(resolveOwnerScriptPath(scriptName), options)
-
   return {
-    runScript,
-    runBuyerScript,
-    runOwnerScript
+    runScript
   }
 }

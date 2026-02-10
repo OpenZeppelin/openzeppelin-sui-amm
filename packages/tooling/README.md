@@ -203,6 +203,7 @@ The testing helpers in `packages/tooling/node/src/testing` provide a consistent 
 - creating isolated localnet instances (or a shared suite instance)
 - providing a `TestContext` with ready-to-use helpers
 - wiring scripts to a controlled config and artifacts directory
+- copying any external Move dependencies into a temp root so tests never mutate workspace vendor code
 
 ### Key entry points
 
@@ -210,6 +211,8 @@ The testing helpers in `packages/tooling/node/src/testing` provide a consistent 
 - `withTestContext(...)` / `createTestContext(...)` — per-test context with cleanup
 - `createSuiScriptRunner(context)` — run TS scripts with a scoped config
 - `parseJsonFromScriptOutput(stdout)` — parse JSON output from scripts
+- `prepareMoveSourcesForLocalnetTests(...)` — copy external Move deps into a temp root and rewrite local paths
+- `copyExternalMoveDependenciesIntoTempRoot(...)` — low-level copier for external Move deps
 
 ### Typical setup (Vitest)
 
@@ -522,6 +525,10 @@ High-level helpers for localnet + scripts. These are used by the integration tes
 - `createLocalnetHarness()` / `createTestContext(...)` — lower-level localnet management
 - `runOwnerScript(...)` / `runBuyerScript(...)` — run dapp scripts in tests
 - `parseJsonFromScriptOutput(stdout)` — parse JSON from script output
+- `prepareMoveSourcesForLocalnetTests(...)` — copy external Move deps into temp root and rewrite local paths
+- `copyExternalMoveDependenciesIntoTempRoot(...)` — low-level external dep copy helper for tests
+- `ensureAccountKeystore(...)` — materialize a keystore entry for a test account
+- `ensureAccountRegisteredInLocalnetKeystore(...)` — register a test account for Sui CLI use
 
 ---
 
@@ -542,5 +549,4 @@ High-level helpers for localnet + scripts. These are used by the integration tes
 - Transaction helpers normalize ID/owner formats to avoid cross-run diffs.
 
 ---
-
 

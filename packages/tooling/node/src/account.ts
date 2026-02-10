@@ -21,3 +21,9 @@ export const resolveOwnerAddress = async (
   const keypair = await loadKeypair(accountConfig)
   return normalizeSuiAddress(keypair.toSuiAddress())
 }
+
+/**
+ * Normalizes the active signer address from a keypair.
+ */
+export const resolveSignerAddress = (keypair: { toSuiAddress: () => string }) =>
+  normalizeSuiAddress(keypair.toSuiAddress())

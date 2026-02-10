@@ -210,17 +210,19 @@ const maybeSplitCoinObjects = async ({
 const requestFunding = async ({
   network,
   signerAddress,
-  attempt
+  attempt,
+  faucetHost
 }: {
   network: FaucetNetworkName
   signerAddress: string
   attempt: number
+  faucetHost?: string
 }) => {
-  const faucetHost = getFaucetHost(network)
+  const resolvedFaucetHost = faucetHost ?? getFaucetHost(network)
 
   try {
     await requestSuiFromFaucetV2({
-      host: faucetHost,
+      host: resolvedFaucetHost,
       recipient: signerAddress
     })
     return { success: true as const }
@@ -263,6 +265,7 @@ export const ensureFoundedAddress = async (
   const faucetNetwork = asFaucetNetwork(
     toolingContext.suiConfig.network.networkName
   )
+  const faucetHost = toolingContext.suiConfig.network.faucetUrl?.trim()
   const normalizedAddress = normalizeSuiAddress(signerAddress)
 
   const effectiveMinimumBalance = deriveEffectiveMinimumBalance({
@@ -317,7 +320,8 @@ export const ensureFoundedAddress = async (
     const faucetResult = await requestFunding({
       network: faucetNetwork,
       signerAddress,
-      attempt: attempts
+      attempt: attempts,
+      faucetHost: faucetHost && faucetHost.length > 0 ? faucetHost : undefined
     })
 
     if (!faucetResult.success) lastError = faucetResult.error
