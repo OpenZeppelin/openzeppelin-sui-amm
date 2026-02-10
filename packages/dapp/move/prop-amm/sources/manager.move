@@ -1,16 +1,22 @@
 /// AMM configuration and admin controls.
-module PropAmm::manager;
+module prop_amm::manager;
+
+// === Imports ===
 
 use sui::event;
 use sui::package;
 
-// === Constants ===
-
-const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
+// === Errors ===
 
 const EInvalidSpread: u64 = 1;
 const EEmptyFeedId: u64 = 13;
 const EInvalidFeedIdLength: u64 = 34;
+const ENotAdminCapRecipient: u64 = 55;
+const EAdminCapAlreadyClaimed: u64 = 56;
+
+// === Constants ===
+
+const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
 // === Structs ===
 
@@ -34,6 +40,36 @@ public struct AMMConfig has key {
 public struct AMMAdminCap has key, store {
     /// Unique ID for the admin capability object.
     id: UID,
+}
+
+/// Shared store holding the admin cap until claimed by the publisher.
+public struct AdminCapStore has key {
+    /// Unique ID for the store object.
+    id: UID,
+    /// Expected recipient for the admin cap.
+    recipient: address,
+    /// Admin capability to be claimed.
+    admin_cap: Option<AMMAdminCap>,
+}
+
+// === Init ===
+
+/// One-time publisher witness created at publish time.
+public struct MANAGER has drop {}
+
+/// Initializes the package and transfers the admin capability to the publisher.
+///
+/// This is intended to run once at publish time via the one-time witness.
+fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
+    package::claim_and_keep<MANAGER>(publisher_witness, ctx);
+
+    let admin_cap = create_admin_cap(ctx);
+    let store = AdminCapStore {
+        id: object::new(ctx),
+        recipient: ctx.sender(),
+        admin_cap: option::some(admin_cap),
+    };
+    transfer::share_object(store);
 }
 
 // === Events ===
@@ -64,21 +100,6 @@ public struct AMMConfigUpdatedEvent has copy, drop {
     use_laser: bool,
     /// Whether trading is paused.
     trading_paused: bool,
-}
-
-// === Init ===
-
-/// One-time publisher witness created at publish time.
-public struct MANAGER has drop {}
-
-/// Initializes the package and transfers the admin capability to the publisher.
-///
-/// This is intended to run once at publish time via the one-time witness.
-fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
-    package::claim_and_keep<MANAGER>(publisher_witness, ctx);
-
-    let admin_cap = create_admin_cap(ctx);
-    transfer_admin_cap(admin_cap, ctx.sender());
 }
 
 // === Public Functions ===
@@ -135,11 +156,28 @@ public fun update_amm_config(
     emit_config_updated(config);
 }
 
+/// Claims the admin capability from the shared store.
+entry fun claim_admin_cap(store: &mut AdminCapStore, ctx: &TxContext) {
+    let admin_cap = claim_admin_cap_from_store(store, ctx.sender());
+    transfer::public_transfer(admin_cap, ctx.sender());
+}
+
 // === Private Functions ===
 
 /// Ensures the base spread is nonzero.
 fun assert_valid_base_spread_bps(base_spread_bps: u64) {
     assert!(base_spread_bps > 0, EInvalidSpread);
+}
+
+/// Extracts the admin capability from storage for the expected recipient.
+fun claim_admin_cap_from_store(
+    store: &mut AdminCapStore,
+    expected_recipient: address,
+): AMMAdminCap {
+    assert!(expected_recipient == store.recipient, ENotAdminCapRecipient);
+    assert!(option::is_some(&store.admin_cap), EAdminCapAlreadyClaimed);
+
+    option::extract(&mut store.admin_cap)
 }
 
 /// Validates all inputs for a new or updated configuration.
@@ -171,13 +209,8 @@ fun create_admin_cap(ctx: &mut TxContext): AMMAdminCap {
     AMMAdminCap { id: object::new(ctx) }
 }
 
-/// Transfers the admin capability to the recipient.
-fun transfer_admin_cap(admin_cap: AMMAdminCap, recipient: address) {
-    transfer::public_transfer(admin_cap, recipient);
-}
-
 /// Verifies the admin capability is valid.
-fun assert_admin_cap(admin_cap: &AMMAdminCap) {
+public(package) fun assert_admin_cap(admin_cap: &AMMAdminCap) {
     let _ = admin_cap.id.to_address();
 }
 

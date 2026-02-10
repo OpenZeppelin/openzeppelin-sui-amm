@@ -1,9 +1,13 @@
 /// Tests for AMM manager behavior.
 #[test_only]
-module PropAmm::manager_tests;
+module prop_amm::manager_tests;
 
-use PropAmm::manager;
+// === Imports ===
+
+use prop_amm::manager;
+
 use std::unit_test::{assert_eq, assert_ref_eq};
+
 use sui::test_scenario;
 
 // === Constants ===
@@ -78,14 +82,17 @@ fun update_amm_config_and_advance_scenario(
     test_scenario::next_tx(scenario, sender)
 }
 
+/// Takes the admin cap from the scenario.
 fun take_admin_cap_from_scenario(scenario: &test_scenario::Scenario): manager::AMMAdminCap {
     test_scenario::take_from_sender<manager::AMMAdminCap>(scenario)
 }
 
+/// Takes the configuration from the scenario.
 fun take_config_from_scenario(scenario: &test_scenario::Scenario): manager::AMMConfig {
     test_scenario::take_shared<manager::AMMConfig>(scenario)
 }
 
+/// Returns the admin cap to the scenario.
 fun return_admin_cap_to_scenario(
     scenario: &test_scenario::Scenario,
     admin_cap: manager::AMMAdminCap,
@@ -93,10 +100,12 @@ fun return_admin_cap_to_scenario(
     test_scenario::return_to_sender(scenario, admin_cap);
 }
 
+/// Returns the configuration to the scenario.
 fun return_config_to_scenario(config: manager::AMMConfig) {
     test_scenario::return_shared(config);
 }
 
+/// Asserts that the configuration matches the expected inputs.
 fun assert_config_matches_inputs(
     config: &manager::AMMConfig,
     base_spread_bps: u64,
