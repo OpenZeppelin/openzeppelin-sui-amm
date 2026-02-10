@@ -1,5 +1,5 @@
 [package]
-name = "PropAmm"
+name = "amm"
 edition = "2024"
 version = "0.0.1"
 

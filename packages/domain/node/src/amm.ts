@@ -14,7 +14,7 @@ import {
 } from "@sui-amm/tooling-node/artifacts"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 
-const AMM_PACKAGE_NAME = "PropAmm"
+const AMM_PACKAGE_NAME = "amm"
 
 export const isAmmPublishArtifact = (artifact: PublishArtifact) =>
   isPublishArtifactNamed(AMM_PACKAGE_NAME)(artifact)

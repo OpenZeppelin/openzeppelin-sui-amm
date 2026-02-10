@@ -1,5 +1,5 @@
 /// AMM configuration and admin controls.
-module PropAmm::manager;
+module amm::manager;
 
 use sui::event;
 use sui::package;

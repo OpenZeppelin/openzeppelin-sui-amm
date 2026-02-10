@@ -8,6 +8,7 @@ coverage
 
 deployments/
 
+packages/tooling/tests-integration/**/build/
 packages/dapp/move/**/build/
 packages/dapp/move/**/.trace
 packages/dapp/move/**/.coverage*

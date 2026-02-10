@@ -1,5 +1,5 @@
 /// Execution-time state and events for the AMM.
-module PropAmm::executor;
+module amm::executor;
 
 use sui::table::Table;
 

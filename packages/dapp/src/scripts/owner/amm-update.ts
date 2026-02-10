@@ -15,11 +15,11 @@ import {
   resolveAmmConfigId,
   resolveAmmPackageId
 } from "@sui-amm/domain-node/amm"
+import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
 import {
   parseNonNegativeU64,
   parsePositiveU64
 } from "@sui-amm/tooling-core/utils/utility"
-import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
@@ -264,7 +264,7 @@ runSuiScript(
       alias: ["amm-package-id"],
       type: "string",
       description:
-        "Package ID for the PropAmm Move package; inferred from the latest publish entry in deployments/deployment.<network>.json when omitted.",
+        "Package ID for the amm Move package; inferred from the latest publish entry in deployments/deployment.<network>.json when omitted.",
       demandOption: false
     })
     .option("devInspect", {
