@@ -139,7 +139,7 @@ runSuiScript(
       alias: ["amm-package-id"],
       type: "string",
       description:
-        "Package ID for the PropAmm Move package; inferred from the latest publish entry in deployments/deployment.<network>.json when omitted.",
+        "Package ID for the amm Move package; inferred from the latest publish entry in deployments/deployment.<network>.json when omitted.",
       demandOption: false
     })
     .option("devInspect", {

@@ -1,9 +1,9 @@
 /// Execution-time state and events for the AMM.
-module prop_amm::executor;
+module amm::executor;
 
+use amm::manager;
 use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, WithdrawCap};
 use deepbook::registry::Registry;
-use prop_amm::manager;
 use sui::table::{Self, Table};
 
 // === Imports ===
@@ -131,7 +131,6 @@ public fun create_trader_account_components(
 ///
 /// Intended for the standard "one-step" flow (no custom PTB composition).
 /// Requires `PropAmmApp` to be authorized in the DeepBook registry.
-#[allow(lint(share_owned))]
 entry fun create_trader_account_with_shared_manager_and_owner_caps(
     deepbook_registry: &Registry,
     admin_cap: &manager::AMMAdminCap,

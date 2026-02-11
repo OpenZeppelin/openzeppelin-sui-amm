@@ -475,7 +475,7 @@ runSuiScript(
       alias: ["amm-package-id"],
       type: "string",
       description:
-        "Package ID for the PropAmm Move package; inferred from the latest publish entry when omitted.",
+        "Package ID for the amm Move package; inferred from the latest publish entry when omitted.",
       demandOption: false
     })
     .option("withUnpublishedDependencies", {
@@ -489,7 +489,7 @@ runSuiScript(
       alias: ["re-publish"],
       type: "boolean",
       description:
-        "Re-publish the PropAmm Move package even if an existing deployment artifact is present.",
+        "Re-publish the amm Move package even if an existing deployment artifact is present.",
       default: false
     })
     .option("useCliPublish", {

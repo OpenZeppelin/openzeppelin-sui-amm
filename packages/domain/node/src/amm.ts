@@ -3,8 +3,8 @@ import { normalizeSuiObjectId } from "@mysten/sui/utils"
 
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
-  AMM_ADMIN_CAP_TYPE_SUFFIX,
   AMM_ADMIN_CAP_STORE_TYPE_SUFFIX,
+  AMM_ADMIN_CAP_TYPE_SUFFIX,
   AMM_CONFIG_TYPE_SUFFIX,
   getAmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
@@ -22,7 +22,7 @@ import {
 } from "@sui-amm/tooling-node/artifacts"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 
-const AMM_PACKAGE_NAME = "prop_amm"
+const AMM_PACKAGE_NAME = "amm"
 
 export const isAmmPublishArtifact = (artifact: PublishArtifact) =>
   isPublishArtifactNamed(AMM_PACKAGE_NAME)(artifact)
