@@ -44,6 +44,7 @@ import {
   ensureMoveTomlEnvironmentChainId,
   removeMoveTomlAddressesSection,
   resolveChainIdentifier,
+  resolveMoveCliEnvironmentName,
   syncMoveTomlDependencyLocalPath,
   syncMoveTomlDependencyPublishedIds
 } from "@sui-amm/tooling-node/move"
@@ -571,9 +572,11 @@ const normalizeDeepbookMoveTomlForLocalnet = async ({
   chainId: string
 }) => {
   const addressesResult = await removeMoveTomlAddressesSection({ moveTomlPath })
+  const environmentName =
+    resolveMoveCliEnvironmentName("localnet") ?? "test-publish"
   const environmentResult = await ensureMoveTomlEnvironmentChainId({
     moveTomlPath,
-    environmentName: "localnet",
+    environmentName,
     chainId
   })
 

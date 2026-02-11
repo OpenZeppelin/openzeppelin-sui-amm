@@ -583,6 +583,7 @@ export const resolveChainIdentifier = async (
 
 /**
  * Ensures the Move.toml environments entry matches the localnet chain id.
+ * The localnet environment name is normalized to `test-publish`.
  * Use dryRun to report drift without writing changes.
  */
 export const syncLocalnetMoveEnvironmentChainId = async (
@@ -597,21 +598,18 @@ export const syncLocalnetMoveEnvironmentChainId = async (
   },
   toolingContext: ToolingContext
 ): Promise<MoveEnvironmentChainIdSyncResult> => {
-  if (environmentName !== "localnet")
+  const resolvedEnvironmentName = resolveMoveCliEnvironmentName(environmentName)
+  if (resolvedEnvironmentName !== "test-publish")
     return { updatedFiles: [], didAttempt: false }
 
+  const chainIdEnvironmentName =
+    environmentName === "test-publish" ? "localnet" : environmentName
   const chainId = await resolveChainIdentifier(
-    {
-      environmentName
-    },
+    { environmentName: chainIdEnvironmentName },
     toolingContext
   )
 
   if (!chainId) return { updatedFiles: [], chainId, didAttempt: true }
-
-  const resolvedEnvironmentName = resolveMoveCliEnvironmentName(environmentName)
-  if (!resolvedEnvironmentName)
-    return { updatedFiles: [], chainId, didAttempt: true }
 
   const { updatedFiles } = await syncMoveEnvironmentChainId({
     moveRootPath,
@@ -785,10 +783,22 @@ export const clearPublishedEntryForNetwork = async ({
     throw error
   }
 
-  const { updatedContents, didUpdate } = removePublishedSectionForNetwork(
-    contents,
-    networkName
-  )
+  const resolvedEnvironmentName = resolveMoveCliEnvironmentName(networkName)
+  const targetNetworks = new Set<string>([networkName])
+  if (resolvedEnvironmentName) targetNetworks.add(resolvedEnvironmentName)
+
+  let updatedContents = contents
+  let didUpdate = false
+
+  for (const targetNetwork of targetNetworks) {
+    const result = removePublishedSectionForNetwork(
+      updatedContents,
+      targetNetwork
+    )
+    updatedContents = result.updatedContents
+    didUpdate = didUpdate || result.didUpdate
+  }
+
   if (!didUpdate) return { publishedTomlPath, didUpdate: false }
 
   await fs.writeFile(publishedTomlPath, updatedContents)

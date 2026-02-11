@@ -1,14 +1,12 @@
 /// Execution-time state and events for the AMM.
 module prop_amm::executor;
 
-// === Imports ===
-
-use prop_amm::manager;
-
 use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, WithdrawCap};
 use deepbook::registry::Registry;
-
+use prop_amm::manager;
 use sui::table::{Self, Table};
+
+// === Imports ===
 
 // === Errors ===
 

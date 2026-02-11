@@ -94,7 +94,7 @@ describe("resolveChainIdentifier", () => {
 })
 
 describe("syncLocalnetMoveEnvironmentChainId", () => {
-  it("skips when the environment is not localnet", async () => {
+  it("skips when the environment is not localnet or test-publish", async () => {
     const { client } = createSuiClientMock({
       getChainIdentifier: vi.fn().mockResolvedValue("0xignored")
     })
@@ -133,6 +133,32 @@ describe("syncLocalnetMoveEnvironmentChainId", () => {
       const updated = await readTextFile(path.join(dir, "Move.toml"))
       expect(updated).toContain("[environments]")
       expect(updated).toContain('test-publish = "0xabc"')
+    })
+  })
+
+  it("updates Move.toml when test-publish is provided", async () => {
+    const { client } = createSuiClientMock({
+      getChainIdentifier: vi.fn().mockResolvedValue("0xdef")
+    })
+
+    await withTempDir(async (dir) => {
+      const moveToml = `[package]\nname = "fixture"\nversion = "0.0.1"\n\n[dep-replacements.test-publish]\nSui = { local = "../sui" }\n`
+      await writeFileTree(dir, { "Move.toml": moveToml })
+
+      const result = await syncLocalnetMoveEnvironmentChainId(
+        {
+          moveRootPath: dir,
+          environmentName: "test-publish"
+        },
+        { suiClient: client, suiConfig: buildSuiConfig("localnet") }
+      )
+
+      expect(result.didAttempt).toBe(true)
+      expect(result.updatedFiles).toEqual([path.join(dir, "Move.toml")])
+
+      const updated = await readTextFile(path.join(dir, "Move.toml"))
+      expect(updated).toContain("[environments]")
+      expect(updated).toContain('test-publish = "0xdef"')
     })
   })
 })

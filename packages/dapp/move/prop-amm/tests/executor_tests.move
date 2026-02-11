@@ -2,19 +2,16 @@
 #[test_only]
 module prop_amm::executor_tests;
 
-// === Imports ===
-
-use prop_amm::executor;
-use prop_amm::manager;
-
 use deepbook::balance_manager;
 use deepbook::registry;
-
+use prop_amm::executor;
+use prop_amm::manager;
 use std::unit_test::{assert_eq, destroy};
-
 use sui::dynamic_field;
 use sui::test_scenario;
 use sui::vec_set;
+
+// === Imports ===
 
 // === Constants ===
 

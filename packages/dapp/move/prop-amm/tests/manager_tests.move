@@ -2,13 +2,11 @@
 #[test_only]
 module prop_amm::manager_tests;
 
-// === Imports ===
-
 use prop_amm::manager;
-
 use std::unit_test::{assert_eq, assert_ref_eq};
-
 use sui::test_scenario;
+
+// === Imports ===
 
 // === Constants ===
 

@@ -1,10 +1,10 @@
 /// AMM configuration and admin controls.
 module prop_amm::manager;
 
-// === Imports ===
-
 use sui::event;
 use sui::package;
+
+// === Imports ===
 
 // === Errors ===
 
