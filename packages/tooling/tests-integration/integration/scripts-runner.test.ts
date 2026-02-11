@@ -13,8 +13,8 @@ import { createToolingIntegrationTestEnv } from "../helpers/env.ts"
 const testEnv = createToolingIntegrationTestEnv()
 
 describe("script runner", () => {
-  it("runs owner counter-create script on localnet", async () => {
-    await testEnv.withTestContext("owner-counter-create", async (context) => {
+  it("runs a categorized counter-create script on localnet", async () => {
+    await testEnv.withTestContext("role-counter-create", async (context) => {
       const publisher = context.createAccount("publisher")
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
 
@@ -26,14 +26,18 @@ describe("script runner", () => {
       const rootArtifact = pickRootNonDependencyArtifact(artifacts)
 
       const scriptRunner = createSuiScriptRunner(context)
-      const result = await scriptRunner.runOwnerScript("counter-create", {
-        account: publisher,
-        args: {
-          json: true,
-          counterPackageId: rootArtifact.packageId,
-          label: "Script Counter"
+      const result = await scriptRunner.runScriptInFolder(
+        "owner",
+        "counter-create",
+        {
+          account: publisher,
+          args: {
+            json: true,
+            counterPackageId: rootArtifact.packageId,
+            label: "Script Counter"
+          }
         }
-      })
+      )
 
       expect(result.exitCode).toBe(0)
       const parsed = parseJsonFromScriptOutput<{

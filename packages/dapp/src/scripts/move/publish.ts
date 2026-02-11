@@ -36,7 +36,7 @@ type ResolvedPublishOptions = {
 const PUBLISH_MINIMUM_GAS_COIN_OBJECTS = 2
 const MOVE_GIT_LOCK_MAX_AGE_MS = 10 * 60 * 1000
 const MOVE_GIT_LOCK_DIR = path.join(os.homedir(), ".move", "git")
-const AMM_PACKAGE_NAME = "PropAmm"
+const AMM_PACKAGE_NAME = "prop_amm"
 const DEEPBOOK_DEPENDENCY_NAME = "deepbook"
 const DEEPBOOK_TOKEN_DEPENDENCY_NAME = "token"
 

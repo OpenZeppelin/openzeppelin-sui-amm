@@ -78,11 +78,11 @@ describe("testing script helpers", () => {
   })
 
   it("resolves script paths", () => {
-    const buyerPath = resolveScriptPathIn("buyer", "buy.ts")
-    const ownerPath = resolveScriptPathIn("owner", "counter-create")
+    const categoryPath = resolveScriptPathIn("category-a", "buy.ts")
+    const rolePath = resolveScriptPathIn("role-b", "counter-create")
 
-    expect(buyerPath.endsWith(path.join("buyer", "buy.ts"))).toBe(true)
-    expect(ownerPath.endsWith(path.join("owner", "counter-create.ts"))).toBe(
+    expect(categoryPath.endsWith(path.join("category-a", "buy.ts"))).toBe(true)
+    expect(rolePath.endsWith(path.join("role-b", "counter-create.ts"))).toBe(
       true
     )
   })

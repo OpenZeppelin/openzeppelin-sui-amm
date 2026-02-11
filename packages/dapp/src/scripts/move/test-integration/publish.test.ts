@@ -71,7 +71,7 @@ describe("move publish integration", () => {
   const runGuardTest = deepbookContractPath ? it : it.skip
 
   runGuardTest(
-    "rejects PropAmm publish without localnet dep replacements",
+    "rejects prop_amm publish without localnet dep replacements",
     async () => {
       await testEnv.withTestContext("move-publish-guard", async (context) => {
         const publisher = context.createAccount("publisher")
@@ -83,7 +83,7 @@ describe("move publish integration", () => {
           path.join(tempPackagePath, "Move.toml"),
           [
             "[package]",
-            'name = "PropAmm"',
+            'name = "prop_amm"',
             'edition = "2024"',
             'version = "0.0.1"'
           ].join("\n")

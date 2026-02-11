@@ -51,6 +51,11 @@ export type SuiScriptRunner = {
     scriptPath: string,
     options?: ScriptRunOptions
   ) => Promise<ScriptRunResult>
+  runScriptInFolder: (
+    folderName: string,
+    scriptName: string,
+    options?: ScriptRunOptions
+  ) => Promise<ScriptRunResult>
 }
 
 const normalizeScriptName = (scriptName: string) =>
@@ -303,6 +308,8 @@ export const createSuiScriptRunner = (
   }
 
   return {
-    runScript
+    runScript,
+    runScriptInFolder: (folderName, scriptName, options) =>
+      runScript(resolveScriptPathIn(folderName, scriptName), options)
   }
 }
