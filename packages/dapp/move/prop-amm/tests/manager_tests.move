@@ -40,14 +40,13 @@ fun create_and_share_amm_config_and_advance_scenario(
     use_laser: bool,
     pyth_price_feed_id: vector<u8>,
 ): test_scenario::TransactionEffects {
-    let config = manager::create_amm_config(
+    manager::create_amm_config_and_share(
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
         pyth_price_feed_id,
         test_scenario::ctx(scenario),
     );
-    manager::share_amm_config(config);
     test_scenario::next_tx(scenario, sender)
 }
 
@@ -64,7 +63,7 @@ fun update_amm_config_and_advance_scenario(
     sender: address,
 ): test_scenario::TransactionEffects {
     let mut config = config;
-    manager::update_amm_config(
+    manager::update_amm_config_and_emit(
         &mut config,
         &admin_cap,
         base_spread_bps,

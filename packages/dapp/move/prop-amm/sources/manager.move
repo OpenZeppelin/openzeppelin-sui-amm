@@ -78,7 +78,58 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
     package::claim_and_keep<MANAGER>(publisher_witness, ctx);
 
     let admin_cap = create_admin_cap(ctx);
-    transfer_admin_cap(admin_cap, ctx.sender());
+    transfer::transfer(admin_cap, ctx.sender());
+}
+
+// === Entry Functions ===
+
+/// Creates, emits, and shares a new AMM configuration.
+public fun create_amm_config_and_share(
+    base_spread_bps: u64,
+    volatility_multiplier_bps: u64,
+    use_laser: bool,
+    pyth_price_feed_id: vector<u8>,
+    ctx: &mut TxContext,
+) {
+    let config = create_amm_config(
+        base_spread_bps,
+        volatility_multiplier_bps,
+        use_laser,
+        pyth_price_feed_id,
+        ctx,
+    );
+    event::emit(build_config_created_event(&config));
+    share_amm_config(config);
+}
+
+/// Updates a configuration object and emits an update event.
+public fun update_amm_config_and_emit(
+    config: &mut AMMConfig,
+    admin_cap: &AMMAdminCap,
+    base_spread_bps: u64,
+    volatility_multiplier_bps: u64,
+    use_laser: bool,
+    trading_paused: bool,
+    pyth_price_feed_id: vector<u8>,
+) {
+    update_amm_config(
+        config,
+        admin_cap,
+        base_spread_bps,
+        volatility_multiplier_bps,
+        use_laser,
+        trading_paused,
+        pyth_price_feed_id,
+    );
+    event::emit(build_config_updated_event(config));
+}
+
+/// Shares a configuration object.
+///
+/// Shared configs are readable by anyone; only the admin cap can update.
+/// This function does not emit events.
+public fun share_amm_config(config: AMMConfig) {
+    transfer::share_object(config);
 }
 
 // === Public Functions ===
@@ -86,6 +137,7 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 /// Creates a new AMM configuration object with validated inputs.
 ///
 /// The returned object is owned; call `share_amm_config` to make it shared.
+/// Use `create_amm_config_and_share` to emit the creation event.
 public fun create_amm_config(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
@@ -103,14 +155,13 @@ public fun create_amm_config(
         ctx,
     );
 
-    emit_config_created(&config);
-
     config
 }
 
 /// Updates a configuration object; requires the admin capability.
 ///
 /// The admin capability is the authorization proof for config mutations.
+/// Use `update_amm_config_and_emit` to emit the update event.
 public fun update_amm_config(
     config: &mut AMMConfig,
     admin_cap: &AMMAdminCap,
@@ -131,8 +182,6 @@ public fun update_amm_config(
         trading_paused,
         pyth_price_feed_id,
     );
-
-    emit_config_updated(config);
 }
 
 // === Private Functions ===
@@ -171,11 +220,6 @@ fun create_admin_cap(ctx: &mut TxContext): AMMAdminCap {
     AMMAdminCap { id: object::new(ctx) }
 }
 
-/// Transfers the admin capability to the recipient.
-fun transfer_admin_cap(admin_cap: AMMAdminCap, recipient: address) {
-    transfer::public_transfer(admin_cap, recipient);
-}
-
 /// Verifies the admin capability is valid.
 fun assert_admin_cap(admin_cap: &AMMAdminCap) {
     let _ = admin_cap.id.to_address();
@@ -195,23 +239,6 @@ fun apply_amm_config_updates(
     config.use_laser = use_laser;
     config.trading_paused = trading_paused;
     config.pyth_price_feed_id = pyth_price_feed_id;
-}
-
-/// Shares a configuration object.
-///
-/// Shared configs are readable by anyone; only the admin cap can update.
-public fun share_amm_config(config: AMMConfig) {
-    transfer::share_object(config);
-}
-
-/// Emits a configuration created event.
-fun emit_config_created(config: &AMMConfig) {
-    event::emit(build_config_created_event(config));
-}
-
-/// Emits a configuration updated event.
-fun emit_config_updated(config: &AMMConfig) {
-    event::emit(build_config_updated_event(config));
 }
 
 /// Builds an AMMConfigCreatedEvent payload.
