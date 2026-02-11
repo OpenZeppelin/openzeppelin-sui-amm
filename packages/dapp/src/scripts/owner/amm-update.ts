@@ -188,7 +188,7 @@ runSuiScript(
       alias: ["admin-cap-id"],
       type: "string",
       description:
-        "AMM admin cap id; inferred from owned objects or claimed from the admin cap store when omitted.",
+        "AMM admin cap id; inferred from the latest publish artifacts when omitted.",
       demandOption: false
     })
     .option("baseSpreadBps", {

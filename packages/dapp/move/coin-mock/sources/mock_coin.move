@@ -1,15 +1,21 @@
-module mock_coin::mock_coin;
+module MockCoin::mock_coin;
 
-use sui::coin;
 use sui::coin_registry;
+
+// === Structs ===
 
 /// Dev/local-only mock USD coin. Published for localnet convenience.
 public struct LocalMockUsd has key, store {
+    /// Unique ID for the coin object.
     id: UID,
 }
 
+// === Constants ===
+
 /// Fixed supply minted at initialization and transferred to `recipient`.
 const MOCK_COIN_SUPPLY: u64 = 1_000_000_000_000_000_000;
+
+// === Public Functions ===
 
 /// Initializes the local mock USD currency.
 ///
@@ -24,7 +30,7 @@ entry fun init_local_mock_usd(
     recipient: address,
     ctx: &mut TxContext,
 ) {
-    let (init, treasury_cap) = coin_registry::new_currency<LocalMockUsd>(
+    let (init, mut treasury_cap) = coin_registry::new_currency<LocalMockUsd>(
         registry,
         6,
         b"USDc".to_string(),
@@ -33,16 +39,6 @@ entry fun init_local_mock_usd(
         b"".to_string(),
         ctx,
     );
-    finalize_and_fund_coin(treasury_cap, init, recipient, ctx);
-}
-
-/// Finalizes metadata, mints the fixed supply, and transfers all caps/coins.
-fun finalize_and_fund_coin<T: key + store>(
-    mut treasury_cap: coin::TreasuryCap<T>,
-    init: coin_registry::CurrencyInitializer<T>,
-    recipient: address,
-    ctx: &mut TxContext,
-) {
     let metadata_cap = coin_registry::finalize(init, ctx);
     let minted = treasury_cap.mint(MOCK_COIN_SUPPLY, ctx);
 

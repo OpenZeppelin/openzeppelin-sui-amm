@@ -81,7 +81,7 @@ export default defineSuiConfig({
 - `SUI_ACCOUNT_MNEMONIC`: BIP-39 mnemonic
 - `SUI_ARTIFACTS_DIR`: where artifacts are written (default: `deployments/`)
 - `SUI_CONFIG_DIR` / `SUI_LOCALNET_CONFIG_DIR`: localnet config directory
-- `SUI_SKIP_MOVE_CHAIN_ID_SYNC`: skip Move.toml localnet environment sync
+- `SUI_SKIP_MOVE_CHAIN_ID_SYNC`: skip Move.toml test-publish environment sync for localnet
 
 ### Account config
 
@@ -125,7 +125,7 @@ Artifacts are merged/deduped by `objectId`/`packageId` where possible. The root 
 
 ### Move environment chain ID sync
 
-For localnet, the tooling can keep `Move.toml` environments aligned to the current chain ID. This prevents `dep-replacements` drift or publish failures when localnet is reset.
+For localnet, the tooling keeps `Move.toml` test-publish environments aligned to the current chain ID. This prevents `dep-replacements` drift or publish failures when localnet is reset.
 
 - `syncLocalnetMoveEnvironmentChainId(...)` updates `Move.toml` if needed.
 - `SUI_SKIP_MOVE_CHAIN_ID_SYNC=1` disables this behavior (useful in test harnesses).

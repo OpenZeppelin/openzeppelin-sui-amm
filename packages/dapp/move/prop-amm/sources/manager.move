@@ -239,24 +239,34 @@ public fun share_amm_config(config: AMMConfig) {
 
 /// Emits a configuration created event.
 fun emit_config_created(config: &AMMConfig) {
-    event::emit(AMMConfigCreatedEvent {
-        config_id: config.id.to_address(),
-        base_spread_bps: config.base_spread_bps,
-        volatility_multiplier_bps: config.volatility_multiplier_bps,
-        use_laser: config.use_laser,
-        trading_paused: config.trading_paused,
-    });
+    event::emit(build_config_created_event(config));
 }
 
 /// Emits a configuration updated event.
 fun emit_config_updated(config: &AMMConfig) {
-    event::emit(AMMConfigUpdatedEvent {
+    event::emit(build_config_updated_event(config));
+}
+
+/// Builds an AMMConfigCreatedEvent payload.
+fun build_config_created_event(config: &AMMConfig): AMMConfigCreatedEvent {
+    AMMConfigCreatedEvent {
         config_id: config.id.to_address(),
         base_spread_bps: config.base_spread_bps,
         volatility_multiplier_bps: config.volatility_multiplier_bps,
         use_laser: config.use_laser,
         trading_paused: config.trading_paused,
-    });
+    }
+}
+
+/// Builds an AMMConfigUpdatedEvent payload.
+fun build_config_updated_event(config: &AMMConfig): AMMConfigUpdatedEvent {
+    AMMConfigUpdatedEvent {
+        config_id: config.id.to_address(),
+        base_spread_bps: config.base_spread_bps,
+        volatility_multiplier_bps: config.volatility_multiplier_bps,
+        use_laser: config.use_laser,
+        trading_paused: config.trading_paused,
+    }
 }
 
 /// Validates the Pyth price feed identifier.

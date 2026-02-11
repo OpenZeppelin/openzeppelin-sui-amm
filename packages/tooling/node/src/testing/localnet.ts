@@ -59,7 +59,8 @@ import { resolveChainIdentifier } from "../move-toml.ts"
 import {
   buildMoveEnvironmentFlags,
   buildMovePackage,
-  clearPublishedEntryForNetwork
+  clearPublishedEntryForNetwork,
+  resolveMoveCliEnvironmentName
 } from "../move.ts"
 import { publishPackageWithLog } from "../publish.ts"
 import { createSuiClient } from "../sui-client.ts"
@@ -289,12 +290,12 @@ const logMovePackageDebug = async (label: string, packagePath: string) => {
   try {
     const moveTomlContents = await readFile(moveTomlPath, "utf8")
     const environmentBlock = extractMoveEnvironmentBlock(moveTomlContents)
-    const hasLocalnetEnvironment = /^\s*localnet\s*=\s*"[^"]*"/m.test(
+    const hasTestPublishEnvironment = /^\s*test-publish\s*=\s*"[^"]*"/m.test(
       moveTomlContents
     )
     logMoveDebug(`${label} Move.toml environments:\n${environmentBlock}`)
     logMoveDebug(
-      `${label} Move.toml localnet entry=${hasLocalnetEnvironment ? "present" : "missing"}`
+      `${label} Move.toml test-publish entry=${hasTestPublishEnvironment ? "present" : "missing"}`
     )
   } catch (error) {
     logMoveDebug(
@@ -304,9 +305,11 @@ const logMovePackageDebug = async (label: string, packagePath: string) => {
 
   try {
     const moveLockContents = await readFile(moveLockPath, "utf8")
-    const hasLocalnetPinned = /\[pinned\.localnet\./.test(moveLockContents)
+    const hasTestPublishPinned = /\[pinned\.test-publish\./.test(
+      moveLockContents
+    )
     logMoveDebug(
-      `${label} Move.lock localnet pinned sections=${hasLocalnetPinned ? "present" : "missing"}`
+      `${label} Move.lock test-publish pinned sections=${hasTestPublishPinned ? "present" : "missing"}`
     )
   } catch (error) {
     logMoveDebug(
@@ -1333,17 +1336,14 @@ const stripLocalnetDepReplacementsForLocalDeps = async (
   if (localDeps.size === 0) return
 
   const lineEnding = resolveTomlLineEnding(contents)
-  const lines = contents.split(/\r?\n/)
-  const sectionHeaderRegex = /^\s*\[dep-replacements\.localnet\]\s*(#.*)?$/
+  let lines = contents.split(/\r?\n/)
   const anyHeaderRegex = /^\s*\[[^\]]+\]\s*(#.*)?$/
-
-  const headerIndex = lines.findIndex((line) => sectionHeaderRegex.test(line))
-  if (headerIndex < 0) return
-
-  const nextHeaderIndex = lines.findIndex(
-    (line, index) => index > headerIndex && anyHeaderRegex.test(line)
+  const environmentNames = Array.from(
+    new Set([
+      "localnet",
+      resolveMoveCliEnvironmentName("localnet") ?? "test-publish"
+    ])
   )
-  const sectionEnd = nextHeaderIndex >= 0 ? nextHeaderIndex : lines.length
 
   const entryRegex = (dependencyName: string) =>
     new RegExp(
@@ -1351,27 +1351,43 @@ const stripLocalnetDepReplacementsForLocalDeps = async (
     )
 
   let didUpdate = false
-  const filteredSectionLines = lines
-    .slice(headerIndex + 1, sectionEnd)
-    .filter((line) => {
-      for (const dependencyName of localDeps) {
-        if (entryRegex(dependencyName).test(line)) {
-          didUpdate = true
-          return false
+  for (const environmentName of environmentNames) {
+    const sectionHeaderRegex = new RegExp(
+      `^\\s*\\[dep-replacements\\.${environmentName}\\]\\s*(#.*)?$`
+    )
+    const headerIndex = lines.findIndex((line) => sectionHeaderRegex.test(line))
+    if (headerIndex < 0) continue
+
+    const nextHeaderIndex = lines.findIndex(
+      (line, index) => index > headerIndex && anyHeaderRegex.test(line)
+    )
+    const sectionEnd = nextHeaderIndex >= 0 ? nextHeaderIndex : lines.length
+
+    let didUpdateSection = false
+    const filteredSectionLines = lines
+      .slice(headerIndex + 1, sectionEnd)
+      .filter((line) => {
+        for (const dependencyName of localDeps) {
+          if (entryRegex(dependencyName).test(line)) {
+            didUpdateSection = true
+            return false
+          }
         }
-      }
-      return true
-    })
+        return true
+      })
+
+    if (!didUpdateSection) continue
+    didUpdate = true
+    lines = [
+      ...lines.slice(0, headerIndex + 1),
+      ...filteredSectionLines,
+      ...lines.slice(sectionEnd)
+    ]
+  }
 
   if (!didUpdate) return
 
-  const updatedLines = [
-    ...lines.slice(0, headerIndex + 1),
-    ...filteredSectionLines,
-    ...lines.slice(sectionEnd)
-  ]
-
-  await writeFile(moveTomlPath, updatedLines.join(lineEnding), "utf8")
+  await writeFile(moveTomlPath, lines.join(lineEnding), "utf8")
 }
 
 const isPathWithinRoot = (candidatePath: string, rootPath: string) => {
@@ -1713,49 +1729,34 @@ export const prepareMoveSourcesForLocalnetTests = async ({
   await sanitizeLocalnetMoveMetadataInTempRoot(destinationMoveRoot)
 }
 
-const ensureLocalnetEnvironmentEntry = async (
-  moveRootPath: string,
+const resolveLocalnetMoveEnvironmentName = () =>
+  resolveMoveCliEnvironmentName("localnet") ?? "test-publish"
+
+const buildEnvironmentEntryLine = (environmentName: string, chainId: string) =>
+  `${environmentName} = "${chainId}"`
+
+const buildEnvironmentEntryRegex = (environmentName: string) =>
+  new RegExp(`^\\s*${environmentName}\\s*=\\s*"[^"]*"`, "m")
+
+const ensureMoveTomlEnvironmentEntry = async ({
+  moveTomlPath,
+  environmentName,
+  chainId
+}: {
+  moveTomlPath: string
+  environmentName: string
   chainId: string
-) => {
-  const moveTomlFiles = await listMoveTomlFiles(moveRootPath)
-
-  await Promise.all(
-    moveTomlFiles.map(async (moveTomlPath) => {
-      const contents = await readFile(moveTomlPath, "utf8")
-      if (/^\s*\[environments\]\s*$/m.test(contents)) {
-        if (/^\s*localnet\s*=\s*"[^"]*"/m.test(contents)) {
-          return
-        }
-        const updated = contents.replace(
-          /^\s*\[environments\]\s*$/m,
-          `[environments]\nlocalnet = "${chainId}"`
-        )
-        if (updated !== contents) {
-          await writeFile(moveTomlPath, updated, "utf8")
-        }
-        return
-      }
-
-      const suffix = contents.endsWith("\n") ? "" : "\n"
-      const updated = `${contents}${suffix}\n[environments]\nlocalnet = "${chainId}"\n`
-      await writeFile(moveTomlPath, updated, "utf8")
-    })
-  )
-}
-
-const ensureLocalnetEnvironmentEntryForPackage = async (
-  packagePath: string,
-  chainId: string
-) => {
-  const moveTomlPath = path.join(packagePath, "Move.toml")
+}) => {
   const contents = await readFile(moveTomlPath, "utf8")
+  const entryRegex = buildEnvironmentEntryRegex(environmentName)
+  if (entryRegex.test(contents)) return
 
-  if (/^\s*localnet\s*=\s*"[^"]*"/m.test(contents)) return
+  const entryLine = buildEnvironmentEntryLine(environmentName, chainId)
 
   if (/^\s*\[environments\]\s*$/m.test(contents)) {
     const updated = contents.replace(
       /^\s*\[environments\]\s*$/m,
-      `[environments]\nlocalnet = "${chainId}"`
+      `[environments]\n${entryLine}`
     )
     if (updated !== contents) {
       await writeFile(moveTomlPath, updated, "utf8")
@@ -1764,8 +1765,39 @@ const ensureLocalnetEnvironmentEntryForPackage = async (
   }
 
   const suffix = contents.endsWith("\n") ? "" : "\n"
-  const updated = `${contents}${suffix}\n[environments]\nlocalnet = "${chainId}"\n`
+  const updated = `${contents}${suffix}\n[environments]\n${entryLine}\n`
   await writeFile(moveTomlPath, updated, "utf8")
+}
+
+const ensureLocalnetEnvironmentEntry = async (
+  moveRootPath: string,
+  chainId: string
+) => {
+  const moveEnvironmentName = resolveLocalnetMoveEnvironmentName()
+  const moveTomlFiles = await listMoveTomlFiles(moveRootPath)
+
+  await Promise.all(
+    moveTomlFiles.map(async (moveTomlPath) => {
+      await ensureMoveTomlEnvironmentEntry({
+        moveTomlPath,
+        environmentName: moveEnvironmentName,
+        chainId
+      })
+    })
+  )
+}
+
+const ensureLocalnetEnvironmentEntryForPackage = async (
+  packagePath: string,
+  chainId: string
+) => {
+  const moveEnvironmentName = resolveLocalnetMoveEnvironmentName()
+  const moveTomlPath = path.join(packagePath, "Move.toml")
+  await ensureMoveTomlEnvironmentEntry({
+    moveTomlPath,
+    environmentName: moveEnvironmentName,
+    chainId
+  })
 }
 
 const removeMoveBuildArtifacts = async (rootDir: string) => {
@@ -2179,7 +2211,6 @@ export const createTestContext = async (
   const tempDir = await createTempDir(buildTempPrefix(testId))
   const moveRootPath = path.join(tempDir, "move")
   const artifactsDir = path.join(tempDir, "artifacts")
-
   await ensureDirectory(artifactsDir)
   const resolvedMoveSourceRoot = await copyMoveSources(
     moveRootPath,

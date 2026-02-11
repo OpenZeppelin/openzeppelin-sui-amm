@@ -1,6 +1,6 @@
 [package]
-name = "mock_coin"
+name = "MockCoin"
 edition = "2024"
 
 [environments]
-localnet = "334a5861"
+test-publish = "8051a268"
