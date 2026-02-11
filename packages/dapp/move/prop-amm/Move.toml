@@ -1,5 +1,5 @@
 [package]
-name = "PropAmm"
+name = "prop_amm"
 edition = "2024"
 version = "0.0.1"
 
@@ -18,5 +18,3 @@ deepbook = { published-at = "0x337f4f4f6567fcd778d5454f27c16c70e2f274cc6377ea624
 
 [environments]
 test-publish = "53417c5d"
-[dep-replacements.localnet]
-deepbook = { local = "../../../../vendor/deepbookv3/packages/deepbook", override = true }

@@ -30,6 +30,8 @@ fun init_and_advance_scenario(
     sender: address,
 ): test_scenario::TransactionEffects {
     manager::init_for_testing(test_scenario::ctx(scenario));
+    test_scenario::next_tx(scenario, sender);
+    claim_admin_cap_from_store(scenario);
     test_scenario::next_tx(scenario, sender)
 }
 
@@ -42,14 +44,13 @@ fun create_and_share_amm_config_and_advance_scenario(
     use_laser: bool,
     pyth_price_feed_id: vector<u8>,
 ): test_scenario::TransactionEffects {
-    let config = manager::create_amm_config(
+    manager::create_amm_config_and_share(
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
         pyth_price_feed_id,
         test_scenario::ctx(scenario),
     );
-    manager::share_amm_config(config);
     test_scenario::next_tx(scenario, sender)
 }
 
@@ -66,7 +67,7 @@ fun update_amm_config_and_advance_scenario(
     sender: address,
 ): test_scenario::TransactionEffects {
     let mut config = config;
-    manager::update_amm_config(
+    manager::update_amm_config_and_emit(
         &mut config,
         &admin_cap,
         base_spread_bps,
@@ -83,6 +84,13 @@ fun update_amm_config_and_advance_scenario(
 /// Takes the admin cap from the scenario.
 fun take_admin_cap_from_scenario(scenario: &test_scenario::Scenario): manager::AMMAdminCap {
     test_scenario::take_from_sender<manager::AMMAdminCap>(scenario)
+}
+
+/// Claims the admin cap from the shared store.
+fun claim_admin_cap_from_store(scenario: &mut test_scenario::Scenario) {
+    let mut store = test_scenario::take_shared<manager::AdminCapStore>(scenario);
+    manager::claim_admin_cap(&mut store, test_scenario::ctx(scenario));
+    test_scenario::return_shared(store);
 }
 
 /// Takes the configuration from the scenario.
@@ -122,7 +130,7 @@ fun assert_config_matches_inputs(
 // === Tests ===
 
 #[test]
-fun init_transfers_admin_cap() {
+fun init_shares_admin_cap_store_and_claims() {
     let sender = @0xA;
     let mut scenario = test_scenario::begin(sender);
 

@@ -52,12 +52,26 @@ public struct AdminCapStore has key {
     admin_cap: Option<AMMAdminCap>,
 }
 
+// === Events ===
+
+/// Emitted when a new configuration object is created.
+public struct AMMConfigCreatedEvent has copy, drop {
+    /// ID of the configuration object.
+    config_id: address,
+}
+
+/// Emitted when a configuration object is updated.
+public struct AMMConfigUpdatedEvent has copy, drop {
+    /// ID of the configuration object.
+    config_id: address,
+}
+
 // === Init ===
 
 /// One-time publisher witness created at publish time.
 public struct MANAGER has drop {}
 
-/// Initializes the package and transfers the admin capability to the publisher.
+/// Initializes the package and shares the admin cap store for the publisher.
 ///
 /// This is intended to run once at publish time via the one-time witness.
 fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
@@ -72,34 +86,55 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
     transfer::share_object(store);
 }
 
-// === Events ===
+// === Entry Functions ===
 
-/// Emitted when a new configuration object is created.
-public struct AMMConfigCreatedEvent has copy, drop {
-    /// ID of the configuration object.
-    config_id: address,
-    /// Base spread in basis points.
+/// Creates, emits, and shares a new AMM configuration.
+public fun create_amm_config_and_share(
     base_spread_bps: u64,
-    /// Volatility multiplier in basis points.
     volatility_multiplier_bps: u64,
-    /// Whether LASER pricing is enabled.
     use_laser: bool,
-    /// Whether trading is paused.
-    trading_paused: bool,
+    pyth_price_feed_id: vector<u8>,
+    ctx: &mut TxContext,
+) {
+    let config = create_amm_config(
+        base_spread_bps,
+        volatility_multiplier_bps,
+        use_laser,
+        pyth_price_feed_id,
+        ctx,
+    );
+    event::emit(build_config_created_event(&config));
+    share_amm_config(config);
 }
 
-/// Emitted when a configuration object is updated.
-public struct AMMConfigUpdatedEvent has copy, drop {
-    /// ID of the configuration object.
-    config_id: address,
-    /// Base spread in basis points.
+/// Updates a configuration object and emits an update event.
+public fun update_amm_config_and_emit(
+    config: &mut AMMConfig,
+    admin_cap: &AMMAdminCap,
     base_spread_bps: u64,
-    /// Volatility multiplier in basis points.
     volatility_multiplier_bps: u64,
-    /// Whether LASER pricing is enabled.
     use_laser: bool,
-    /// Whether trading is paused.
     trading_paused: bool,
+    pyth_price_feed_id: vector<u8>,
+) {
+    update_amm_config(
+        config,
+        admin_cap,
+        base_spread_bps,
+        volatility_multiplier_bps,
+        use_laser,
+        trading_paused,
+        pyth_price_feed_id,
+    );
+    event::emit(build_config_updated_event(config));
+}
+
+/// Shares a configuration object.
+///
+/// Shared configs are readable by anyone; only the admin cap can update.
+/// This function does not emit events.
+public fun share_amm_config(config: AMMConfig) {
+    transfer::share_object(config);
 }
 
 // === Public Functions ===
@@ -107,6 +142,7 @@ public struct AMMConfigUpdatedEvent has copy, drop {
 /// Creates a new AMM configuration object with validated inputs.
 ///
 /// The returned object is owned; call `share_amm_config` to make it shared.
+/// Use `create_amm_config_and_share` to emit the creation event.
 public fun create_amm_config(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
@@ -124,14 +160,13 @@ public fun create_amm_config(
         ctx,
     );
 
-    emit_config_created(&config);
-
     config
 }
 
 /// Updates a configuration object; requires the admin capability.
 ///
 /// The admin capability is the authorization proof for config mutations.
+/// Use `update_amm_config_and_emit` to emit the update event.
 public fun update_amm_config(
     config: &mut AMMConfig,
     admin_cap: &AMMAdminCap,
@@ -152,8 +187,6 @@ public fun update_amm_config(
         trading_paused,
         pyth_price_feed_id,
     );
-
-    emit_config_updated(config);
 }
 
 /// Claims the admin capability from the shared store.
@@ -230,31 +263,10 @@ fun apply_amm_config_updates(
     config.pyth_price_feed_id = pyth_price_feed_id;
 }
 
-/// Shares a configuration object.
-///
-/// Shared configs are readable by anyone; only the admin cap can update.
-public fun share_amm_config(config: AMMConfig) {
-    transfer::share_object(config);
-}
-
-/// Emits a configuration created event.
-fun emit_config_created(config: &AMMConfig) {
-    event::emit(build_config_created_event(config));
-}
-
-/// Emits a configuration updated event.
-fun emit_config_updated(config: &AMMConfig) {
-    event::emit(build_config_updated_event(config));
-}
-
 /// Builds an AMMConfigCreatedEvent payload.
 fun build_config_created_event(config: &AMMConfig): AMMConfigCreatedEvent {
     AMMConfigCreatedEvent {
         config_id: config.id.to_address(),
-        base_spread_bps: config.base_spread_bps,
-        volatility_multiplier_bps: config.volatility_multiplier_bps,
-        use_laser: config.use_laser,
-        trading_paused: config.trading_paused,
     }
 }
 
@@ -262,10 +274,6 @@ fun build_config_created_event(config: &AMMConfig): AMMConfigCreatedEvent {
 fun build_config_updated_event(config: &AMMConfig): AMMConfigUpdatedEvent {
     AMMConfigUpdatedEvent {
         config_id: config.id.to_address(),
-        base_spread_bps: config.base_spread_bps,
-        volatility_multiplier_bps: config.volatility_multiplier_bps,
-        use_laser: config.use_laser,
-        trading_paused: config.trading_paused,
     }
 }
 
