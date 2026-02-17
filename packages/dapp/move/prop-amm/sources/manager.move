@@ -145,7 +145,7 @@ public fun create_amm_config(
     pyth_price_feed_id: vector<u8>,
     ctx: &mut TxContext,
 ): AMMConfig {
-    assert_valid_amm_config_inputs(base_spread_bps, &pyth_price_feed_id);
+    assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
     let config = create_config(
         base_spread_bps,
@@ -171,8 +171,8 @@ public fun update_amm_config(
     trading_paused: bool,
     pyth_price_feed_id: vector<u8>,
 ) {
-    assert_admin_cap(admin_cap);
-    assert_valid_amm_config_inputs(base_spread_bps, &pyth_price_feed_id);
+    assert_admin_cap!(admin_cap);
+    assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
     apply_amm_config_updates(
         config,
@@ -187,14 +187,14 @@ public fun update_amm_config(
 // === Private Functions ===
 
 /// Ensures the base spread is nonzero.
-fun assert_valid_base_spread_bps(base_spread_bps: u64) {
-    assert!(base_spread_bps > 0, EInvalidSpread);
+macro fun assert_valid_base_spread_bps($base_spread_bps: u64) {
+    assert!($base_spread_bps > 0, EInvalidSpread);
 }
 
 /// Validates all inputs for a new or updated configuration.
-fun assert_valid_amm_config_inputs(base_spread_bps: u64, pyth_price_feed_id: &vector<u8>) {
-    assert_valid_base_spread_bps(base_spread_bps);
-    assert_valid_feed_id(pyth_price_feed_id);
+macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
+    assert_valid_base_spread_bps!($base_spread_bps);
+    assert_valid_feed_id($pyth_price_feed_id);
 }
 
 /// Builds a configuration object with default flags.
@@ -221,7 +221,8 @@ fun create_admin_cap(ctx: &mut TxContext): AMMAdminCap {
 }
 
 /// Verifies the admin capability is valid.
-fun assert_admin_cap(admin_cap: &AMMAdminCap) {
+macro fun assert_admin_cap($admin_cap: &AMMAdminCap) {
+    let admin_cap = $admin_cap;
     let _ = admin_cap.id.to_address();
 }
 
