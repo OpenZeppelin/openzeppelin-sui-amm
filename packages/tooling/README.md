@@ -61,7 +61,7 @@ export default defineSuiConfig({
     }
   },
   paths: {
-    move: "move",
+    move: "contracts",
     deployments: "deployments",
     objects: "deployments",
     artifacts: "deployments"
@@ -221,7 +221,7 @@ const testEnv = createSuiLocalnetTestEnv({
   mode: "test", // or "suite" to reuse one localnet per test file
   withFaucet: true,
   keepTemp: false,
-  moveSourceRootPath: "path/to/move/sources"
+  moveSourceRootPath: "path/to/contracts/sources"
 })
 
 describe("integration flow", () => {

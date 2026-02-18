@@ -32,11 +32,11 @@ export const mockArtifactPath = getArtifactPath("mock")("localnet")
 
 export const DEFAULT_PYTH_CONTRACT_PATH = path.join(
   process.cwd(),
-  "move",
+  "contracts",
   "pyth-mock"
 )
 export const DEFAULT_COIN_CONTRACT_PATH = path.join(
   process.cwd(),
-  "move",
+  "contracts",
   "coin-mock"
 )

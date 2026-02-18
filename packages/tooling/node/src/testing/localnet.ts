@@ -1726,7 +1726,7 @@ export const createTestContext = async (
   options?: TestContextOptions
 ): Promise<TestContext> => {
   const tempDir = await createTempDir(buildTempPrefix(testId))
-  const moveRootPath = path.join(tempDir, "move")
+  const moveRootPath = path.join(tempDir, "contracts")
   const artifactsDir = path.join(tempDir, "artifacts")
   await ensureDirectory(artifactsDir)
   await copyMoveSources(moveRootPath, options?.moveSourceRootPath)
