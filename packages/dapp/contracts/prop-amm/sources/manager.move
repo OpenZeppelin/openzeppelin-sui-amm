@@ -42,28 +42,12 @@ public struct AMMAdminCap has key, store {
 public struct AMMConfigCreatedEvent has copy, drop {
     /// ID of the configuration object.
     config_id: address,
-    /// Base spread in basis points.
-    base_spread_bps: u64,
-    /// Volatility multiplier in basis points.
-    volatility_multiplier_bps: u64,
-    /// Whether LASER pricing is enabled.
-    use_laser: bool,
-    /// Whether trading is paused.
-    trading_paused: bool,
 }
 
 /// Emitted when a configuration object is updated.
 public struct AMMConfigUpdatedEvent has copy, drop {
     /// ID of the configuration object.
     config_id: address,
-    /// Base spread in basis points.
-    base_spread_bps: u64,
-    /// Volatility multiplier in basis points.
-    volatility_multiplier_bps: u64,
-    /// Whether LASER pricing is enabled.
-    use_laser: bool,
-    /// Whether trading is paused.
-    trading_paused: bool,
 }
 
 // === Init ===
@@ -98,7 +82,7 @@ public fun create_amm_config_and_share(
         pyth_price_feed_id,
         ctx,
     );
-    event::emit(build_config_created_event(&config));
+    event::emit(new_amm_config_created_event(&config));
     share_amm_config(config);
 }
 
@@ -121,7 +105,7 @@ public fun update_amm_config_and_emit(
         trading_paused,
         pyth_price_feed_id,
     );
-    event::emit(build_config_updated_event(config));
+    event::emit(new_amm_config_updated_event(config));
 }
 
 /// Shares a configuration object.
@@ -186,17 +170,6 @@ public fun update_amm_config(
 
 // === Private Functions ===
 
-/// Ensures the base spread is nonzero.
-macro fun assert_valid_base_spread_bps($base_spread_bps: u64) {
-    assert!($base_spread_bps > 0, EInvalidSpread);
-}
-
-/// Validates all inputs for a new or updated configuration.
-macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
-    assert_valid_base_spread_bps!($base_spread_bps);
-    assert_valid_feed_id($pyth_price_feed_id);
-}
-
 /// Builds a configuration object with default flags.
 fun create_config(
     base_spread_bps: u64,
@@ -220,12 +193,6 @@ fun create_admin_cap(ctx: &mut TxContext): AMMAdminCap {
     AMMAdminCap { id: object::new(ctx) }
 }
 
-/// Verifies the admin capability is valid.
-macro fun assert_admin_cap($admin_cap: &AMMAdminCap) {
-    let admin_cap = $admin_cap;
-    let _ = admin_cap.id.to_address();
-}
-
 /// Applies updates to the configuration object.
 fun apply_amm_config_updates(
     config: &mut AMMConfig,
@@ -242,26 +209,21 @@ fun apply_amm_config_updates(
     config.pyth_price_feed_id = pyth_price_feed_id;
 }
 
-/// Builds an AMMConfigCreatedEvent payload.
-fun build_config_created_event(config: &AMMConfig): AMMConfigCreatedEvent {
-    AMMConfigCreatedEvent {
-        config_id: config.id.to_address(),
-        base_spread_bps: config.base_spread_bps,
-        volatility_multiplier_bps: config.volatility_multiplier_bps,
-        use_laser: config.use_laser,
-        trading_paused: config.trading_paused,
-    }
+/// Ensures the base spread is nonzero.
+macro fun assert_valid_base_spread_bps($base_spread_bps: u64) {
+    assert!($base_spread_bps > 0, EInvalidSpread);
 }
 
-/// Builds an AMMConfigUpdatedEvent payload.
-fun build_config_updated_event(config: &AMMConfig): AMMConfigUpdatedEvent {
-    AMMConfigUpdatedEvent {
-        config_id: config.id.to_address(),
-        base_spread_bps: config.base_spread_bps,
-        volatility_multiplier_bps: config.volatility_multiplier_bps,
-        use_laser: config.use_laser,
-        trading_paused: config.trading_paused,
-    }
+/// Validates all inputs for a new or updated configuration.
+macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
+    assert_valid_base_spread_bps!($base_spread_bps);
+    assert_valid_feed_id($pyth_price_feed_id);
+}
+
+/// Verifies the admin capability is valid.
+macro fun assert_admin_cap($admin_cap: &AMMAdminCap) {
+    let admin_cap = $admin_cap;
+    let _ = admin_cap.id.to_address();
 }
 
 /// Validates the Pyth price feed identifier.
@@ -270,6 +232,20 @@ fun build_config_updated_event(config: &AMMConfig): AMMConfigUpdatedEvent {
 fun assert_valid_feed_id(pyth_price_feed_id: &vector<u8>) {
     assert!(!pyth_price_feed_id.is_empty(), EEmptyFeedId);
     assert!(pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH, EInvalidFeedIdLength);
+}
+
+/// Creates an AMMConfigCreatedEvent payload.
+fun new_amm_config_created_event(config: &AMMConfig): AMMConfigCreatedEvent {
+    AMMConfigCreatedEvent {
+        config_id: config.id.to_address(),
+    }
+}
+
+/// Creates an AMMConfigUpdatedEvent payload.
+fun new_amm_config_updated_event(config: &AMMConfig): AMMConfigUpdatedEvent {
+    AMMConfigUpdatedEvent {
+        config_id: config.id.to_address(),
+    }
 }
 
 // === Test-Only Helpers ===
