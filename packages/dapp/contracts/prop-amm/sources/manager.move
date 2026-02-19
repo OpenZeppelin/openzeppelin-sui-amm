@@ -217,7 +217,7 @@ macro fun assert_valid_base_spread_bps($base_spread_bps: u64) {
 /// Validates all inputs for a new or updated configuration.
 macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
     assert_valid_base_spread_bps!($base_spread_bps);
-    assert_valid_feed_id($pyth_price_feed_id);
+    assert_valid_feed_id!($pyth_price_feed_id);
 }
 
 /// Verifies the admin capability is valid.
@@ -229,7 +229,8 @@ macro fun assert_admin_cap($admin_cap: &AMMAdminCap) {
 /// Validates the Pyth price feed identifier.
 ///
 /// Pyth feed IDs are 32-byte identifiers.
-fun assert_valid_feed_id(pyth_price_feed_id: &vector<u8>) {
+macro fun assert_valid_feed_id($pyth_price_feed_id: &vector<u8>) {
+    let pyth_price_feed_id = $pyth_price_feed_id;
     assert!(!pyth_price_feed_id.is_empty(), EEmptyFeedId);
     assert!(pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH, EInvalidFeedIdLength);
 }
