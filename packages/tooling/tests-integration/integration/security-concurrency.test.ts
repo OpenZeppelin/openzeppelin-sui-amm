@@ -6,10 +6,8 @@ import {
   newTransaction,
   resolveSplitCoinResult
 } from "@sui-amm/tooling-core/transactions"
-import {
-  pickRootNonDependencyArtifact,
-  withArtifactsRoot
-} from "@sui-amm/tooling-node/artifacts"
+import { withArtifactsRoot } from "@sui-amm/tooling-node/artifacts"
+import { pickRootNonDependencyArtifact } from "@sui-amm/tooling-node/package"
 import { signAndExecute } from "@sui-amm/tooling-node/transactions"
 
 import { requireCreatedObjectId } from "@sui-amm/tooling-node/testing/assert"
