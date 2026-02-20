@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 
@@ -43,10 +42,6 @@ const resolveUserScriptPath = (scriptName: string) =>
     scriptName.endsWith(".ts") ? scriptName : `${scriptName}.ts`
   )
 
-const resolvePythMockPath = () => path.join(resolveDappMoveRoot(), "pyth-mock")
-
-const isPythMockAvailable = () => existsSync(resolvePythMockPath())
-
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
   keepTemp: resolveKeepTemp(),
@@ -54,7 +49,7 @@ const testEnv = createSuiLocalnetTestEnv({
   moveSourceRootPath: resolveDappMoveRoot()
 })
 
-;(isPythMockAvailable() ? describe : describe.skip)("amm-view script", () => {
+describe("amm-view script", () => {
   it("renders the latest AMM config snapshot when no id is provided", async () => {
     await testEnv.withTestContext("user-amm-view", async (context) => {
       const publisher = context.createAccount("publisher")
