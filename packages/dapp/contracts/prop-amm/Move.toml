@@ -1,0 +1,13 @@
+[package]
+name = "amm"
+edition = "2024"
+version = "0.0.1"
+
+[dependencies]
+deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/deepbook", rev = "main" }
+
+[dep-replacements.test-publish]
+pyth = { local = "../pyth-mock", rename-from = "Pyth", override = true }
+
+[environments]
+test-publish = "8051a268"
