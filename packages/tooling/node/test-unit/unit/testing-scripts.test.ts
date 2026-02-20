@@ -41,7 +41,7 @@ const runWithRunnerContext = async <T>(
     },
     suiConfig: {
       network: {
-        gasBudget: 500_000_000
+        gasBudget: 800_000_000
       }
     }
   } as never
