@@ -1,0 +1,6 @@
+[package]
+name = "Pyth"
+edition = "2024"
+
+[environments]
+test-publish = "8051a268"
