@@ -32,4 +32,6 @@ export type TAmmConfigCardState = {
   viewModel: TAmmConfigCardViewModel
   ammConfig?: AmmConfigOverview
   refreshAmmConfig: () => void
+  canUpdateConfig: boolean
+  applyAmmConfigUpdate: (ammConfig: AmmConfigOverview) => void
 }

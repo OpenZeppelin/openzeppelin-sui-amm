@@ -11,6 +11,7 @@ import type {
   TAmmConfigCardViewModel,
   TAmmConfigDetails
 } from "../types/TAmmConfigCard"
+import useAmmConfigUpdateEligibility from "./useAmmConfigUpdateEligibility"
 import useAmmConfigOverview, {
   type AmmConfigStatus
 } from "./useAmmConfigOverview"
@@ -108,8 +109,9 @@ const useAmmConfigCardViewModel = (): TAmmConfigCardState => {
   const { network: currentNetwork } = useSuiClientContext()
   const explorerUrl = useExplorerUrl()
   const ammConfigId = useResolvedAmmConfigId()
-  const { status, ammConfig, error, refreshAmmConfig } =
+  const { status, ammConfig, error, refreshAmmConfig, applyAmmConfigUpdate } =
     useAmmConfigOverview(ammConfigId)
+  const { canUpdateConfig } = useAmmConfigUpdateEligibility(ammConfigId)
 
   const networkLabel = useMemo(
     () => resolveNetworkLabel(currentNetwork),
@@ -139,7 +141,9 @@ const useAmmConfigCardViewModel = (): TAmmConfigCardState => {
   return {
     viewModel,
     ammConfig,
-    refreshAmmConfig
+    refreshAmmConfig,
+    canUpdateConfig,
+    applyAmmConfigUpdate
   }
 }
 
