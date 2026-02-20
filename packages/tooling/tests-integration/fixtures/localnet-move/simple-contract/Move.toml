@@ -1,6 +1,6 @@
 [package]
-name = "simple_contract"
+name = "SimpleContract"
 edition = "2024"
 
 [environments]
-localnet = "58157b31"
+test-publish = "58157b31"

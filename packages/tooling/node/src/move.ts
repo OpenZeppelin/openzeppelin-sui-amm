@@ -63,12 +63,25 @@ export type MoveTestPublishOptions = {
 }
 
 /**
+ * Normalizes Move CLI environment names when they differ from Sui network names.
+ */
+export const resolveMoveCliEnvironmentName = (
+  environmentName?: string
+): string | undefined =>
+  environmentName === "localnet" ? "test-publish" : environmentName
+
+/**
  * Builds CLI flags for Move commands that accept an environment.
  */
 export const buildMoveEnvironmentFlags = ({
   environmentName
-}: MoveEnvironmentOptions): string[] =>
-  environmentName ? ["--environment", environmentName] : []
+}: MoveEnvironmentOptions): string[] => {
+  const resolvedEnvironmentName = resolveMoveCliEnvironmentName(environmentName)
+
+  return resolvedEnvironmentName
+    ? ["--environment", resolvedEnvironmentName]
+    : []
+}
 
 /**
  * Builds CLI flags for `sui move test`.
@@ -97,7 +110,11 @@ const buildMoveTestPublishFlags = ({
 }: MoveTestPublishOptions): string[] => {
   const flags: string[] = []
 
-  if (buildEnvironmentName) flags.push("--build-env", buildEnvironmentName)
+  const resolvedBuildEnvironmentName =
+    resolveMoveCliEnvironmentName(buildEnvironmentName)
+  if (resolvedBuildEnvironmentName) {
+    flags.push("--build-env", resolvedBuildEnvironmentName)
+  }
   if (publicationFilePath) flags.push("--pubfile-path", publicationFilePath)
   if (withUnpublishedDependencies) flags.push("--with-unpublished-dependencies")
 

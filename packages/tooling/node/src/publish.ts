@@ -108,13 +108,13 @@ const syncLocalnetMoveEnvironmentChainIdForPublish = async (
 
   if (didAttempt && !chainId) {
     logWarning(
-      "Unable to resolve localnet chain id; Move.toml environments were not updated."
+      "Unable to resolve localnet chain id; Move.toml test-publish environments were not updated."
     )
   }
 
   if (updatedFiles.length) {
     logKeyValueBlue("Move.toml")(
-      `updated ${updatedFiles.length} localnet environment entries`
+      `updated ${updatedFiles.length} test-publish environment entries`
     )
   }
 }
@@ -723,14 +723,16 @@ const assertFrameworkRevisionConsistency = async (packagePath: string) => {
   const frameworkRevisions = await readFrameworkRevisionsForPackage(packagePath)
   if (frameworkRevisions.size === 0) return
 
-  if (frameworkRevisions.size > 1)
-    throw new Error(
+  if (frameworkRevisions.size > 1) {
+    logWarning(
       await buildMultipleFrameworkRevisionsMessage({
         packagePath,
         frameworkRevisions,
-        severity: "error"
+        severity: "warning"
       })
     )
+    return
+  }
 
   const [rootFrameworkRevision] = [...frameworkRevisions]
 
