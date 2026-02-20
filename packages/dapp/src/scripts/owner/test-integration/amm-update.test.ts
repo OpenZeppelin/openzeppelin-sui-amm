@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs"
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -36,6 +38,10 @@ const resolveWithFaucet = () => process.env.SUI_IT_WITH_FAUCET !== "0"
 const UPDATED_PYTH_PRICE_FEED_ID_HEX =
   "0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
 
+const resolvePythMockPath = () => path.join(resolveDappMoveRoot(), "pyth-mock")
+
+const isPythMockAvailable = () => existsSync(resolvePythMockPath())
+
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
   keepTemp: resolveKeepTemp(),
@@ -43,92 +49,95 @@ const testEnv = createSuiLocalnetTestEnv({
   moveSourceRootPath: resolveDappMoveRoot()
 })
 
-describe("owner amm-update integration", () => {
-  it("updates a shared AMM config and returns the latest snapshot", async () => {
-    await testEnv.withTestContext("owner-amm-update", async (context) => {
-      const publisher = context.createAccount("publisher")
-      await context.fundAccount(publisher, { minimumCoinObjects: 2 })
+;(isPythMockAvailable() ? describe : describe.skip)(
+  "owner amm-update integration",
+  () => {
+    it("updates a shared AMM config and returns the latest snapshot", async () => {
+      await testEnv.withTestContext("owner-amm-update", async (context) => {
+        const publisher = context.createAccount("publisher")
+        await context.fundAccount(publisher, { minimumCoinObjects: 2 })
 
-      const publishArtifacts = await context.publishPackage(
-        "prop-amm",
-        publisher,
-        { withUnpublishedDependencies: true }
-      )
-      const rootArtifact = pickRootNonDependencyArtifact(publishArtifacts)
-      const ammPackageId = rootArtifact.packageId
+        const publishArtifacts = await context.publishPackage(
+          "prop-amm",
+          publisher,
+          { withUnpublishedDependencies: true }
+        )
+        const rootArtifact = pickRootNonDependencyArtifact(publishArtifacts)
+        const ammPackageId = rootArtifact.packageId
 
-      await context.waitForFinality(rootArtifact.digest)
+        await context.waitForFinality(rootArtifact.digest)
 
-      const adminCapId = await resolveAmmAdminCapIdFromPublishDigest({
-        publishDigest: rootArtifact.digest,
-        suiClient: context.suiClient
-      })
-      if (!adminCapId)
-        throw new Error("Expected AMM admin cap to be published.")
+        const adminCapId = await resolveAmmAdminCapIdFromPublishDigest({
+          publishDigest: rootArtifact.digest,
+          suiClient: context.suiClient
+        })
+        if (!adminCapId)
+          throw new Error("Expected AMM admin cap to be published.")
 
-      const initialConfigTransaction = buildCreateAmmConfigTransaction({
-        packageId: ammPackageId,
-        baseSpreadBps: 25n,
-        volatilityMultiplierBps: 200n,
-        useLaser: false,
-        pythPriceFeedIdBytes: parsePythPriceFeedIdBytes(
-          DEFAULT_MOCK_PRICE_FEED.feedIdHex
+        const initialConfigTransaction = buildCreateAmmConfigTransaction({
+          packageId: ammPackageId,
+          baseSpreadBps: 25n,
+          volatilityMultiplierBps: 200n,
+          useLaser: false,
+          pythPriceFeedIdBytes: parsePythPriceFeedIdBytes(
+            DEFAULT_MOCK_PRICE_FEED.feedIdHex
+          )
+        })
+
+        const createResult = await context.signAndExecuteTransaction(
+          initialConfigTransaction,
+          publisher
+        )
+        await context.waitForFinality(createResult.digest)
+
+        const ammConfigId = ensureCreatedObject(
+          AMM_CONFIG_TYPE_SUFFIX,
+          createResult
+        ).objectId
+
+        const scriptRunner = createSuiScriptRunner(context)
+        const result = await scriptRunner.runScript(
+          resolveOwnerScriptPath("amm-update"),
+          {
+            account: publisher,
+            args: {
+              json: true,
+              ammPackageId,
+              ammConfigId,
+              adminCapId,
+              baseSpreadBps: "55",
+              volatilityMultiplierBps: "555",
+              useLaser: true,
+              tradingPaused: true,
+              pythPriceFeedId: UPDATED_PYTH_PRICE_FEED_ID_HEX
+            }
+          }
+        )
+
+        expect(result.exitCode).toBe(0)
+
+        const output = parseJsonFromScriptOutput<AmmUpdateOutput>(
+          result.stdout,
+          "amm-update output"
+        )
+        if (!output.ammConfig)
+          throw new Error("amm-update output did not include ammConfig.")
+
+        expect(output.transactionSummary?.label).toBe("update-amm")
+        expect(output.ammConfigId).toBe(ammConfigId)
+        expect(output.adminCapId).toBe(adminCapId)
+        expect(output.ammConfig.configId).toBe(ammConfigId)
+        expect(output.ammConfig.baseSpreadBps).toBe("55")
+        expect(output.ammConfig.volatilityMultiplierBps).toBe("555")
+        expect(output.ammConfig.useLaser).toBe(true)
+        expect(output.ammConfig.tradingPaused).toBe(true)
+        expect(normalizeHex(output.ammConfig.pythPriceFeedIdHex)).toBe(
+          normalizeHex(UPDATED_PYTH_PRICE_FEED_ID_HEX)
+        )
+        expect(normalizeHex(output.pythPriceFeedIdHex ?? "")).toBe(
+          normalizeHex(UPDATED_PYTH_PRICE_FEED_ID_HEX)
         )
       })
-
-      const createResult = await context.signAndExecuteTransaction(
-        initialConfigTransaction,
-        publisher
-      )
-      await context.waitForFinality(createResult.digest)
-
-      const ammConfigId = ensureCreatedObject(
-        AMM_CONFIG_TYPE_SUFFIX,
-        createResult
-      ).objectId
-
-      const scriptRunner = createSuiScriptRunner(context)
-      const result = await scriptRunner.runScript(
-        resolveOwnerScriptPath("amm-update"),
-        {
-          account: publisher,
-          args: {
-            json: true,
-            ammPackageId,
-            ammConfigId,
-            adminCapId,
-            baseSpreadBps: "55",
-            volatilityMultiplierBps: "555",
-            useLaser: true,
-            tradingPaused: true,
-            pythPriceFeedId: UPDATED_PYTH_PRICE_FEED_ID_HEX
-          }
-        }
-      )
-
-      expect(result.exitCode).toBe(0)
-
-      const output = parseJsonFromScriptOutput<AmmUpdateOutput>(
-        result.stdout,
-        "amm-update output"
-      )
-      if (!output.ammConfig)
-        throw new Error("amm-update output did not include ammConfig.")
-
-      expect(output.transactionSummary?.label).toBe("update-amm")
-      expect(output.ammConfigId).toBe(ammConfigId)
-      expect(output.adminCapId).toBe(adminCapId)
-      expect(output.ammConfig.configId).toBe(ammConfigId)
-      expect(output.ammConfig.baseSpreadBps).toBe("55")
-      expect(output.ammConfig.volatilityMultiplierBps).toBe("555")
-      expect(output.ammConfig.useLaser).toBe(true)
-      expect(output.ammConfig.tradingPaused).toBe(true)
-      expect(normalizeHex(output.ammConfig.pythPriceFeedIdHex)).toBe(
-        normalizeHex(UPDATED_PYTH_PRICE_FEED_ID_HEX)
-      )
-      expect(normalizeHex(output.pythPriceFeedIdHex ?? "")).toBe(
-        normalizeHex(UPDATED_PYTH_PRICE_FEED_ID_HEX)
-      )
     })
-  })
-})
+  }
+)
