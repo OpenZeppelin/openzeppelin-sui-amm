@@ -1,81 +1,181 @@
-import type { SuiClient } from "@mysten/sui/client"
-import {
-  AMM_ADMIN_CAP_TYPE_SUFFIX,
-  type AmmConfigOverview
-} from "@sui-amm/domain-core/models/amm"
+import path from "node:path"
+
+import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import { findMockPriceFeedConfig } from "@sui-amm/domain-core/models/pyth"
-import type { PublishArtifact } from "@sui-amm/tooling-core/types"
-import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
+import { buildClaimAmmAdminCapTransaction } from "@sui-amm/domain-core/ptb/amm"
 import {
-  findLatestArtifactThat,
-  loadDeploymentArtifacts,
-  readArtifact
-} from "@sui-amm/tooling-node/artifacts"
+  resolveAmmAdminCapStoreId,
+  resolveOwnedAmmAdminCapId
+} from "@sui-amm/domain-node/amm"
+import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
+import { resolveSignerAddress } from "@sui-amm/tooling-node/account"
+import { readArtifact } from "@sui-amm/tooling-node/artifacts"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { logKeyValueGreen, logWarning } from "@sui-amm/tooling-node/log"
-import { resolveFullPackagePath } from "@sui-amm/tooling-node/move"
+import {
+  resolveFullPackagePath,
+  syncMoveTomlDependencyReplacementEntry,
+  syncMoveTomlDependencyPublishedIds
+} from "@sui-amm/tooling-node/move"
 import type { MockArtifact } from "./mocks.ts"
 import { mockArtifactPath } from "./mocks.ts"
 
 export const DEFAULT_PYTH_PRICE_FEED_LABEL = "MOCK_SUI_FEED"
 
+const AMM_DEEPBOOK_DEPENDENCY_NAME = "deepbook"
 const AMM_PACKAGE_FOLDER_NAME = "prop-amm"
 
-export const resolveAmmPackagePath = (tooling: Tooling) =>
+export const resolveAmmPackagePath = (tooling: Pick<Tooling, "suiConfig">) =>
   resolveFullPackagePath(tooling.suiConfig.paths.move, AMM_PACKAGE_FOLDER_NAME)
 
-const resolveAmmPublishArtifact = async ({
-  networkName,
-  ammPackageId
-}: {
-  networkName: string
-  ammPackageId: string
-}): Promise<PublishArtifact | undefined> => {
-  const deploymentArtifacts = await loadDeploymentArtifacts(networkName)
-
-  return findLatestArtifactThat(
-    (artifact) => artifact.packageId === ammPackageId,
-    deploymentArtifacts
-  )
-}
-
-export const resolveAmmAdminCapIdFromPublishDigest = async ({
-  publishDigest,
-  suiClient
-}: {
-  publishDigest: string
-  suiClient: SuiClient
-}): Promise<string> => {
-  const publishTransaction = await suiClient.getTransactionBlock({
-    digest: publishDigest,
-    options: { showObjectChanges: true }
-  })
-
-  return ensureCreatedObject(AMM_ADMIN_CAP_TYPE_SUFFIX, publishTransaction)
-    .objectId
-}
-
-export const resolveAmmAdminCapIdFromArtifacts = async ({
+export const syncAmmDeepbookDependencyPublishedIds = async ({
   tooling,
-  ammPackageId
+  environmentName,
+  deepbookPublishedAt,
+  deepbookOriginalId
 }: {
-  tooling: Pick<Tooling, "suiClient" | "network">
+  tooling: Pick<Tooling, "suiConfig">
+  environmentName: string
+  deepbookPublishedAt: string
+  deepbookOriginalId: string
+}) => {
+  const ammPackagePath = resolveAmmPackagePath(tooling)
+  const moveTomlPath = path.join(ammPackagePath, "Move.toml")
+
+  return await syncMoveTomlDependencyPublishedIds({
+    moveTomlPath,
+    environmentName,
+    dependencyName: AMM_DEEPBOOK_DEPENDENCY_NAME,
+    publishedAt: deepbookPublishedAt,
+    originalId: deepbookOriginalId
+  })
+}
+
+export const syncAmmDeepbookDependencyLocalReplacement = async ({
+  tooling,
+  environmentName,
+  deepbookContractPath
+}: {
+  tooling: Pick<Tooling, "suiConfig">
+  environmentName: string
+  deepbookContractPath: string
+}) => {
+  const ammPackagePath = resolveAmmPackagePath(tooling)
+  const moveTomlPath = path.join(ammPackagePath, "Move.toml")
+  const relativeDeepbookPath = path.relative(
+    ammPackagePath,
+    deepbookContractPath
+  )
+  const normalizedDeepbookPath = relativeDeepbookPath.startsWith(".")
+    ? relativeDeepbookPath
+    : `./${relativeDeepbookPath}`
+
+  return await syncMoveTomlDependencyReplacementEntry({
+    moveTomlPath,
+    environmentName,
+    dependencyName: AMM_DEEPBOOK_DEPENDENCY_NAME,
+    replacementEntry: `${AMM_DEEPBOOK_DEPENDENCY_NAME} = { local = "${normalizedDeepbookPath}", override = true }`
+  })
+}
+
+export const claimAmmAdminCapFromStore = async ({
+  tooling,
+  ammPackageId,
+  adminCapStoreId,
+  devInspect,
+  summaryLabel = "claim-amm-admin-cap"
+}: {
+  tooling: Pick<
+    Tooling,
+    | "executeTransactionWithSummary"
+    | "getMutableSharedObject"
+    | "loadedEd25519KeyPair"
+  >
   ammPackageId: string
-}): Promise<string> => {
-  const publishArtifact = await resolveAmmPublishArtifact({
-    networkName: tooling.network.networkName,
-    ammPackageId
+  adminCapStoreId: string
+  devInspect?: boolean
+  summaryLabel?: string
+}) => {
+  const adminCapStore = await tooling.getMutableSharedObject({
+    objectId: adminCapStoreId
+  })
+  const claimTransaction = buildClaimAmmAdminCapTransaction({
+    packageId: ammPackageId,
+    adminCapStore
   })
 
-  if (!publishArtifact?.digest)
-    throw new Error(
-      "Unable to locate the latest AMM publish artifact; provide --admin-cap-id or re-run publish to refresh deployments."
+  return await tooling.executeTransactionWithSummary({
+    transaction: claimTransaction,
+    signer: tooling.loadedEd25519KeyPair,
+    summaryLabel,
+    devInspect
+  })
+}
+
+export const resolveAmmAdminCapIdOrClaim = async ({
+  tooling,
+  ammPackageId,
+  adminCapId,
+  devInspect,
+  dryRun
+}: {
+  tooling: Pick<
+    Tooling,
+    | "executeTransactionWithSummary"
+    | "getMutableSharedObject"
+    | "loadedEd25519KeyPair"
+    | "network"
+    | "suiClient"
+  >
+  ammPackageId: string
+  adminCapId?: string
+  devInspect?: boolean
+  dryRun?: boolean
+}): Promise<string> => {
+  const trimmedAdminCapId = adminCapId?.trim()
+  if (trimmedAdminCapId)
+    return normalizeIdOrThrow(
+      trimmedAdminCapId,
+      "AMM admin cap id is required; provide --admin-cap-id."
     )
 
-  return resolveAmmAdminCapIdFromPublishDigest({
-    publishDigest: publishArtifact.digest,
+  const ownerAddress = resolveSignerAddress(tooling.loadedEd25519KeyPair)
+
+  const ownedAdminCapId = await resolveOwnedAmmAdminCapId({
+    ammPackageId,
+    ownerAddress,
     suiClient: tooling.suiClient
   })
+  if (ownedAdminCapId) return ownedAdminCapId
+
+  if (dryRun)
+    throw new Error(
+      "AMM admin cap id is required in --dry-run mode. Provide --admin-cap-id or run without --dry-run to claim from the admin cap store."
+    )
+
+  const adminCapStoreId = await resolveAmmAdminCapStoreId({
+    networkName: tooling.network.networkName,
+    ammPackageId,
+    suiClient: tooling.suiClient
+  })
+  await claimAmmAdminCapFromStore({
+    tooling,
+    ammPackageId,
+    adminCapStoreId,
+    devInspect
+  })
+
+  const claimedAdminCapId = await resolveOwnedAmmAdminCapId({
+    suiClient: tooling.suiClient,
+    ammPackageId,
+    ownerAddress
+  })
+  if (!claimedAdminCapId)
+    throw new Error(
+      "Unable to resolve the AMM admin cap after claiming; provide --admin-cap-id and retry."
+    )
+
+  return claimedAdminCapId
 }
 
 const findPriceFeedIdFromMockArtifact = (

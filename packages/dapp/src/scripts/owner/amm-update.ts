@@ -15,17 +15,15 @@ import {
   resolveAmmConfigId,
   resolveAmmPackageId
 } from "@sui-amm/domain-node/amm"
-import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
 import {
   parseNonNegativeU64,
   parsePositiveU64
 } from "@sui-amm/tooling-core/utils/utility"
-import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
 import {
   logAmmConfigOverview,
-  resolveAmmAdminCapIdFromArtifacts,
+  resolveAmmAdminCapIdOrClaim,
   resolvePythPriceFeedIdHex
 } from "../../utils/amm.ts"
 
@@ -51,35 +49,6 @@ type ResolvedAmmUpdateInputs = {
   tradingPaused: boolean
   pythPriceFeedIdHex: string
   pythPriceFeedIdBytes: number[]
-}
-
-const resolveAmmAdminCapIdFromCli = (
-  adminCapId?: string
-): string | undefined => {
-  const trimmedAdminCapId = adminCapId?.trim()
-  if (!trimmedAdminCapId) return undefined
-  return normalizeIdOrThrow(
-    trimmedAdminCapId,
-    "An AMM admin cap id is required; provide --admin-cap-id."
-  )
-}
-
-const resolveAmmAdminCapIdForUpdate = async ({
-  tooling,
-  cliArguments,
-  ammPackageId
-}: {
-  tooling: Pick<Tooling, "network" | "suiClient">
-  cliArguments: UpdateAmmArguments
-  ammPackageId: string
-}): Promise<string> => {
-  const adminCapIdFromCli = resolveAmmAdminCapIdFromCli(cliArguments.adminCapId)
-  if (adminCapIdFromCli) return adminCapIdFromCli
-
-  return resolveAmmAdminCapIdFromArtifacts({
-    tooling,
-    ammPackageId
-  })
 }
 
 const resolveBaseSpreadBps = (rawValue: string): bigint =>
@@ -141,10 +110,12 @@ runSuiScript(
       networkName: tooling.network.networkName,
       ammConfigId: cliArguments.ammConfigId
     })
-    const adminCapId = await resolveAmmAdminCapIdForUpdate({
+    const adminCapId = await resolveAmmAdminCapIdOrClaim({
       tooling,
-      cliArguments,
-      ammPackageId
+      ammPackageId,
+      adminCapId: cliArguments.adminCapId,
+      devInspect: cliArguments.devInspect,
+      dryRun: cliArguments.dryRun
     })
 
     const ammConfigSharedObject = await tooling.getMutableSharedObject({
