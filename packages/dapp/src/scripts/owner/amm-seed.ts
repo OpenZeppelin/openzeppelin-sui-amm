@@ -12,6 +12,7 @@ import {
   DEFAULT_VOLATILITY_MULTIPLIER_BPS,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
+import { resolveDeepbookPublishedIds } from "@sui-amm/domain-core/models/deepbook"
 import { buildCreateAmmConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
 import {
   collectAmmConfigSnapshot,
@@ -38,7 +39,8 @@ import { requireCreatedArtifactIdBySuffix } from "@sui-amm/tooling-node/transact
 import {
   logAmmConfigOverview,
   resolveAmmPackagePath,
-  resolvePythPriceFeedIdHex
+  resolvePythPriceFeedIdHex,
+  syncAmmDeepbookDependencyPublishedIds
 } from "../../utils/amm.ts"
 
 type AmmSeedArguments = {
@@ -49,6 +51,7 @@ type AmmSeedArguments = {
   pythPriceFeedLabel?: string
   ammPackageId?: string
   rePublish?: boolean
+  withUnpublishedDependencies?: boolean
   useCliPublish?: boolean
   json?: boolean
 }
@@ -158,24 +161,53 @@ const resolveExistingAmmPackageId = async ({
 const publishAmmPackage = async ({
   tooling,
   rePublish,
+  withUnpublishedDependencies,
   useCliPublish
 }: {
   tooling: Tooling
   rePublish?: boolean
+  withUnpublishedDependencies?: boolean
   useCliPublish?: boolean
 }) => {
   const targetingLocalnet = tooling.network.networkName === "localnet"
   const shouldUseCliPublish = useCliPublish ?? !targetingLocalnet
+  const shouldUseUnpublishedDependencies =
+    withUnpublishedDependencies ?? targetingLocalnet
 
   logKeyValueBlue("Package")("Publishing AMM package.")
 
   return tooling.publishMovePackageWithFunding({
     packagePath: resolveAmmPackagePath(tooling),
-    withUnpublishedDependencies: targetingLocalnet,
-    allowAutoUnpublishedDependencies: targetingLocalnet,
+    withUnpublishedDependencies: shouldUseUnpublishedDependencies,
+    allowAutoUnpublishedDependencies: shouldUseUnpublishedDependencies,
     clearPublishedEntry: Boolean(rePublish),
     useCliPublish: shouldUseCliPublish
   })
+}
+
+const syncDeepbookAddressForNetwork = async ({
+  tooling
+}: {
+  tooling: Pick<Tooling, "network" | "suiConfig">
+}) => {
+  const deepbookPublishedIds = resolveDeepbookPublishedIds(
+    tooling.network.networkName
+  )
+  if (!deepbookPublishedIds) return { didUpdate: false, moveTomlPath: "" }
+
+  const result = await syncAmmDeepbookDependencyPublishedIds({
+    tooling,
+    environmentName: tooling.network.networkName,
+    deepbookPublishedAt: deepbookPublishedIds.publishedAt,
+    deepbookOriginalId: deepbookPublishedIds.originalId
+  })
+
+  if (result.didUpdate)
+    logKeyValueBlue("Move.toml")(
+      `updated PropAmm deepbook address (${result.moveTomlPath})`
+    )
+
+  return result
 }
 
 const resolveOrPublishAmmPackageId = async ({
@@ -208,9 +240,12 @@ const resolveOrPublishAmmPackageId = async ({
     logKeyValueYellow("Package")("Re-publish requested; forcing publish.")
   }
 
+  await syncDeepbookAddressForNetwork({ tooling })
+
   const publishArtifact = await publishAmmPackage({
     tooling,
     rePublish: cliArguments.rePublish,
+    withUnpublishedDependencies: cliArguments.withUnpublishedDependencies,
     useCliPublish: cliArguments.useCliPublish
   })
 
@@ -441,6 +476,13 @@ runSuiScript(
       type: "string",
       description:
         "Package ID for the amm Move package; inferred from the latest publish entry when omitted.",
+      demandOption: false
+    })
+    .option("withUnpublishedDependencies", {
+      alias: ["with-unpublished-deps", "with-unpublished-dependencies"],
+      type: "boolean",
+      description:
+        "Publish dependencies from source (localnet only). Defaults to true on localnet when omitted.",
       demandOption: false
     })
     .option("rePublish", {

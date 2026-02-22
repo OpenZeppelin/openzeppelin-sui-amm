@@ -11,13 +11,11 @@ import { normalizeHex } from "@sui-amm/tooling-core/hex"
 import { extractInitialSharedVersion } from "@sui-amm/tooling-core/shared-object"
 import { pickRootNonDependencyArtifact } from "@sui-amm/tooling-node/artifacts"
 import { createSuiLocalnetTestEnv } from "@sui-amm/tooling-node/testing/env"
-import {
-  resolveDappMoveRoot,
-  resolveDappRoot
-} from "@sui-amm/tooling-node/testing/paths"
+import { resolveDappMoveRoot } from "@sui-amm/tooling-node/testing/paths"
 import {
   createSuiScriptRunner,
-  parseJsonFromScriptOutput
+  parseJsonFromScriptOutput,
+  resolveScriptPathIn
 } from "@sui-amm/tooling-node/testing/scripts"
 
 type AmmCreateOutput = {
@@ -33,19 +31,6 @@ type ObjectArtifact = {
   objectType?: string
   initialSharedVersion?: string
 }
-
-const resolveKeepTemp = () => process.env.SUI_IT_KEEP_TEMP === "1"
-
-const resolveWithFaucet = () => process.env.SUI_IT_WITH_FAUCET !== "0"
-
-const resolveOwnerScriptPath = (scriptName: string) =>
-  path.join(
-    resolveDappRoot(),
-    "src",
-    "scripts",
-    "owner",
-    scriptName.endsWith(".ts") ? scriptName : `${scriptName}.ts`
-  )
 
 const resolveObjectArtifactsPath = (artifactsDir: string) =>
   path.join(artifactsDir, "objects.localnet.json")
@@ -65,8 +50,6 @@ const findObjectArtifactById = (
 
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
-  keepTemp: resolveKeepTemp(),
-  withFaucet: resolveWithFaucet(),
   moveSourceRootPath: resolveDappMoveRoot()
 })
 
@@ -90,7 +73,7 @@ describe("owner amm-create integration", () => {
 
       const scriptRunner = createSuiScriptRunner(context)
       const result = await scriptRunner.runScript(
-        resolveOwnerScriptPath("amm-create"),
+        resolveScriptPathIn("owner", "amm-create"),
         {
           account: publisher,
           args: {

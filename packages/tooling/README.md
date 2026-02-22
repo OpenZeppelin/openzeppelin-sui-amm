@@ -61,7 +61,7 @@ export default defineSuiConfig({
     }
   },
   paths: {
-    move: "contracts",
+    move: "move",
     deployments: "deployments",
     objects: "deployments",
     artifacts: "deployments"
@@ -203,6 +203,7 @@ The testing helpers in `packages/tooling/node/src/testing` provide a consistent 
 - creating isolated localnet instances (or a shared suite instance)
 - providing a `TestContext` with ready-to-use helpers
 - wiring scripts to a controlled config and artifacts directory
+- copying any external Move dependencies into a temp root so tests never mutate workspace vendor code
 
 ### Key entry points
 
@@ -210,6 +211,8 @@ The testing helpers in `packages/tooling/node/src/testing` provide a consistent 
 - `withTestContext(...)` / `createTestContext(...)` — per-test context with cleanup
 - `createSuiScriptRunner(context)` — run TS scripts with a scoped config
 - `parseJsonFromScriptOutput(stdout)` — parse JSON output from scripts
+- `prepareMoveSourcesForLocalnetTests(...)` — copy external Move deps into a temp root and rewrite local paths
+- `copyExternalMoveDependenciesIntoTempRoot(...)` — low-level copier for external Move deps
 
 ### Typical setup (Vitest)
 
@@ -221,7 +224,7 @@ const testEnv = createSuiLocalnetTestEnv({
   mode: "test", // or "suite" to reuse one localnet per test file
   withFaucet: true,
   keepTemp: false,
-  moveSourceRootPath: "path/to/contracts/sources"
+  moveSourceRootPath: "path/to/move/sources"
 })
 
 describe("integration flow", () => {
@@ -254,15 +257,16 @@ import { describe, it, expect } from "vitest"
 import { pickRootNonDependencyArtifact } from "_root_package__/tooling-node/artifacts"
 import {
   createSuiScriptRunner,
-  parseJsonFromScriptOutput
+  parseJsonFromScriptOutput,
+  resolveScriptPathIn
 } from "_root_package__/tooling-node/testing/scripts"
 import { createSuiLocalnetTestEnv } from "_root_package__/tooling-node/testing/env"
 
 const testEnv = createSuiLocalnetTestEnv({ mode: "test", withFaucet: true })
 
-describe("owner scripts", () => {
+describe("script folders", () => {
   it("runs amm-create and parses JSON output", async () => {
-    await testEnv.withTestContext("owner-amm-create", async (context) => {
+    await testEnv.withTestContext("script-amm-create", async (context) => {
       const publisher = context.createAccount("publisher")
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
 
@@ -274,12 +278,15 @@ describe("owner scripts", () => {
       const rootArtifact = pickRootNonDependencyArtifact(artifacts)
 
       const scriptRunner = createSuiScriptRunner(context)
-      const result = await scriptRunner.runOwnerScript("amm-create", {
-        account: publisher,
-        args: {
-          json: true,
-          ammPackageId: rootArtifact.packageId,
-          pythPriceFeedLabel: "MOCK_SUI_FEED"
+      const result = await scriptRunner.runScript(
+        resolveScriptPathIn("category", "amm-create"),
+        {
+          account: publisher,
+          args: {
+            json: true,
+            ammPackageId: rootArtifact.packageId,
+            pythPriceFeedLabel: "MOCK_SUI_FEED"
+          }
         }
       })
 
@@ -520,8 +527,12 @@ High-level helpers for localnet + scripts. These are used by the integration tes
 - `createSuiScriptRunner(context)` — run TS scripts against a localnet test context
 - `parseJsonFromScriptOutput(stdout)` — parse JSON from script output
 - `createLocalnetHarness()` / `createTestContext(...)` — lower-level localnet management
-- `runOwnerScript(...)` / `runBuyerScript(...)` — run dapp scripts in tests
+- `runScriptInFolder(folderName, scriptName, ...)` — run dapp scripts in tests
 - `parseJsonFromScriptOutput(stdout)` — parse JSON from script output
+- `prepareMoveSourcesForLocalnetTests(...)` — copy external Move deps into temp root and rewrite local paths
+- `copyExternalMoveDependenciesIntoTempRoot(...)` — low-level external dep copy helper for tests
+- `ensureAccountKeystore(...)` — materialize a keystore entry for a test account
+- `ensureAccountRegisteredInLocalnetKeystore(...)` — register a test account for Sui CLI use
 
 ---
 
@@ -542,4 +553,3 @@ High-level helpers for localnet + scripts. These are used by the integration tes
 - Transaction helpers normalize ID/owner formats to avoid cross-run diffs.
 
 ---
-

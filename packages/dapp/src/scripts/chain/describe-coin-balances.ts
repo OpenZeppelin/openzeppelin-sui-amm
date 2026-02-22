@@ -8,11 +8,11 @@ import yargs from "yargs"
 import { resolveOwnerAddress } from "@sui-amm/tooling-node/account"
 import {
   logEachGreen,
-  logKeyValueBlue,
   logKeyValueGreen,
   logKeyValueYellow
 } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
+import { formatBigInt, logChainContext } from "./utils.ts"
 
 type CoinBalancesCliArgs = {
   address?: string
@@ -32,10 +32,11 @@ runSuiScript<CoinBalancesCliArgs>(
       tooling.network
     )
 
-    logInspectionContext({
-      address: addressToInspect,
+    logChainContext({
+      networkName: tooling.network.networkName,
       rpcUrl: tooling.network.url,
-      networkName: tooling.network.networkName
+      subjectLabel: "Address",
+      subjectValue: addressToInspect
     })
 
     const balances = await tooling.getCoinBalances({
@@ -78,19 +79,4 @@ const logCoinBalances = (balances: CoinBalanceSummary[]) => {
   )
 }
 
-const logInspectionContext = ({
-  address,
-  rpcUrl,
-  networkName
-}: {
-  address: string
-  rpcUrl: string
-  networkName: string
-}) => {
-  logKeyValueBlue("Network")(networkName)
-  logKeyValueBlue("RPC")(rpcUrl)
-  logKeyValueBlue("Address")(address)
-  console.log("")
-}
-
-const formatBigInt = (value: bigint) => value.toString()
+// formatBigInt provided by chain utils

@@ -19,9 +19,11 @@ import {
   canonicalizePackagePath,
   clearPublishedEntryForNetwork,
   hasDeploymentForPackage,
+  readMoveTomlDependencyReplacement,
   resolveFullPackagePath
 } from "@sui-amm/tooling-node/move"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
+import { DEFAULT_DEEPBOOK_PATH } from "../../utils/mocks.ts"
 
 type ResolvedPublishOptions = {
   withUnpublishedDependencies: boolean
@@ -34,6 +36,9 @@ type ResolvedPublishOptions = {
 const PUBLISH_MINIMUM_GAS_COIN_OBJECTS = 2
 const MOVE_GIT_LOCK_MAX_AGE_MS = 10 * 60 * 1000
 const MOVE_GIT_LOCK_DIR = path.join(os.homedir(), ".move", "git")
+const AMM_PACKAGE_NAME = "prop_amm"
+const DEEPBOOK_DEPENDENCY_NAME = "deepbook"
+const DEEPBOOK_TOKEN_DEPENDENCY_NAME = "token"
 
 const findStaleMoveGitLocks = async (): Promise<string[]> => {
   let entries: string[]
@@ -167,6 +172,80 @@ const buildFundingRequirements = (gasBudget: number) => {
   }
 }
 
+const readMoveTomlPackageName = async (
+  packagePath: string
+): Promise<string | undefined> => {
+  const moveTomlPath = path.join(packagePath, "Move.toml")
+  try {
+    const contents = await fs.readFile(moveTomlPath, "utf8")
+    return contents.match(/name\s*=\s*"([^"]+)"/)?.[1]
+  } catch {
+    return undefined
+  }
+}
+
+const assertDependencyReplacementPresent = async ({
+  moveTomlPath,
+  environmentName,
+  dependencyName,
+  contextLabel
+}: {
+  moveTomlPath: string
+  environmentName: string
+  dependencyName: string
+  contextLabel: string
+}) => {
+  let replacement:
+    | { publishedAt?: string; originalId?: string; local?: string }
+    | undefined
+  try {
+    replacement = await readMoveTomlDependencyReplacement({
+      moveTomlPath,
+      environmentName,
+      dependencyName
+    })
+  } catch {
+    throw new Error(
+      `Unable to read ${contextLabel}. Ensure the path exists before publishing.`
+    )
+  }
+
+  if (replacement?.publishedAt && replacement?.originalId) return
+  if (replacement?.local) return
+
+  throw new Error(
+    [
+      `Missing ${dependencyName} dep-replacements.${environmentName} entry in ${contextLabel}.`,
+      `Run "pnpm mock:setup --re-publish" to publish DeepBook + token and update Move.toml mappings.`
+    ].join(" ")
+  )
+}
+
+const assertLocalnetPropAmmDependencyReplacements = async ({
+  packagePath
+}: {
+  packagePath: string
+}) => {
+  const packageName = await readMoveTomlPackageName(packagePath)
+  if (packageName !== AMM_PACKAGE_NAME) return
+
+  const ammMoveTomlPath = path.join(packagePath, "Move.toml")
+  await assertDependencyReplacementPresent({
+    moveTomlPath: ammMoveTomlPath,
+    environmentName: "localnet",
+    dependencyName: DEEPBOOK_DEPENDENCY_NAME,
+    contextLabel: ammMoveTomlPath
+  })
+
+  const deepbookMoveTomlPath = path.join(DEFAULT_DEEPBOOK_PATH, "Move.toml")
+  await assertDependencyReplacementPresent({
+    moveTomlPath: deepbookMoveTomlPath,
+    environmentName: "localnet",
+    dependencyName: DEEPBOOK_TOKEN_DEPENDENCY_NAME,
+    contextLabel: deepbookMoveTomlPath
+  })
+}
+
 const publishPackageToNetwork = async (
   tooling: Tooling,
   packagePath: string,
@@ -211,6 +290,8 @@ const derivePublishOptions = (
   }
 ): ResolvedPublishOptions => {
   const targetingLocalnet = networkName === "localnet"
+  const explicitlyDisabledUnpublishedDependencies =
+    cliArguments.withUnpublishedDependencies === false
 
   if (!targetingLocalnet && cliArguments.withUnpublishedDependencies)
     throw new Error(
@@ -220,7 +301,8 @@ const derivePublishOptions = (
   return {
     withUnpublishedDependencies:
       cliArguments.withUnpublishedDependencies ?? targetingLocalnet,
-    allowAutoUnpublishedDependencies: targetingLocalnet,
+    allowAutoUnpublishedDependencies:
+      targetingLocalnet && !explicitlyDisabledUnpublishedDependencies,
     useCliPublish: cliArguments.useCliPublish ?? true
   }
 }
@@ -231,10 +313,14 @@ runSuiScript(
       clearStaleLocks: cliArguments.clearStaleMoveLocks
     })
 
-    // Resolve the absolute Move package path (relative to repo root or contracts/).
+    // Resolve the absolute Move package path (relative to repo root or move/).
     const fullPackagePath = resolveFullPackagePath(
       path.resolve(tooling.suiConfig.paths.move),
       cliArguments.packagePath
+    )
+    const publishOptions = derivePublishOptions(
+      tooling.suiConfig.network.networkName,
+      cliArguments
     )
 
     if (cliArguments.rePublish) {
@@ -266,18 +352,24 @@ runSuiScript(
       return
     }
 
+    if (
+      tooling.suiConfig.network.networkName === "localnet" &&
+      !publishOptions.withUnpublishedDependencies &&
+      !publishOptions.allowAutoUnpublishedDependencies
+    ) {
+      await assertLocalnetPropAmmDependencyReplacements({
+        packagePath: fullPackagePath
+      })
+    }
+
     // Publish with network-aware options (unpublished deps localnet-only, published deps on shared nets).
-    await publishPackageToNetwork(
-      tooling,
-      fullPackagePath,
-      derivePublishOptions(tooling.suiConfig.network.networkName, cliArguments)
-    )
+    await publishPackageToNetwork(tooling, fullPackagePath, publishOptions)
   },
   yargs()
     .option("packagePath", {
       alias: "package-path",
       type: "string",
-      description: `The path of the package to publish in "contracts" directory`,
+      description: `The path of the package to publish in "move" directory`,
       demandOption: true
     })
     .option("withUnpublishedDependencies", {

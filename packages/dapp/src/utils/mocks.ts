@@ -1,5 +1,7 @@
 import { getArtifactPath, writeArtifact } from "@sui-amm/tooling-node/artifacts"
+import fs from "node:fs"
 import path from "node:path"
+import process from "node:process"
 
 export type MockArtifact = Partial<{
   pythPackageId: string
@@ -36,11 +38,54 @@ export const mockArtifactPath = getArtifactPath("mock")("localnet")
 
 export const DEFAULT_PYTH_CONTRACT_PATH = path.join(
   process.cwd(),
-  "contracts",
+  "move",
   "pyth-mock"
 )
 export const DEFAULT_COIN_CONTRACT_PATH = path.join(
   process.cwd(),
-  "contracts",
+  "move",
   "coin-mock"
 )
+
+export const DEFAULT_DEEPBOOK_PATH = path.resolve(
+  process.cwd(),
+  "..",
+  "..",
+  "vendor",
+  "deepbookv3",
+  "packages",
+  "deepbook"
+)
+
+export const DEFAULT_DEEPBOOK_TOKEN_PATH = path.resolve(
+  process.cwd(),
+  "..",
+  "..",
+  "vendor",
+  "deepbookv3",
+  "packages",
+  "token"
+)
+
+export const resolveDeepbookContractPathSync = ({
+  basePath,
+  allowMissing = false
+}: {
+  basePath: string
+  allowMissing?: boolean
+}) => {
+  const deepbookPath = path.resolve(
+    basePath,
+    "vendor",
+    "deepbookv3",
+    "packages",
+    "deepbook"
+  )
+
+  if (fs.existsSync(deepbookPath)) return deepbookPath
+  if (allowMissing) return undefined
+
+  throw new Error(
+    `DeepBook contract path was not found at ${deepbookPath}. Re-run with --deepbook-contract-path.`
+  )
+}
