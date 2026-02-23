@@ -4,14 +4,34 @@ import os from "node:os"
 import path from "node:path"
 import { PassThrough } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519"
 
 const { spawn } = vi.hoisted(() => ({
   spawn: vi.fn()
 }))
 
-vi.mock("node:child_process", () => ({
-  spawn
-}))
+const { ensureAccountKeystore, ensureAccountRegisteredInLocalnetKeystore } =
+  vi.hoisted(() => ({
+    ensureAccountKeystore: vi.fn(async () => "/tmp/sui-script-test.keystore"),
+    ensureAccountRegisteredInLocalnetKeystore: vi.fn(async () => {})
+  }))
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    spawn
+  }
+})
+
+vi.mock("../../src/testing/localnet.ts", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    ensureAccountKeystore,
+    ensureAccountRegisteredInLocalnetKeystore
+  }
+})
 
 import {
   buildScriptArguments,
@@ -34,6 +54,7 @@ const runWithRunnerContext = async <T>(
     tempDir,
     artifactsDir: tempDir,
     moveRootPath: tempDir,
+    fundAccount: vi.fn(async () => {}),
     localnet: {
       rpcUrl: "http://localhost:9000",
       configDir: tempDir
@@ -55,6 +76,10 @@ const runWithRunnerContext = async <T>(
 describe("testing script helpers", () => {
   beforeEach(() => {
     spawn.mockReset()
+    ensureAccountKeystore.mockReset()
+    ensureAccountKeystore.mockResolvedValue("/tmp/sui-script-test.keystore")
+    ensureAccountRegisteredInLocalnetKeystore.mockReset()
+    ensureAccountRegisteredInLocalnetKeystore.mockResolvedValue(undefined)
   })
 
   it("builds script arguments from maps", () => {
@@ -88,6 +113,8 @@ describe("testing script helpers", () => {
   })
 
   it("runs scripts with resolved environment", async () => {
+    const keypair = new Ed25519Keypair()
+
     spawn.mockImplementation(() => {
       const child = new MockChildProcess()
       process.nextTick(() => {
@@ -103,8 +130,9 @@ describe("testing script helpers", () => {
       return runner.runScript("/tmp/script.ts", {
         args: { fooBar: "baz" },
         account: {
+          label: "owner",
           address: "0x1",
-          keypair: { getSecretKey: () => "secret" }
+          keypair
         } as never
       })
     })
@@ -124,7 +152,7 @@ describe("testing script helpers", () => {
     )
     expect(
       (options as { env: Record<string, string> }).env.SUI_ACCOUNT_PRIVATE_KEY
-    ).toBe("secret")
+    ).toBe(keypair.getSecretKey())
   })
 
   it("throws when scripts exit with non-zero codes by default", async () => {

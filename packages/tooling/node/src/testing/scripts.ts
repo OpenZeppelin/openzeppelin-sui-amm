@@ -67,6 +67,12 @@ const resolveScriptPath = (segments: string[]) =>
 export const resolveScriptPathIn = (scriptFolder: string, scriptName: string) =>
   resolveScriptPath([scriptFolder, normalizeScriptName(scriptName)])
 
+export const resolveBuyerScriptPath = (scriptName: string) =>
+  resolveScriptPathIn("buyer", scriptName)
+
+export const resolveOwnerScriptPath = (scriptName: string) =>
+  resolveScriptPathIn("owner", scriptName)
+
 const buildArgumentEntries = (key: string, value: ScriptArgumentValue) => {
   if (value === undefined) return []
 

@@ -1327,6 +1327,30 @@ const collectLocalDependencyNames = (contents: string) =>
     )
   )
 
+const isTomlCommentOrEmptyLine = (line: string) => {
+  const trimmedLine = line.trim()
+  return trimmedLine.length === 0 || trimmedLine.startsWith("#")
+}
+
+const pruneSectionSurroundingBlankLines = (
+  leadingLines: string[],
+  trailingLines: string[]
+) => {
+  if (leadingLines.length === 0 || trailingLines.length === 0) {
+    return [...leadingLines, ...trailingLines]
+  }
+
+  const lastLeadingLine = leadingLines[leadingLines.length - 1]
+  const firstTrailingLine = trailingLines[0]
+  const hasDoubleSeparator =
+    isTomlCommentOrEmptyLine(lastLeadingLine ?? "") &&
+    isTomlCommentOrEmptyLine(firstTrailingLine ?? "")
+
+  if (!hasDoubleSeparator) return [...leadingLines, ...trailingLines]
+
+  return [...leadingLines.slice(0, -1), ...trailingLines]
+}
+
 const stripLocalnetDepReplacementsForLocalDeps = async (
   moveTomlPath: string
 ) => {
@@ -1378,6 +1402,18 @@ const stripLocalnetDepReplacementsForLocalDeps = async (
 
     if (!didUpdateSection) continue
     didUpdate = true
+
+    const hasSectionEntries = filteredSectionLines.some(
+      (line) => !isTomlCommentOrEmptyLine(line)
+    )
+    if (!hasSectionEntries) {
+      lines = pruneSectionSurroundingBlankLines(
+        lines.slice(0, headerIndex),
+        lines.slice(sectionEnd)
+      )
+      continue
+    }
+
     lines = [
       ...lines.slice(0, headerIndex + 1),
       ...filteredSectionLines,
