@@ -4,6 +4,10 @@ import path from "node:path"
 export type MockArtifact = Partial<{
   pythPackageId: string
   coinPackageId: string
+  deepbookPackageId: string
+  deepbookTokenPackageId: string
+  deepbookRegistryId: string
+  deepbookAdminCapId: string
   priceFeeds: {
     label: string
     feedIdHex: string
