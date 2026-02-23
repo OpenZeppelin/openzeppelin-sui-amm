@@ -22,7 +22,7 @@ import { resolveDappMoveRoot } from "@sui-amm/tooling-node/testing/paths"
 import {
   createSuiScriptRunner,
   parseJsonFromScriptOutput,
-  resolveScriptPathIn
+  resolveOwnerScriptPath
 } from "@sui-amm/tooling-node/testing/scripts"
 
 type AmmUpdateOutput = {
@@ -118,7 +118,7 @@ describe("owner amm-update integration", () => {
 
       const scriptRunner = createSuiScriptRunner(context)
       const result = await scriptRunner.runScript(
-        resolveScriptPathIn("owner", "amm-update"),
+        resolveOwnerScriptPath("amm-update"),
         {
           account: publisher,
           args: {
