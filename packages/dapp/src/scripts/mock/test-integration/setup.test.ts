@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises"
+import fs from "node:fs"
+import { cp, readFile } from "node:fs/promises"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 
@@ -28,6 +29,37 @@ const readMockArtifact = async (artifactsDir: string) => {
   return JSON.parse(contents) as MockArtifact
 }
 
+const resolveWorkspaceTokenContractPath = () =>
+  path.join(resolveWorkspaceRoot(), "vendor", "deepbookv3", "packages", "token")
+
+const ensureTempTokenContractPath = async (
+  tempDeepbookContractPath: string
+) => {
+  const tempTokenContractPath = path.resolve(
+    tempDeepbookContractPath,
+    "..",
+    "token"
+  )
+  const tempMoveTomlPath = path.join(tempTokenContractPath, "Move.toml")
+  if (fs.existsSync(tempMoveTomlPath)) return tempTokenContractPath
+
+  const workspaceTokenContractPath = resolveWorkspaceTokenContractPath()
+  const workspaceMoveTomlPath = path.join(
+    workspaceTokenContractPath,
+    "Move.toml"
+  )
+  if (!fs.existsSync(workspaceMoveTomlPath))
+    throw new Error(
+      `DeepBook token contract path was not resolved at ${tempTokenContractPath} or ${workspaceTokenContractPath}.`
+    )
+
+  await cp(workspaceTokenContractPath, tempTokenContractPath, {
+    recursive: true
+  })
+
+  return tempTokenContractPath
+}
+
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
   moveSourceRootPath: resolveDappMoveRoot()
@@ -53,10 +85,8 @@ describe("mock setup integration", () => {
         throw new Error(
           `DeepBook contract path was not resolved under ${externalMoveRoot}.`
         )
-      const tempTokenContractPath = path.resolve(
-        tempDeepbookContractPath,
-        "..",
-        "token"
+      const tempTokenContractPath = await ensureTempTokenContractPath(
+        tempDeepbookContractPath
       )
 
       const publisher = context.createAccount("publisher")
