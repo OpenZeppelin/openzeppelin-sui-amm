@@ -1,0 +1,3 @@
+[submodule "vendor/deepbookv3"]
+	path = vendor/deepbookv3
+	url = https://github.com/MystenLabs/deepbookv3.git
