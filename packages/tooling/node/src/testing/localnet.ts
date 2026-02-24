@@ -39,16 +39,13 @@ import {
 } from "@sui-amm/tooling-core/transactions"
 import type { BuildOutput, PublishArtifact } from "@sui-amm/tooling-core/types"
 import { formatErrorMessage } from "@sui-amm/tooling-core/utils/errors"
-import {
-  pickRootNonDependencyArtifact,
-  withArtifactsRoot
-} from "../artifacts.ts"
+import { withArtifactsRoot } from "../artifacts.ts"
 import type { SuiResolvedConfig } from "../config.ts"
 import { loadSuiConfig } from "../config.ts"
 import {
   DEFAULT_PUBLISH_GAS_BUDGET,
   DEFAULT_TX_GAS_BUDGET
-} from "../constants.ts"
+, SUI_COIN_TYPE } from "../constants.ts"
 import {
   buildKeystoreEntry,
   loadKeypair,
@@ -62,6 +59,7 @@ import {
   clearPublishedEntryForNetwork,
   resolveMoveCliEnvironmentName
 } from "../move.ts"
+import { pickRootNonDependencyArtifact } from "../package.ts"
 import { publishPackageWithLog } from "../publish.ts"
 import { createSuiClient } from "../sui-client.ts"
 import { signAndExecute } from "../transactions.ts"
@@ -705,7 +703,7 @@ const loadTreasuryAccount = async (
       const address = keypair.toSuiAddress()
       const coins = await suiClient.getCoins({
         owner: address,
-        coinType: "0x2::sui::SUI",
+        coinType: SUI_COIN_TYPE,
         limit: 1
       })
       const hasBalance = coins.data.some((coin) => BigInt(coin.balance) > 0n)
@@ -1466,7 +1464,7 @@ const getAccountFundingSnapshot = async (
 ) => {
   const coins = await suiClient.getCoins({
     owner: address,
-    coinType: "0x2::sui::SUI",
+    coinType: SUI_COIN_TYPE,
     limit: 50
   })
   const balances = coins.data.map((coin) => BigInt(coin.balance))
