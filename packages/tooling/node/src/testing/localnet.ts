@@ -44,8 +44,9 @@ import type { SuiResolvedConfig } from "../config.ts"
 import { loadSuiConfig } from "../config.ts"
 import {
   DEFAULT_PUBLISH_GAS_BUDGET,
-  DEFAULT_TX_GAS_BUDGET
-, SUI_COIN_TYPE } from "../constants.ts"
+  DEFAULT_TX_GAS_BUDGET,
+  SUI_COIN_TYPE
+} from "../constants.ts"
 import {
   buildKeystoreEntry,
   loadKeypair,
