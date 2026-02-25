@@ -1,4 +1,4 @@
-module SimpleContract::counter;
+module simple_contract::counter;
 
 use std::string;
 use sui::event;

@@ -1,5 +1,5 @@
 [package]
-name = "SimpleContract"
+name = "simple_contract"
 edition = "2024"
 
 [environments]
