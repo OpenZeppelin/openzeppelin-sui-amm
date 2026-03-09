@@ -8,7 +8,7 @@ import useHostNetworkPolicy from "../hooks/useHostNetworkPolicy"
 
 const NETWORK_QUERY_PARAM = "network"
 // Backwards-compatible typo support.
-const LEGACY_NETWORK_QUERY_PARAM = "networ"
+const LEGACY_NETWORK_QUERY_PARAM = "network"
 
 const normalizeNetworkKey = (value: string | null | undefined) => {
   const normalized = value?.trim().toLowerCase()
