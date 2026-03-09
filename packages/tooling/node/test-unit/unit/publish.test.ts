@@ -75,7 +75,7 @@ const buildPublishPlan = (
       url: "http://localhost:9000",
       account: { accountIndex: 0 }
     },
-    packagePath: "/tmp/move/oracle-market",
+    packagePath: "/tmp/contracts/oracle-market",
     fullNodeUrl: "http://localhost:9000",
     keypair: Ed25519Keypair.generate(),
     gasBudget: 1000,
@@ -125,7 +125,7 @@ const buildResolvedConfig = ({
     defaultNetwork: networkName,
     networks: { [networkName]: network },
     paths: {
-      move: path.join(packageRoot, "move"),
+      move: path.join(packageRoot, "contracts"),
       deployments: path.join(packageRoot, "deployments"),
       objects: path.join(packageRoot, "deployments"),
       artifacts: path.join(packageRoot, "deployments")
@@ -482,7 +482,7 @@ describe("publishPackageWithLog", () => {
     )
   })
 
-  it("errors when Move.lock contains multiple framework revisions on shared networks", async () => {
+  it("fails when Move.lock contains multiple framework revisions on shared networks", async () => {
     const { client } = createSuiClientMock()
 
     await withTempDir(async (dir) => {

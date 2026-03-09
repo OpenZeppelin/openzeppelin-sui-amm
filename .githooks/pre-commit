@@ -1,5 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Capture originally staged paths so only those are re-staged after fixes.
+staged_paths=()
+while IFS= read -r -d '' staged_path; do
+	staged_paths+=("$staged_path")
+done < <(git diff --cached --name-only -z)
+
+pnpm dapp format:move 
 pnpm lint:fix
+
+# Ensure formatter/linter edits are included, but only for files staged at start.
+if ((${#staged_paths[@]} > 0)); then
+	restage_existing_paths=()
+	for staged_path in "${staged_paths[@]}"; do
+		if [[ -e "$staged_path" || -L "$staged_path" ]]; then
+			restage_existing_paths+=("$staged_path")
+		fi
+	done
+
+	if ((${#restage_existing_paths[@]} > 0)); then
+		git add -- "${restage_existing_paths[@]}"
+	fi
+fi
+
 node scripts/strip-move-localnet.js --staged

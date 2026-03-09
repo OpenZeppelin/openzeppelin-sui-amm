@@ -146,6 +146,7 @@ export const readArtifact = async <TArtifact>(
  */
 const resolveArtifactsRoot = () => {
   const scoped = artifactsRootStore.getStore()
+
   if (scoped) return scoped
 
   const override = process.env.SUI_ARTIFACTS_DIR?.trim()

@@ -108,13 +108,13 @@ const syncLocalnetMoveEnvironmentChainIdForPublish = async (
 
   if (didAttempt && !chainId) {
     logWarning(
-      "Unable to resolve localnet chain id; Move.toml environments were not updated."
+      "Unable to resolve localnet chain id; Move.toml test-publish environments were not updated."
     )
   }
 
   if (updatedFiles.length) {
     logKeyValueBlue("Move.toml")(
-      `updated ${updatedFiles.length} localnet environment entries`
+      `updated ${updatedFiles.length} test-publish environment entries`
     )
   }
 }
@@ -381,7 +381,10 @@ const buildPublishPlan = async (
       allowImplicitUnpublishedDependencies
     )
   ) {
-    await assertFrameworkRevisionConsistency(packagePath)
+    await assertFrameworkRevisionConsistency(
+      packagePath,
+      network.networkName !== "localnet"
+    )
   }
 
   const implicitlyEnabledUnpublishedDeps =
@@ -719,18 +722,26 @@ const resolvePackageNames = async (
 }
 
 /** Ensures the root package and any local dependencies share the same framework git revision. */
-const assertFrameworkRevisionConsistency = async (packagePath: string) => {
+const assertFrameworkRevisionConsistency = async (
+  packagePath: string,
+  shouldThrowOnMultipleRevisions: boolean
+) => {
   const frameworkRevisions = await readFrameworkRevisionsForPackage(packagePath)
   if (frameworkRevisions.size === 0) return
 
-  if (frameworkRevisions.size > 1)
-    throw new Error(
-      await buildMultipleFrameworkRevisionsMessage({
-        packagePath,
-        frameworkRevisions,
-        severity: "error"
-      })
-    )
+  if (frameworkRevisions.size > 1) {
+    const message = await buildMultipleFrameworkRevisionsMessage({
+      packagePath,
+      frameworkRevisions,
+      severity: shouldThrowOnMultipleRevisions ? "error" : "warning"
+    })
+
+    logWarning(message)
+
+    if (shouldThrowOnMultipleRevisions) throw new Error(message)
+
+    return
+  }
 
   const [rootFrameworkRevision] = [...frameworkRevisions]
 
@@ -863,6 +874,13 @@ const buildMultipleFrameworkRevisionsMessage = async ({
 
     howToFixLines.push("How to fix:")
     if (outlierLabel) howToFixLines.push(`- ${outlierLabel}`)
+
+    howToFixLines.push(
+      "- In each involved Move.toml, pin BOTH Sui and MoveStdlib to the same git revision (`rev = <commit-sha>`)."
+    )
+    howToFixLines.push(
+      "- Ensure local dependency packages also pin that same revision in their own Move.toml files."
+    )
 
     for (const {
       revision,
