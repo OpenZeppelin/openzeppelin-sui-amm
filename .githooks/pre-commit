@@ -12,7 +12,16 @@ pnpm lint:fix
 
 # Ensure formatter/linter edits are included, but only for files staged at start.
 if ((${#staged_paths[@]} > 0)); then
-	git add -- "${staged_paths[@]}"
+	restage_existing_paths=()
+	for staged_path in "${staged_paths[@]}"; do
+		if [[ -e "$staged_path" || -L "$staged_path" ]]; then
+			restage_existing_paths+=("$staged_path")
+		fi
+	done
+
+	if ((${#restage_existing_paths[@]} > 0)); then
+		git add -- "${restage_existing_paths[@]}"
+	fi
 fi
 
 node scripts/strip-move-localnet.js --staged
