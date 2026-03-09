@@ -17,7 +17,7 @@
     "test:integration": "vitest --config ./vitest.integration.config.ts --passWithNoTests",
     "test:unit": "vitest --config ./vitest.config.ts --passWithNoTests",
     "lint:fix": "../../node_modules/.bin/eslint . --fix",
-    "format:move": "prettier --write --no-error-on-unmatched-pattern 'contracts/**/*.move' '!contracts/**/**-patched/**/*.move'"
+    "format:move": "prettier --write --no-error-on-unmatched-pattern \"contracts/**/*.move\" \"!contracts/**/**-patched/**/*.move\""
   },
   "dependencies": {
     "@mysten/sui": "^1.45.2",
