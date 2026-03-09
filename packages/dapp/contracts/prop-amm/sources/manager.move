@@ -8,9 +8,14 @@ use sui::package;
 
 const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
-const EInvalidSpread: u64 = 1;
-const EEmptyFeedId: u64 = 13;
-const EInvalidFeedIdLength: u64 = 34;
+// === Errors ===
+
+#[error]
+const EInvalidSpread: vector<u8> = b"invalid spread";
+#[error]
+const EEmptyFeedId: vector<u8> = b"empty feed id";
+#[error]
+const EInvalidFeedIdLength: vector<u8> = b"invalid feed id length";
 
 // === Structs ===
 
@@ -131,15 +136,13 @@ public fun create_amm_config(
 ): AMMConfig {
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
-    let config = create_config(
+    create_config(
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
         pyth_price_feed_id,
         ctx,
-    );
-
-    config
+    )
 }
 
 /// Updates a configuration object; requires the admin capability.
