@@ -866,6 +866,13 @@ const buildMultipleFrameworkRevisionsMessage = async ({
     howToFixLines.push("How to fix:")
     if (outlierLabel) howToFixLines.push(`- ${outlierLabel}`)
 
+    howToFixLines.push(
+      "- In each involved Move.toml, pin BOTH Sui and MoveStdlib to the same git revision (`rev = <commit-sha>`)."
+    )
+    howToFixLines.push(
+      "- Ensure local dependency packages also pin that same revision in their own Move.toml files."
+    )
+
     for (const {
       revision,
       nonFrameworkPackages
