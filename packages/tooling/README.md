@@ -10,7 +10,7 @@ The tooling is designed for:
 - publishing Move packages with artifact capture across networks
 - managing deployment/object changes with artifacts across networks
 - executing scripts with a consistent CLI environment
-- integrating with by environment flows in CI or integration tests
+- integrating with environment-based flows in CI or integration tests
 
 ---
 
