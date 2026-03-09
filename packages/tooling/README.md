@@ -34,8 +34,8 @@ packages/tooling/
 This repository is a PNPM workspace. Import from the workspace package names directly:
 
 ```ts
-import { newTransaction } from "_root_package__/tooling-core/transactions"
-import { publishPackageWithLog } from "_root_package__/tooling-node/publish"
+import { newTransaction } from "@sui-amm/tooling-core/transactions"
+import { publishPackageWithLog } from "@sui-amm/tooling-node/publish"
 ```
 
 ---
@@ -47,7 +47,7 @@ Tooling reads configuration from `sui.config.*` in the current working directory
 ### Config file shape
 
 ```ts
-import { defineSuiConfig } from "_root_package__/tooling-node/config"
+import { defineSuiConfig } from "@sui-amm/tooling-node/config"
 
 export default defineSuiConfig({
   defaultNetwork: "localnet",
@@ -163,7 +163,7 @@ The publish flow enforces:
 
 ```ts
 import yargs from "yargs"
-import { runSuiScript } from "_root_package__/tooling-node/process"
+import { runSuiScript } from "@sui-amm/tooling-node/process"
 
 runSuiScript(async (tooling, args) => {
   // use tooling.signAndExecute, publishPackageWithLog, etc
@@ -173,7 +173,7 @@ runSuiScript(async (tooling, args) => {
 ### Load the most recent deployment artifact
 
 ```ts
-import { loadDeploymentArtifacts, getLatestArtifact } from "_root_package__/tooling-node/artifacts"
+import { loadDeploymentArtifacts, getLatestArtifact } from "@sui-amm/tooling-node/artifacts"
 
 const artifacts = await loadDeploymentArtifacts("testnet")
 const latest = getLatestArtifact(artifacts)
@@ -182,8 +182,8 @@ const latest = getLatestArtifact(artifacts)
 ### Run transactions with summaries
 
 ```ts
-import { newTransaction } from "_root_package__/tooling-core/transactions"
-import { executeTransactionWithSummary } from "_root_package__/tooling-node/transactions-execution"
+import { newTransaction } from "@sui-amm/tooling-core/transactions"
+import { executeTransactionWithSummary } from "@sui-amm/tooling-node/transactions-execution"
 
 const tx = newTransaction()
 // build PTB...
@@ -215,7 +215,7 @@ The testing helpers in `packages/tooling/node/src/testing` provide a consistent 
 
 ```ts
 import { describe, it, expect } from "vitest"
-import { createSuiLocalnetTestEnv } from "_root_package__/tooling-node/testing/env"
+import { createSuiLocalnetTestEnv } from "@sui-amm/tooling-node/testing/env"
 
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test", // or "suite" to reuse one localnet per test file
@@ -251,12 +251,12 @@ Use `createSuiScriptRunner(...)` to execute scripts from the `packages/dapp/src/
 
 ```ts
 import { describe, it, expect } from "vitest"
-import { pickRootNonDependencyArtifact } from "_root_package__/tooling-node/artifacts"
+import { pickRootNonDependencyArtifact } from "@sui-amm/tooling-node/artifacts"
 import {
   createSuiScriptRunner,
   parseJsonFromScriptOutput
-} from "_root_package__/tooling-node/testing/scripts"
-import { createSuiLocalnetTestEnv } from "_root_package__/tooling-node/testing/env"
+} from "@sui-amm/tooling-node/testing/scripts"
+import { createSuiLocalnetTestEnv } from "@sui-amm/tooling-node/testing/env"
 
 const testEnv = createSuiLocalnetTestEnv({ mode: "test", withFaucet: true })
 

@@ -381,7 +381,10 @@ const buildPublishPlan = async (
       allowImplicitUnpublishedDependencies
     )
   ) {
-    await assertFrameworkRevisionConsistency(packagePath)
+    await assertFrameworkRevisionConsistency(
+      packagePath,
+      network.networkName !== "localnet"
+    )
   }
 
   const implicitlyEnabledUnpublishedDeps =
@@ -719,18 +722,24 @@ const resolvePackageNames = async (
 }
 
 /** Ensures the root package and any local dependencies share the same framework git revision. */
-const assertFrameworkRevisionConsistency = async (packagePath: string) => {
+const assertFrameworkRevisionConsistency = async (
+  packagePath: string,
+  shouldThrowOnMultipleRevisions: boolean
+) => {
   const frameworkRevisions = await readFrameworkRevisionsForPackage(packagePath)
   if (frameworkRevisions.size === 0) return
 
   if (frameworkRevisions.size > 1) {
-    logWarning(
-      await buildMultipleFrameworkRevisionsMessage({
-        packagePath,
-        frameworkRevisions,
-        severity: "warning"
-      })
-    )
+    const message = await buildMultipleFrameworkRevisionsMessage({
+      packagePath,
+      frameworkRevisions,
+      severity: shouldThrowOnMultipleRevisions ? "error" : "warning"
+    })
+
+    logWarning(message)
+
+    if (shouldThrowOnMultipleRevisions) throw new Error(message)
+
     return
   }
 
