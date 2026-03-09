@@ -3,4 +3,8 @@ set -euo pipefail
 
 pnpm dapp format:move 
 pnpm lint:fix
+
+# Ensure formatter/linter edits are included in the commit.
+git add -A
+
 node scripts/strip-move-localnet.js --staged
