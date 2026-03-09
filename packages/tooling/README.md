@@ -16,7 +16,7 @@ The tooling is designed for:
 
 ## Package layout
 
-```
+```text
 packages/tooling/
   core/ (Node + browser)
   node/ (Node only)
