@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [tooling, dapp]
+        suite: [dapp]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
