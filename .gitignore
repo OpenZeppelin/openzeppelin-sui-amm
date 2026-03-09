@@ -15,6 +15,8 @@ packages/dapp/contracts/**/.coverage*
 packages/dapp/contracts/**/Pub.localnet.toml
 packages/dapp/contracts/**/Published.toml
 
+**/*tsbuildinfo
+
 patches/pyth-crosschain/
 
 tmp.json

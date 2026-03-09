@@ -482,19 +482,7 @@ describe("publishPackageWithLog", () => {
     )
   })
 
-  it("warns when Move.lock contains multiple framework revisions on shared networks", async () => {
-    moveMocks.buildMovePackage.mockResolvedValue({
-      modules: ["module"],
-      dependencies: ["dep"],
-      dependencyAddresses: {}
-    })
-
-    runSuiCliMock.mockResolvedValueOnce({
-      stdout: JSON.stringify(buildCliPublishResponse()),
-      stderr: "",
-      exitCode: 0
-    })
-
+  it("fails when Move.lock contains multiple framework revisions on shared networks", async () => {
     const { client } = createSuiClientMock()
 
     await withTempDir(async (dir) => {
