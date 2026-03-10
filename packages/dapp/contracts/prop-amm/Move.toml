@@ -4,7 +4,7 @@ edition = "2024"
 version = "0.0.1"
 
 [dependencies]
-deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/deepbook", rev = "main" }
+deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/deepbook", rev = "b0c3f8b42f5209205dc3f2802b9312e59518a692" }
 
 [dep-replacements.test-publish]
 pyth = { local = "../pyth-mock", rename-from = "Pyth", override = true }

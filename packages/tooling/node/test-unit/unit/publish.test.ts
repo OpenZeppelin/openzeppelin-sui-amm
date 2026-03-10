@@ -498,15 +498,17 @@ describe("publishPackageWithLog", () => {
         url: "https://example.invalid"
       })
 
-      const artifacts = await publishPackageWithLog(
-        {
-          packagePath,
-          keypair: Ed25519Keypair.generate()
-        },
-        { suiClient: client, suiConfig: config }
+      await expect(
+        publishPackageWithLog(
+          {
+            packagePath,
+            keypair: Ed25519Keypair.generate()
+          },
+          { suiClient: client, suiConfig: config }
+        )
+      ).rejects.toThrow(
+        "Multiple Sui framework revisions detected in Move.lock"
       )
-
-      expect(artifacts[0]?.packageId).toBe("0x1")
 
       expect(
         logMocks.logWarning.mock.calls.some(([message]) =>
