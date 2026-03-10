@@ -18,6 +18,7 @@ import {
   getObjectArtifactPath,
   readArtifact,
   resolvePublisherCapIdFromObjectArtifacts,
+  writeArtifact,
   writeObjectArtifact
 } from "../../src/artifacts.ts"
 import {
@@ -59,6 +60,97 @@ describe("writeObjectArtifact", () => {
 
       expect(merged).toHaveLength(1)
       expect(merged[0]?.objectType).toBe("B")
+    })
+  })
+})
+
+describe("writeArtifact", () => {
+  it("merges and dedupes mock artifact arrays instead of overwriting them", async () => {
+    await withTempDir(async (dir) => {
+      const artifactPath = path.join(dir, "mock.json")
+      const writeMockArtifact = writeArtifact<{
+        coins?: {
+          label: string
+          coinType: string
+          currencyObjectId: string
+        }[]
+        priceFeeds?: {
+          label: string
+          feedIdHex: string
+          priceInfoObjectId: string
+        }[]
+      }>({})
+
+      await writeMockArtifact(artifactPath, {
+        coins: [
+          {
+            label: "USDC",
+            coinType: "0x1::usdc::USDC",
+            currencyObjectId: "0x1"
+          }
+        ],
+        priceFeeds: [
+          {
+            label: "BTC/USD",
+            feedIdHex: "0xfeed-1",
+            priceInfoObjectId: "0xa"
+          }
+        ]
+      })
+
+      const merged = await writeMockArtifact(artifactPath, {
+        coins: [
+          {
+            label: "USDC",
+            coinType: "0x1::usdc::USDC",
+            currencyObjectId: "0x2"
+          },
+          {
+            label: "SUI",
+            coinType: "0x2::sui::SUI",
+            currencyObjectId: "0x3"
+          }
+        ],
+        priceFeeds: [
+          {
+            label: "BTC/USD",
+            feedIdHex: "0xfeed-1",
+            priceInfoObjectId: "0xb"
+          },
+          {
+            label: "ETH/USD",
+            feedIdHex: "0xfeed-2",
+            priceInfoObjectId: "0xc"
+          }
+        ]
+      })
+
+      expect(merged).toEqual({
+        coins: [
+          {
+            label: "USDC",
+            coinType: "0x1::usdc::USDC",
+            currencyObjectId: "0x2"
+          },
+          {
+            label: "SUI",
+            coinType: "0x2::sui::SUI",
+            currencyObjectId: "0x3"
+          }
+        ],
+        priceFeeds: [
+          {
+            label: "BTC/USD",
+            feedIdHex: "0xfeed-1",
+            priceInfoObjectId: "0xb"
+          },
+          {
+            label: "ETH/USD",
+            feedIdHex: "0xfeed-2",
+            priceInfoObjectId: "0xc"
+          }
+        ]
+      })
     })
   })
 })

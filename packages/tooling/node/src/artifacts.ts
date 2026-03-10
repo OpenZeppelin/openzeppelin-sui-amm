@@ -5,6 +5,7 @@ import { formatErrorMessage } from "@sui-amm/tooling-core/utils/errors"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path, { dirname } from "node:path"
+import { dedupeEntriesByKey, mergeObjectCollections } from "./utils/object.ts"
 
 export const ARTIFACTS_FILES = ["mock", "deployment", "objects"] as const
 export type ArtifactFile = (typeof ARTIFACTS_FILES)[number]
@@ -27,21 +28,25 @@ const resolveArtifactKey = (value: unknown): string | undefined => {
   return undefined
 }
 
-const dedupeArtifacts = <TArtifact>(entries: TArtifact[]): TArtifact[] => {
-  const seen = new Set<string>()
-  const dedupedReversed: TArtifact[] = []
+const dedupeArtifacts = <TArtifact>(entries: TArtifact[]): TArtifact[] =>
+  dedupeEntriesByKey(entries, resolveArtifactKey)
 
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index]
-    const key = resolveArtifactKey(entry)
-    if (key) {
-      if (seen.has(key)) continue
-      seen.add(key)
-    }
-    dedupedReversed.push(entry)
+const resolveMockCoinKey = (coin: unknown): string | undefined => {
+  if (!coin || typeof coin !== "object") return undefined
+  const record = coin as Record<string, unknown>
+  if (typeof record.coinType === "string") return `coinType:${record.coinType}`
+  if (typeof record.label === "string") return `label:${record.label}`
+  return undefined
+}
+
+const resolveMockPriceFeedKey = (priceFeed: unknown): string | undefined => {
+  if (!priceFeed || typeof priceFeed !== "object") return undefined
+  const record = priceFeed as Record<string, unknown>
+  if (typeof record.feedIdHex === "string") {
+    return `feedIdHex:${record.feedIdHex}`
   }
-
-  return dedupedReversed.reverse()
+  if (typeof record.label === "string") return `label:${record.label}`
+  return undefined
 }
 
 /**
@@ -63,10 +68,10 @@ export const writeArtifact =
       const updatedArtifacts =
         Array.isArray(currentArtifacts) && Array.isArray(newArtifact)
           ? dedupeArtifacts([...currentArtifacts, ...newArtifact])
-          : {
-              ...currentArtifacts,
-              ...newArtifact
-            }
+          : mergeObjectCollections(currentArtifacts, newArtifact, {
+              coins: resolveMockCoinKey,
+              priceFeeds: resolveMockPriceFeedKey
+            })
 
       await writeFile(filePath, JSON.stringify(updatedArtifacts, undefined, 2))
 
