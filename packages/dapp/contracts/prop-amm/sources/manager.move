@@ -128,19 +128,10 @@ public fun update_amm_config_and_emit(
     event::emit(new_amm_config_updated_event(config.id.to_inner()));
 }
 
-/// Shares a configuration object.
-///
-/// Shared configs are readable by anyone; only the admin cap can update.
-/// This function does not emit events.
-public fun share_amm_config(config: AMMConfig) {
-    transfer::share_object(config);
-}
-
 // === Public Functions ===
 
 /// Creates a new AMM configuration object with validated inputs.
 ///
-/// The returned object is owned; call `share_amm_config` to make it shared.
 /// Use `create_amm_config_and_share` to emit the creation event.
 public fun create_amm_config(
     base_spread_bps: u64,
