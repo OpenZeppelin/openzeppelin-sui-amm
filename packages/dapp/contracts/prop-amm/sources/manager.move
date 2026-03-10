@@ -78,7 +78,7 @@ public struct MANAGER has drop {}
 fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
     package::claim_and_keep<MANAGER>(publisher_witness, ctx);
 
-    let admin_cap = new_amm_admin_cap(ctx);
+    let admin_cap = AMMAdminCap { id: object::new(ctx) };
     transfer::transfer(admin_cap, ctx.sender());
 }
 
@@ -137,14 +137,13 @@ public fun update_amm_config_and_emit(
 /// Requires the admin capability used to control this config.
 /// Use `create_amm_config_and_share` to emit the creation event.
 public(package) fun create_amm_config(
-    admin_cap: &AMMAdminCap,
+    _: &AMMAdminCap,
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
     pyth_price_feed_id: vector<u8>,
     ctx: &mut TxContext,
 ): AMMConfig {
-    let _ = admin_cap;
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
     AMMConfig {
@@ -163,7 +162,7 @@ public(package) fun create_amm_config(
 /// Use `update_amm_config_and_emit` to emit the update event.
 public(package) fun update_amm_config(
     config: &mut AMMConfig,
-    admin_cap: &AMMAdminCap,
+    _: &AMMAdminCap,
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
@@ -182,11 +181,6 @@ public(package) fun update_amm_config(
 }
 
 // === Private Functions ===
-
-/// Creates a new admin capability object.
-fun new_amm_admin_cap(ctx: &mut TxContext): AMMAdminCap {
-    AMMAdminCap { id: object::new(ctx) }
-}
 
 /// Applies updates to the configuration object.
 fun apply_amm_config_updates(
