@@ -1,2 +1,2 @@
 /// Execution-time state and events for the AMM.
-module amm::executor;
+module openzeppelin_market_maker::executor;

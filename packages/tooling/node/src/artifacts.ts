@@ -44,6 +44,94 @@ const dedupeArtifacts = <TArtifact>(entries: TArtifact[]): TArtifact[] => {
   return dedupedReversed.reverse()
 }
 
+const dedupeByKey = <TEntry>(
+  entries: TEntry[],
+  resolveKey: (entry: TEntry) => string | undefined
+): TEntry[] => {
+  const seen = new Set<string>()
+  const dedupedReversed: TEntry[] = []
+
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]
+    const key = resolveKey(entry)
+    if (key) {
+      if (seen.has(key)) continue
+      seen.add(key)
+    }
+    dedupedReversed.push(entry)
+  }
+
+  return dedupedReversed.reverse()
+}
+
+const isArtifactRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object"
+
+const mergeMockArtifactArrays = <TArtifact>(
+  currentArtifact: TArtifact,
+  newArtifact: TArtifact,
+  mergedArtifact: TArtifact
+): TArtifact => {
+  if (!isArtifactRecord(currentArtifact)) return mergedArtifact
+  if (!isArtifactRecord(newArtifact)) return mergedArtifact
+  if (!isArtifactRecord(mergedArtifact)) return mergedArtifact
+
+  const shouldMergeCoins =
+    Array.isArray(currentArtifact.coins) || Array.isArray(newArtifact.coins)
+  const shouldMergePriceFeeds =
+    Array.isArray(currentArtifact.priceFeeds) ||
+    Array.isArray(newArtifact.priceFeeds)
+
+  if (!shouldMergeCoins && !shouldMergePriceFeeds) return mergedArtifact
+
+  return {
+    ...mergedArtifact,
+    ...(shouldMergeCoins
+      ? {
+          coins: dedupeByKey(
+            [
+              ...(Array.isArray(currentArtifact.coins)
+                ? currentArtifact.coins
+                : []),
+              ...(Array.isArray(newArtifact.coins) ? newArtifact.coins : [])
+            ],
+            (coin) => {
+              if (!isArtifactRecord(coin)) return undefined
+              if (typeof coin.coinType === "string")
+                return `coinType:${coin.coinType}`
+              if (typeof coin.label === "string") return `label:${coin.label}`
+              return undefined
+            }
+          )
+        }
+      : {}),
+    ...(shouldMergePriceFeeds
+      ? {
+          priceFeeds: dedupeByKey(
+            [
+              ...(Array.isArray(currentArtifact.priceFeeds)
+                ? currentArtifact.priceFeeds
+                : []),
+              ...(Array.isArray(newArtifact.priceFeeds)
+                ? newArtifact.priceFeeds
+                : [])
+            ],
+            (priceFeed) => {
+              if (!isArtifactRecord(priceFeed)) return undefined
+              if (typeof priceFeed.feedIdHex === "string") {
+                return `feedIdHex:${priceFeed.feedIdHex}`
+              }
+              if (typeof priceFeed.label === "string") {
+                return `label:${priceFeed.label}`
+              }
+              return undefined
+            }
+          )
+        }
+      : {})
+  } as TArtifact
+}
+
 /**
  * Curried writer that appends/merges JSON artifacts on disk.
  * Why: deployment/mock scripts share a consistent artifact format so other tools
@@ -63,10 +151,10 @@ export const writeArtifact =
       const updatedArtifacts =
         Array.isArray(currentArtifacts) && Array.isArray(newArtifact)
           ? dedupeArtifacts([...currentArtifacts, ...newArtifact])
-          : {
+          : mergeMockArtifactArrays(currentArtifacts, newArtifact, {
               ...currentArtifacts,
               ...newArtifact
-            }
+            })
 
       await writeFile(filePath, JSON.stringify(updatedArtifacts, undefined, 2))
 

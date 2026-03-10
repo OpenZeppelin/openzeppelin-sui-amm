@@ -40,11 +40,11 @@ export const isMatchingMockPriceFeedConfig = (
 ) => {
   const feedIdMatch = candidate.feedIdHex
     ? normalizeHex(candidate.feedIdHex) === normalizeHex(config.feedIdHex)
-    : false
+    : true
 
-  const labelMatch = candidate.label ? candidate.label === config.label : false
+  const labelMatch = candidate.label ? candidate.label === config.label : true
 
-  return feedIdMatch || labelMatch
+  return feedIdMatch && labelMatch
 }
 
 export const findMockPriceFeedConfig = (
