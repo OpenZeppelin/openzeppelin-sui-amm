@@ -132,7 +132,7 @@ public fun update_amm_config_and_emit(
 /// Creates a new AMM configuration object with validated inputs.
 ///
 /// Use `create_amm_config_and_share` to emit the creation event.
-entry fun create_amm_config(
+public(package) fun create_amm_config(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
@@ -155,7 +155,7 @@ entry fun create_amm_config(
 ///
 /// The admin capability is the authorization proof for config mutations.
 /// Use `update_amm_config_and_emit` to emit the update event.
-entry fun update_amm_config(
+public(package) fun update_amm_config(
     config: &mut AMMConfig,
     _admin_cap: &AMMAdminCap,
     base_spread_bps: u64,
