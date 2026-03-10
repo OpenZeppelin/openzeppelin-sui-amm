@@ -5,6 +5,7 @@ module prop_amm::manager_tests;
 use prop_amm::manager::{Self, new_amm_config_created_event};
 use std::unit_test::{assert_eq, assert_ref_eq};
 use sui::test_scenario::{Self, Scenario, TransactionEffects};
+use prop_amm::manager::new_amm_config_updated_event;
 
 // === Helpers ===
 
@@ -16,32 +17,6 @@ fun build_pyth_price_feed_id_for_tests(byte_value: u8): vector<u8> {
 /// Runs package init in a scenario and advances to the next transaction.
 fun init_and_advance_scenario(scenario: &mut Scenario, sender: address): TransactionEffects {
     manager::init_for_testing(test_scenario::ctx(scenario));
-    test_scenario::next_tx(scenario, sender)
-}
-
-/// Updates a config, returns resources to the scenario, and advances.
-fun update_amm_config_and_advance_scenario(
-    mut config: manager::AMMConfig,
-    scenario: &mut Scenario,
-    admin_cap: manager::AMMAdminCap,
-    base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
-    use_laser: bool,
-    trading_paused: bool,
-    pyth_price_feed_id: vector<u8>,
-    sender: address,
-): TransactionEffects {
-    manager::update_amm_config_and_emit(
-        &mut config,
-        &admin_cap,
-        base_spread_bps,
-        volatility_multiplier_bps,
-        use_laser,
-        trading_paused,
-        pyth_price_feed_id,
-    );
-    return_admin_cap_to_scenario(scenario, admin_cap);
-    return_config_to_scenario(config);
     test_scenario::next_tx(scenario, sender)
 }
 
@@ -160,41 +135,35 @@ fun update_amm_config_updates_config_and_emits_event() {
     scenario.next_tx(sender);
 
     let admin_cap = take_admin_cap_from_scenario(&scenario);
-    let config = take_config_from_scenario(&scenario);
+    let mut config = take_config_from_scenario(&scenario);
     let updated_base_spread_bps = 35;
     let updated_volatility_multiplier_bps = 300;
     let updated_use_laser = false;
     let updated_trading_paused = true;
     let updated_pyth_price_feed_id = build_pyth_price_feed_id_for_tests(1);
 
-    let effects = update_amm_config_and_advance_scenario(
-        config,
-        &mut scenario,
-        admin_cap,
+    manager::update_amm_config_and_emit(
+        &mut config,
+        &admin_cap,
         updated_base_spread_bps,
         updated_volatility_multiplier_bps,
         updated_use_laser,
         updated_trading_paused,
         updated_pyth_price_feed_id,
-        sender,
     );
+    assert_emitted!(new_amm_config_updated_event(config.config_id()));
+    scenario.next_tx(sender);
 
-    assert_eq!(test_scenario::num_user_events(&effects), 1);
-
-    let updated_config = take_config_from_scenario(&scenario);
-    let expected_pyth_price_feed_id = build_pyth_price_feed_id_for_tests(1);
     assert_config_matches_inputs(
-        &updated_config,
+        &config,
         updated_base_spread_bps,
         updated_volatility_multiplier_bps,
         updated_use_laser,
         updated_trading_paused,
-        &expected_pyth_price_feed_id,
+        &updated_pyth_price_feed_id,
     );
 
-    return_config_to_scenario(updated_config);
-
-    let admin_cap = take_admin_cap_from_scenario(&scenario);
+    return_config_to_scenario(config);
     return_admin_cap_to_scenario(&scenario, admin_cap);
     test_scenario::end(scenario);
 }
@@ -218,52 +187,45 @@ fun update_amm_config_supports_multiple_updates() {
     );
     scenario.next_tx(sender);
 
-    let first_admin_cap = take_admin_cap_from_scenario(&scenario);
-    let first_config = take_config_from_scenario(&scenario);
+    let admin_cap = take_admin_cap_from_scenario(&scenario);
+    let mut config = take_config_from_scenario(&scenario);
     let first_update_pyth_price_feed_id = build_pyth_price_feed_id_for_tests(1);
-    let first_update_effects = update_amm_config_and_advance_scenario(
-        first_config,
-        &mut scenario,
-        first_admin_cap,
+
+    manager::update_amm_config_and_emit(
+        &mut config,
+        &admin_cap,
         20,
         150,
         true,
         true,
         first_update_pyth_price_feed_id,
-        sender,
     );
-    assert_eq!(test_scenario::num_user_events(&first_update_effects), 1);
+    assert_emitted!(new_amm_config_updated_event(config.config_id()));
+    scenario.next_tx(sender);
 
-    let second_admin_cap = take_admin_cap_from_scenario(&scenario);
-    let second_config = take_config_from_scenario(&scenario);
     let second_update_pyth_price_feed_id = build_pyth_price_feed_id_for_tests(2);
-    let second_update_effects = update_amm_config_and_advance_scenario(
-        second_config,
-        &mut scenario,
-        second_admin_cap,
+    manager::update_amm_config_and_emit(
+        &mut config,
+        &admin_cap,
         30,
         180,
         false,
         false,
         second_update_pyth_price_feed_id,
-        sender,
     );
-    assert_eq!(test_scenario::num_user_events(&second_update_effects), 1);
+    assert_emitted!(new_amm_config_updated_event(config.config_id()));
+    scenario.next_tx(sender);
 
-    let updated_config = take_config_from_scenario(&scenario);
-    let expected_pyth_price_feed_id = build_pyth_price_feed_id_for_tests(2);
     assert_config_matches_inputs(
-        &updated_config,
+        &config,
         30,
         180,
         false,
         false,
-        &expected_pyth_price_feed_id,
+        &second_update_pyth_price_feed_id,
     );
 
-    return_config_to_scenario(updated_config);
-
-    let admin_cap = take_admin_cap_from_scenario(&scenario);
+    return_config_to_scenario(config);
     return_admin_cap_to_scenario(&scenario, admin_cap);
     test_scenario::end(scenario);
 }
