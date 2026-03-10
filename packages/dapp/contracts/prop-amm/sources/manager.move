@@ -1,5 +1,5 @@
 /// AMM configuration and admin controls.
-module amm::manager;
+module prop_amm::manager;
 
 use sui::event;
 use sui::package;
@@ -12,8 +12,6 @@ const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
 #[error]
 const EInvalidBaseSpreadBps: vector<u8> = b"base spread bps must be greater than zero";
-#[error]
-const EEmptyPythPriceFeedId: vector<u8> = b"pyth price feed id cannot be empty";
 #[error]
 const EInvalidPythPriceFeedIdLength: vector<u8> = b"pyth price feed id must be 32 bytes";
 
@@ -88,7 +86,7 @@ public fun create_amm_config_and_share(
         ctx,
     );
     let config_id = config.id.to_inner();
-    event::emit(new_amm_config_created_event(config_id));
+    event::emit(AMMConfigCreatedEvent { config_id });
     share_amm_config(config);
 }
 
@@ -111,7 +109,9 @@ public fun update_amm_config_and_emit(
         trading_paused,
         pyth_price_feed_id,
     );
-    event::emit(new_amm_config_updated_event(config.id.to_inner()));
+    event::emit(AMMConfigUpdatedEvent {
+        config_id: config.id.to_inner(),
+    });
 }
 
 /// Shares a configuration object.
@@ -152,14 +152,13 @@ public fun create_amm_config(
 /// Use `update_amm_config_and_emit` to emit the update event.
 public fun update_amm_config(
     config: &mut AMMConfig,
-    admin_cap: &AMMAdminCap,
+    _admin_cap: &AMMAdminCap,
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
     trading_paused: bool,
     pyth_price_feed_id: vector<u8>,
 ) {
-    assert_admin_cap!(admin_cap);
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
     apply_amm_config_updates(
@@ -224,39 +223,23 @@ macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed
     assert_valid_feed_id!($pyth_price_feed_id);
 }
 
-/// Verifies the admin capability is valid.
-macro fun assert_admin_cap($admin_cap: &AMMAdminCap) {
-    let admin_cap = $admin_cap;
-    let _ = admin_cap.id.to_address();
-}
-
 /// Validates the Pyth price feed identifier.
 ///
 /// Pyth feed IDs are 32-byte identifiers.
 macro fun assert_valid_feed_id($pyth_price_feed_id: &vector<u8>) {
     let pyth_price_feed_id = $pyth_price_feed_id;
-    assert!(!pyth_price_feed_id.is_empty(), EEmptyPythPriceFeedId);
     assert!(
         pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
     );
 }
 
-/// Creates an AMMConfigCreatedEvent payload.
-public(package) fun new_amm_config_created_event(config_id: ID): AMMConfigCreatedEvent {
-    AMMConfigCreatedEvent {
-        config_id,
-    }
-}
-
-/// Creates an AMMConfigUpdatedEvent payload.
-public(package) fun new_amm_config_updated_event(config_id: ID): AMMConfigUpdatedEvent {
-    AMMConfigUpdatedEvent {
-        config_id,
-    }
-}
-
 // === View helpers ===
+
+/// Returns the required Pyth price feed identifier length.
+public(package) fun pyth_price_identifier_length(): u64 {
+    PYTH_PRICE_IDENTIFIER_LENGTH
+}
 
 /// Returns the base spread in basis points.
 public fun base_spread_bps(config: &AMMConfig): u64 {
