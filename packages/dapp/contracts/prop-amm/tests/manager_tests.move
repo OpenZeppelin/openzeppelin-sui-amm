@@ -30,13 +30,13 @@ fun assert_config_matches_inputs(
     volatility_multiplier_bps: u64,
     use_laser: bool,
     trading_paused: bool,
-    expected_pyth_price_feed_id: &vector<u8>,
+    expected_pyth_price_feed_id: vector<u8>,
 ) {
     assert_eq!(config.base_spread_bps(), base_spread_bps);
     assert_eq!(config.volatility_multiplier_bps(), volatility_multiplier_bps);
     assert_eq!(config.use_laser(), use_laser);
     assert_eq!(config.trading_paused(), trading_paused);
-    assert_ref_eq!(config.pyth_price_feed_id(), expected_pyth_price_feed_id);
+    assert_eq!(config.pyth_price_feed_id(), expected_pyth_price_feed_id);
 }
 
 /// Asserts that `expected_event` of type `T` was emitted.
@@ -96,7 +96,7 @@ fun create_amm_config_shares_config_and_emits_event() {
         volatility_multiplier_bps,
         use_laser,
         false,
-        &expected_pyth_price_feed_id,
+        expected_pyth_price_feed_id,
     );
 
     test_scenario::return_shared(config);
@@ -148,7 +148,7 @@ fun update_amm_config_updates_config_and_emits_event() {
         updated_volatility_multiplier_bps,
         updated_use_laser,
         updated_trading_paused,
-        &updated_pyth_price_feed_id,
+        updated_pyth_price_feed_id,
     );
 
     test_scenario::return_shared(config);
@@ -210,7 +210,7 @@ fun update_amm_config_supports_multiple_updates() {
         180,
         false,
         false,
-        &second_update_pyth_price_feed_id,
+        second_update_pyth_price_feed_id,
     );
 
     test_scenario::return_shared(config);

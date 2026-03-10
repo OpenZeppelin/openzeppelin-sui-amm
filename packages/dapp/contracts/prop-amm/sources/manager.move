@@ -267,8 +267,8 @@ public fun trading_paused(config: &AMMConfig): bool {
 }
 
 /// Returns the Pyth price feed ID bytes.
-public fun pyth_price_feed_id(config: &AMMConfig): &vector<u8> {
-    &config.pyth_price_feed_id
+public fun pyth_price_feed_id(config: &AMMConfig): vector<u8> {
+    config.pyth_price_feed_id
 }
 
 /// Returns the configuration object ID as an address.
