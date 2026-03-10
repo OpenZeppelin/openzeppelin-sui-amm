@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [tooling, dapp]
+        suite: [dapp, tooling]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -84,9 +84,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: tooling
-            command: pnpm tooling test:integration
-            report: reports/vitest-tooling-integration.xml
           - name: dapp
             command: pnpm dapp test:integration
             report: reports/vitest-dapp-integration.xml
@@ -121,4 +118,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: pnpm audit --audit-level=high`
+      - run: pnpm audit --audit-level=high

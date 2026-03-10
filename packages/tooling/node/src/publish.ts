@@ -16,7 +16,6 @@ import type {
 import { withTestnetFaucetRetry } from "./address.ts"
 import {
   getDeploymentArtifactPath,
-  pickRootNonDependencyArtifact,
   writeDeploymentArtifact
 } from "./artifacts.ts"
 import type { SuiNetworkConfig } from "./config.ts"
@@ -42,6 +41,7 @@ import {
   clearPublishedEntryForNetwork,
   syncLocalnetMoveEnvironmentChainId
 } from "./move.ts"
+import { pickRootNonDependencyArtifact } from "./package.ts"
 import { getSuiCliVersion, runSuiCli } from "./suiCli.ts"
 
 type PackageNames = { root?: string; dependencies: string[] }
@@ -381,7 +381,10 @@ const buildPublishPlan = async (
       allowImplicitUnpublishedDependencies
     )
   ) {
-    await assertFrameworkRevisionConsistency(packagePath)
+    await assertFrameworkRevisionConsistency(
+      packagePath,
+      network.networkName !== "localnet"
+    )
   }
 
   const implicitlyEnabledUnpublishedDeps =
@@ -719,18 +722,24 @@ const resolvePackageNames = async (
 }
 
 /** Ensures the root package and any local dependencies share the same framework git revision. */
-const assertFrameworkRevisionConsistency = async (packagePath: string) => {
+const assertFrameworkRevisionConsistency = async (
+  packagePath: string,
+  shouldThrowOnMultipleRevisions: boolean
+) => {
   const frameworkRevisions = await readFrameworkRevisionsForPackage(packagePath)
   if (frameworkRevisions.size === 0) return
 
   if (frameworkRevisions.size > 1) {
-    logWarning(
-      await buildMultipleFrameworkRevisionsMessage({
-        packagePath,
-        frameworkRevisions,
-        severity: "warning"
-      })
-    )
+    const message = await buildMultipleFrameworkRevisionsMessage({
+      packagePath,
+      frameworkRevisions,
+      severity: shouldThrowOnMultipleRevisions ? "error" : "warning"
+    })
+
+    logWarning(message)
+
+    if (shouldThrowOnMultipleRevisions) throw new Error(message)
+
     return
   }
 
@@ -865,6 +874,13 @@ const buildMultipleFrameworkRevisionsMessage = async ({
 
     howToFixLines.push("How to fix:")
     if (outlierLabel) howToFixLines.push(`- ${outlierLabel}`)
+
+    howToFixLines.push(
+      "- In each involved Move.toml, pin BOTH Sui and MoveStdlib to the same git revision (`rev = <commit-sha>`)."
+    )
+    howToFixLines.push(
+      "- Ensure local dependency packages also pin that same revision in their own Move.toml files."
+    )
 
     for (const {
       revision,
