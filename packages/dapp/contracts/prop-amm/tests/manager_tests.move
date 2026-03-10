@@ -204,50 +204,6 @@ fun update_amm_config_supports_multiple_updates() {
     test_scenario::end(scenario);
 }
 
-#[test, expected_failure(abort_code = manager::EConfigAdminCapMismatch)]
-fun update_amm_config_rejects_mismatched_admin_cap() {
-    let sender = @0xDE;
-    let mismatched_sender = @0xDF;
-    let mut scenario = test_scenario::begin(sender);
-    let base_spread_bps = 25;
-    let volatility_multiplier_bps = 200;
-    let use_laser = true;
-    let pyth_price_feed_id = build_pyth_price_feed_id(0);
-
-    manager::test_init(scenario.ctx());
-    scenario.next_tx(sender);
-
-    let admin_cap = test_scenario::take_from_sender(&scenario);
-    manager::create_amm_config_and_share(
-        &admin_cap,
-        base_spread_bps,
-        volatility_multiplier_bps,
-        use_laser,
-        pyth_price_feed_id,
-        scenario.ctx(),
-    );
-    scenario.next_tx(mismatched_sender);
-
-    manager::test_init(scenario.ctx());
-    scenario.next_tx(mismatched_sender);
-
-    let mismatched_admin_cap: AMMAdminCap = test_scenario::take_from_sender(&scenario);
-    scenario.next_tx(sender);
-
-    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
-
-    config.update_amm_config(
-        &mismatched_admin_cap,
-        30,
-        300,
-        false,
-        true,
-        build_pyth_price_feed_id(1),
-    );
-
-    abort
-}
-
 #[test, expected_failure(abort_code = manager::EInvalidBaseSpreadBps)]
 fun create_amm_config_rejects_zero_base_spread_bps() {
     let sender = @0x10;

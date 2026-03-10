@@ -14,8 +14,6 @@ const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 const EInvalidBaseSpreadBps: vector<u8> = b"base spread bps must be greater than zero";
 #[error]
 const EInvalidPythPriceFeedIdLength: vector<u8> = b"pyth price feed id must be 32 bytes";
-#[error]
-const EConfigAdminCapMismatch: vector<u8> = b"admin cap does not control this config";
 
 // === Structs ===
 
@@ -23,8 +21,6 @@ const EConfigAdminCapMismatch: vector<u8> = b"admin cap does not control this co
 public struct AMMConfig has key {
     /// Unique ID for the config object.
     id: UID,
-    /// ID of the admin capability authorized to mutate this config.
-    admin_cap_id: ID,
     /// Whether trading is paused.
     trading_paused: bool,
     /// Base spread in basis points.
@@ -148,11 +144,11 @@ public(package) fun create_amm_config(
     pyth_price_feed_id: vector<u8>,
     ctx: &mut TxContext,
 ): AMMConfig {
+    let _ = admin_cap;
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
     AMMConfig {
         id: object::new(ctx),
-        admin_cap_id: admin_cap.id.to_inner(),
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -174,7 +170,6 @@ public(package) fun update_amm_config(
     trading_paused: bool,
     pyth_price_feed_id: vector<u8>,
 ) {
-    assert_config_admin_cap!(config, admin_cap);
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
     config.apply_amm_config_updates(
@@ -217,13 +212,6 @@ macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed
         pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
     );
-}
-
-/// Verifies the supplied admin capability controls the target config.
-macro fun assert_config_admin_cap($config: &AMMConfig, $admin_cap: &AMMAdminCap) {
-    let config = $config;
-    let admin_cap = $admin_cap;
-    assert!(config.admin_cap_id == admin_cap.id.to_inner(), EConfigAdminCapMismatch);
 }
 
 // === View helpers ===
