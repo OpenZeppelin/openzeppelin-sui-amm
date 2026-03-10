@@ -509,6 +509,14 @@ describe("publishPackageWithLog", () => {
       ).rejects.toThrow(
         "Multiple Sui framework revisions detected in Move.lock"
       )
+
+      expect(
+        logMocks.logWarning.mock.calls.some(([message]) =>
+          String(message).includes(
+            "Multiple Sui framework revisions detected in Move.lock"
+          )
+        )
+      ).toBe(true)
     })
   })
 
