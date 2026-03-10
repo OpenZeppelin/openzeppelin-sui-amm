@@ -24,21 +24,6 @@ fun build_invalid_pyth_price_feed_id(): vector<u8> {
     vector::tabulate!(manager::pyth_price_identifier_length() - 1, |_| 0)
 }
 
-fun assert_config_matches_inputs(
-    config: &manager::AMMConfig,
-    base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
-    use_laser: bool,
-    trading_paused: bool,
-    expected_pyth_price_feed_id: vector<u8>,
-) {
-    assert_eq!(config.base_spread_bps(), base_spread_bps);
-    assert_eq!(config.volatility_multiplier_bps(), volatility_multiplier_bps);
-    assert_eq!(config.use_laser(), use_laser);
-    assert_eq!(config.trading_paused(), trading_paused);
-    assert_eq!(config.pyth_price_feed_id(), expected_pyth_price_feed_id);
-}
-
 /// Asserts that `expected_event` of type `T` was emitted.
 macro fun assert_emitted<$T>($expected_event: $T) {
     let events = sui::event::events_by_type<$T>();
@@ -89,15 +74,13 @@ fun create_amm_config_shares_config_and_emits_event() {
     assert_emitted!(new_amm_config_created_event(config_id));
     scenario.next_tx(sender);
 
-    let config = test_scenario::take_shared(&scenario);
-    assert_config_matches_inputs(
-        &config,
-        base_spread_bps,
-        volatility_multiplier_bps,
-        use_laser,
-        false,
-        pyth_price_feed_id,
-    );
+    let config: AMMConfig = test_scenario::take_shared(&scenario);
+
+    assert_eq!(config.base_spread_bps(), base_spread_bps);
+    assert_eq!(config.volatility_multiplier_bps(), volatility_multiplier_bps);
+    assert_eq!(config.use_laser(), use_laser);
+    assert_eq!(config.trading_paused(), false);
+    assert_eq!(config.pyth_price_feed_id(), pyth_price_feed_id);
 
     test_scenario::return_shared(config);
     test_scenario::end(scenario);
@@ -114,6 +97,7 @@ fun update_amm_config_updates_config_and_emits_event() {
 
     manager::init_for_testing(scenario.ctx());
     scenario.next_tx(sender);
+
     manager::create_amm_config_and_share(
         base_spread_bps,
         volatility_multiplier_bps,
@@ -142,14 +126,11 @@ fun update_amm_config_updates_config_and_emits_event() {
     assert_emitted!(new_amm_config_updated_event(config.config_id()));
     scenario.next_tx(sender);
 
-    assert_config_matches_inputs(
-        &config,
-        updated_base_spread_bps,
-        updated_volatility_multiplier_bps,
-        updated_use_laser,
-        updated_trading_paused,
-        updated_pyth_price_feed_id,
-    );
+    assert_eq!(config.base_spread_bps(), updated_base_spread_bps);
+    assert_eq!(config.volatility_multiplier_bps(), updated_volatility_multiplier_bps);
+    assert_eq!(config.use_laser(), updated_use_laser);
+    assert_eq!(config.trading_paused(), updated_trading_paused);
+    assert_eq!(config.pyth_price_feed_id(), updated_pyth_price_feed_id);
 
     test_scenario::return_shared(config);
     test_scenario::return_to_sender(&scenario, admin_cap);
@@ -167,6 +148,7 @@ fun update_amm_config_supports_multiple_updates() {
 
     manager::init_for_testing(scenario.ctx());
     scenario.next_tx(sender);
+
     manager::create_amm_config_and_share(
         base_spread_bps,
         volatility_multiplier_bps,
@@ -203,14 +185,11 @@ fun update_amm_config_supports_multiple_updates() {
     assert_emitted!(new_amm_config_updated_event(config.config_id()));
     scenario.next_tx(sender);
 
-    assert_config_matches_inputs(
-        &config,
-        30,
-        180,
-        false,
-        false,
-        second_update_pyth_price_feed_id,
-    );
+    assert_eq!(config.base_spread_bps(), 30);
+    assert_eq!(config.volatility_multiplier_bps(), 180);
+    assert_eq!(config.use_laser(), false);
+    assert_eq!(config.trading_paused(), false);
+    assert_eq!(config.pyth_price_feed_id(), second_update_pyth_price_feed_id);
 
     test_scenario::return_shared(config);
     test_scenario::return_to_sender(&scenario, admin_cap);
@@ -248,6 +227,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
 
     manager::init_for_testing(scenario.ctx());
     scenario.next_tx(sender);
+    
     manager::create_amm_config_and_share(
         base_spread_bps,
         volatility_multiplier_bps,
