@@ -311,7 +311,7 @@ fun update_amm_config_supports_multiple_updates() {
     test_scenario::end(scenario);
 }
 
-#[test, expected_failure(abort_code = manager::EInvalidSpread)]
+#[test, expected_failure(abort_code = manager::EInvalidBaseSpreadBps)]
 fun create_amm_config_rejects_zero_base_spread_bps() {
     let base_spread_bps = 0;
     let volatility_multiplier_bps = 1;
@@ -332,7 +332,7 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
     abort
 }
 
-#[test, expected_failure(abort_code = manager::EInvalidSpread)]
+#[test, expected_failure(abort_code = manager::EInvalidBaseSpreadBps)]
 fun update_amm_config_rejects_zero_base_spread_bps() {
     let sender = @0xD;
     let mut scenario = test_scenario::begin(sender);
@@ -369,7 +369,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     abort
 }
 
-#[test, expected_failure(abort_code = manager::EEmptyFeedId)]
+#[test, expected_failure(abort_code = manager::EEmptyPythPriceFeedId)]
 fun create_amm_config_rejects_empty_feed_id() {
     let base_spread_bps = 1;
     let volatility_multiplier_bps = 1;
@@ -388,7 +388,7 @@ fun create_amm_config_rejects_empty_feed_id() {
     abort
 }
 
-#[test, expected_failure(abort_code = manager::EEmptyFeedId)]
+#[test, expected_failure(abort_code = manager::EEmptyPythPriceFeedId)]
 fun update_amm_config_rejects_empty_feed_id() {
     let sender = @0xE;
     let mut scenario = test_scenario::begin(sender);
@@ -422,7 +422,7 @@ fun update_amm_config_rejects_empty_feed_id() {
     abort
 }
 
-#[test, expected_failure(abort_code = manager::EInvalidFeedIdLength)]
+#[test, expected_failure(abort_code = manager::EInvalidPythPriceFeedIdLength)]
 fun create_amm_config_rejects_invalid_feed_id_length() {
     let base_spread_bps = 1;
     let volatility_multiplier_bps = 1;
@@ -443,7 +443,7 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
     abort
 }
 
-#[test, expected_failure(abort_code = manager::EInvalidFeedIdLength)]
+#[test, expected_failure(abort_code = manager::EInvalidPythPriceFeedIdLength)]
 fun update_amm_config_rejects_invalid_feed_id_length() {
     let sender = @0xF;
     let mut scenario = test_scenario::begin(sender);

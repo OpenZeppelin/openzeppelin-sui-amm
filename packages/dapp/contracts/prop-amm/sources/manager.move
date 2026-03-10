@@ -11,11 +11,11 @@ const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 // === Errors ===
 
 #[error]
-const EInvalidSpread: vector<u8> = b"invalid spread";
+const EInvalidBaseSpreadBps: vector<u8> = b"base spread bps must be greater than zero";
 #[error]
-const EEmptyFeedId: vector<u8> = b"empty feed id";
+const EEmptyPythPriceFeedId: vector<u8> = b"pyth price feed id cannot be empty";
 #[error]
-const EInvalidFeedIdLength: vector<u8> = b"invalid feed id length";
+const EInvalidPythPriceFeedIdLength: vector<u8> = b"pyth price feed id must be 32 bytes";
 
 // === Structs ===
 
@@ -46,13 +46,13 @@ public struct AMMAdminCap has key, store {
 /// Emitted when a new configuration object is created.
 public struct AMMConfigCreatedEvent has copy, drop {
     /// ID of the configuration object.
-    config_id: address,
+    config_id: ID,
 }
 
 /// Emitted when a configuration object is updated.
 public struct AMMConfigUpdatedEvent has copy, drop {
     /// ID of the configuration object.
-    config_id: address,
+    config_id: ID,
 }
 
 // === Init ===
@@ -66,7 +66,7 @@ public struct MANAGER has drop {}
 fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
     package::claim_and_keep<MANAGER>(publisher_witness, ctx);
 
-    let admin_cap = create_admin_cap(ctx);
+    let admin_cap = new_amm_admin_cap(ctx);
     transfer::transfer(admin_cap, ctx.sender());
 }
 
@@ -87,7 +87,8 @@ public fun create_amm_config_and_share(
         pyth_price_feed_id,
         ctx,
     );
-    event::emit(new_amm_config_created_event(&config));
+    let config_id = config.id.to_inner();
+    event::emit(new_amm_config_created_event(config_id));
     share_amm_config(config);
 }
 
@@ -110,7 +111,7 @@ public fun update_amm_config_and_emit(
         trading_paused,
         pyth_price_feed_id,
     );
-    event::emit(new_amm_config_updated_event(config));
+    event::emit(new_amm_config_updated_event(config.id.to_inner()));
 }
 
 /// Shares a configuration object.
@@ -136,7 +137,7 @@ public fun create_amm_config(
 ): AMMConfig {
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
-    create_config(
+    new_amm_config(
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -174,7 +175,7 @@ public fun update_amm_config(
 // === Private Functions ===
 
 /// Builds a configuration object with default flags.
-fun create_config(
+fun new_amm_config(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
@@ -192,7 +193,7 @@ fun create_config(
 }
 
 /// Creates a new admin capability object.
-fun create_admin_cap(ctx: &mut TxContext): AMMAdminCap {
+fun new_amm_admin_cap(ctx: &mut TxContext): AMMAdminCap {
     AMMAdminCap { id: object::new(ctx) }
 }
 
@@ -214,7 +215,7 @@ fun apply_amm_config_updates(
 
 /// Ensures the base spread is nonzero.
 macro fun assert_valid_base_spread_bps($base_spread_bps: u64) {
-    assert!($base_spread_bps > 0, EInvalidSpread);
+    assert!($base_spread_bps > 0, EInvalidBaseSpreadBps);
 }
 
 /// Validates all inputs for a new or updated configuration.
@@ -234,22 +235,62 @@ macro fun assert_admin_cap($admin_cap: &AMMAdminCap) {
 /// Pyth feed IDs are 32-byte identifiers.
 macro fun assert_valid_feed_id($pyth_price_feed_id: &vector<u8>) {
     let pyth_price_feed_id = $pyth_price_feed_id;
-    assert!(!pyth_price_feed_id.is_empty(), EEmptyFeedId);
-    assert!(pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH, EInvalidFeedIdLength);
+    assert!(!pyth_price_feed_id.is_empty(), EEmptyPythPriceFeedId);
+    assert!(
+        pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
+        EInvalidPythPriceFeedIdLength,
+    );
 }
 
 /// Creates an AMMConfigCreatedEvent payload.
-fun new_amm_config_created_event(config: &AMMConfig): AMMConfigCreatedEvent {
+public(package) fun new_amm_config_created_event(config_id: ID): AMMConfigCreatedEvent {
     AMMConfigCreatedEvent {
-        config_id: config.id.to_address(),
+        config_id,
     }
 }
 
 /// Creates an AMMConfigUpdatedEvent payload.
-fun new_amm_config_updated_event(config: &AMMConfig): AMMConfigUpdatedEvent {
+public(package) fun new_amm_config_updated_event(config_id: ID): AMMConfigUpdatedEvent {
     AMMConfigUpdatedEvent {
-        config_id: config.id.to_address(),
+        config_id,
     }
+}
+
+// === View helpers ===
+
+/// Returns the base spread in basis points.
+public fun base_spread_bps(config: &AMMConfig): u64 {
+    config.base_spread_bps
+}
+
+/// Returns the volatility multiplier in basis points.
+public fun volatility_multiplier_bps(config: &AMMConfig): u64 {
+    config.volatility_multiplier_bps
+}
+
+/// Returns whether LASER pricing is enabled.
+public fun use_laser(config: &AMMConfig): bool {
+    config.use_laser
+}
+
+/// Returns whether trading is paused.
+public fun trading_paused(config: &AMMConfig): bool {
+    config.trading_paused
+}
+
+/// Returns the Pyth price feed ID bytes.
+public fun pyth_price_feed_id(config: &AMMConfig): &vector<u8> {
+    &config.pyth_price_feed_id
+}
+
+/// Returns the configuration object ID as an address.
+public fun config_id(config: &AMMConfig): ID {
+    config.id.to_inner()
+}
+
+/// Returns the admin capability object ID.
+public fun admin_cap_id(admin_cap: &AMMAdminCap): ID {
+    admin_cap.id.to_inner()
 }
 
 // === Test-Only Helpers ===
@@ -262,34 +303,4 @@ public fun init_for_testing(ctx: &mut TxContext) {
         publisher_witness,
         ctx,
     );
-}
-
-#[test_only]
-/// Returns the base spread for tests.
-public fun base_spread_bps(config: &AMMConfig): u64 {
-    config.base_spread_bps
-}
-
-#[test_only]
-/// Returns the volatility multiplier for tests.
-public fun volatility_multiplier_bps(config: &AMMConfig): u64 {
-    config.volatility_multiplier_bps
-}
-
-#[test_only]
-/// Returns the LASER flag for tests.
-public fun use_laser(config: &AMMConfig): bool {
-    config.use_laser
-}
-
-#[test_only]
-/// Returns the trading paused flag for tests.
-public fun trading_paused(config: &AMMConfig): bool {
-    config.trading_paused
-}
-
-#[test_only]
-/// Returns the Pyth price feed ID for tests.
-public fun pyth_price_feed_id(config: &AMMConfig): &vector<u8> {
-    &config.pyth_price_feed_id
 }
