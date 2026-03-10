@@ -104,7 +104,9 @@ public fun create_amm_config_and_share(
         ctx,
     );
     let config_id = config.id.to_inner();
-    event::emit(new_amm_config_created_event(config_id));
+    event::emit(AMMConfigCreatedEvent {
+        config_id,
+    });
     transfer::share_object(config);
     config_id
 }
@@ -127,7 +129,10 @@ public fun update_amm_config_and_emit(
         trading_paused,
         pyth_price_feed_id,
     );
-    event::emit(new_amm_config_updated_event(config.id.to_inner()));
+    let config_id = config.id.to_inner();
+    event::emit(AMMConfigUpdatedEvent {
+        config_id,
+    });
 }
 
 // === Public Functions ===
