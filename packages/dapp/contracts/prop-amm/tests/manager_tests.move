@@ -9,7 +9,7 @@ use prop_amm::manager::{
     AMMAdminCap
 };
 use std::unit_test::{assert_eq, assert_ref_eq};
-use sui::test_scenario::{Self, Scenario, TransactionEffects};
+use sui::test_scenario;
 
 // === Helpers ===
 
@@ -21,12 +21,6 @@ fun build_pyth_price_feed_id(byte_value: u8): vector<u8> {
 /// Builds a dummy Pyth feed ID with invalid length.
 fun build_invalid_pyth_price_feed_id(): vector<u8> {
     vector::tabulate!(manager::pyth_price_identifier_length() - 1, |_| 0)
-}
-
-/// Runs package init in a scenario and advances to the next transaction.
-fun init_and_advance_scenario(scenario: &mut Scenario, sender: address): TransactionEffects {
-    manager::init_for_testing(test_scenario::ctx(scenario));
-    test_scenario::next_tx(scenario, sender)
 }
 
 fun assert_config_matches_inputs(
@@ -67,7 +61,8 @@ fun init_transfers_admin_cap() {
     let sender = @0xA;
     let mut scenario = test_scenario::begin(sender);
 
-    init_and_advance_scenario(&mut scenario, sender);
+    manager::init_for_testing(scenario.ctx());
+    scenario.next_tx(sender);
 
     let admin_cap: AMMAdminCap = test_scenario::take_from_sender(&scenario);
     test_scenario::return_to_sender(&scenario, admin_cap);
@@ -116,7 +111,8 @@ fun update_amm_config_updates_config_and_emits_event() {
     let use_laser = true;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    init_and_advance_scenario(&mut scenario, sender);
+    manager::init_for_testing(scenario.ctx());
+    scenario.next_tx(sender);
     manager::create_amm_config_and_share(
         base_spread_bps,
         volatility_multiplier_bps,
@@ -169,7 +165,8 @@ fun update_amm_config_supports_multiple_updates() {
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    init_and_advance_scenario(&mut scenario, sender);
+    manager::init_for_testing(scenario.ctx());
+    scenario.next_tx(sender);
     manager::create_amm_config_and_share(
         base_spread_bps,
         volatility_multiplier_bps,
@@ -251,7 +248,8 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    init_and_advance_scenario(&mut scenario, sender);
+    manager::init_for_testing(scenario.ctx());
+    scenario.next_tx(sender);
     manager::create_amm_config_and_share(
         base_spread_bps,
         volatility_multiplier_bps,
@@ -306,7 +304,8 @@ fun update_amm_config_rejects_empty_feed_id() {
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    init_and_advance_scenario(&mut scenario, sender);
+    manager::init_for_testing(scenario.ctx());
+    scenario.next_tx(sender);
 
     manager::create_amm_config_and_share(
         base_spread_bps,
@@ -362,7 +361,8 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    init_and_advance_scenario(&mut scenario, sender);
+    manager::init_for_testing(scenario.ctx());
+    scenario.next_tx(sender);
 
     manager::create_amm_config_and_share(
         base_spread_bps,
@@ -385,6 +385,6 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
         trading_paused,
         build_invalid_pyth_price_feed_id(),
     );
-    
+
     abort
 }
