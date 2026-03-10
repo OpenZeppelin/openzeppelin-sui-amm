@@ -53,6 +53,20 @@ public struct AMMConfigUpdatedEvent has copy, drop {
     config_id: ID,
 }
 
+/// Builds an `AMMConfigCreatedEvent` payload.
+public(package) fun new_amm_config_created_event(config_id: ID): AMMConfigCreatedEvent {
+    AMMConfigCreatedEvent {
+        config_id,
+    }
+}
+
+/// Builds an `AMMConfigCreatedEvent` payload.
+public(package) fun new_amm_config_updated_event(config_id: ID): AMMConfigUpdatedEvent {
+    AMMConfigUpdatedEvent {
+        config_id,
+    }
+}
+
 // === Init ===
 
 /// One-time publisher witness created at publish time.
@@ -71,13 +85,14 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 // === Entry Functions ===
 
 /// Creates, emits, and shares a new AMM configuration.
+/// Returns the new configuration's object ID.
 public fun create_amm_config_and_share(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
     pyth_price_feed_id: vector<u8>,
     ctx: &mut TxContext,
-) {
+): ID {
     let config = create_amm_config(
         base_spread_bps,
         volatility_multiplier_bps,
@@ -86,8 +101,9 @@ public fun create_amm_config_and_share(
         ctx,
     );
     let config_id = config.id.to_inner();
-    event::emit(AMMConfigCreatedEvent { config_id });
-    share_amm_config(config);
+    event::emit(new_amm_config_created_event(config_id));
+    transfer::share_object(config);
+    config_id
 }
 
 /// Updates a configuration object and emits an update event.
@@ -100,8 +116,7 @@ public fun update_amm_config_and_emit(
     trading_paused: bool,
     pyth_price_feed_id: vector<u8>,
 ) {
-    update_amm_config(
-        config,
+    config.update_amm_config(
         admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
@@ -109,24 +124,13 @@ public fun update_amm_config_and_emit(
         trading_paused,
         pyth_price_feed_id,
     );
-    event::emit(AMMConfigUpdatedEvent {
-        config_id: config.id.to_inner(),
-    });
-}
-
-/// Shares a configuration object.
-///
-/// Shared configs are readable by anyone; only the admin cap can update.
-/// This function does not emit events.
-public fun share_amm_config(config: AMMConfig) {
-    transfer::share_object(config);
+    event::emit(new_amm_config_updated_event(config.id.to_inner()));
 }
 
 // === Public Functions ===
 
 /// Creates a new AMM configuration object with validated inputs.
 ///
-/// The returned object is owned; call `share_amm_config` to make it shared.
 /// Use `create_amm_config_and_share` to emit the creation event.
 entry fun create_amm_config(
     base_spread_bps: u64,
@@ -137,13 +141,14 @@ entry fun create_amm_config(
 ): AMMConfig {
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
-    new_amm_config(
+    AMMConfig {
+        id: object::new(ctx),
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
+        trading_paused: false,
         pyth_price_feed_id,
-        ctx,
-    )
+    }
 }
 
 /// Updates a configuration object; requires the admin capability.
@@ -161,8 +166,7 @@ entry fun update_amm_config(
 ) {
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
-    apply_amm_config_updates(
-        config,
+    config.apply_amm_config_updates(
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -172,24 +176,6 @@ entry fun update_amm_config(
 }
 
 // === Private Functions ===
-
-/// Builds a configuration object with default flags.
-fun new_amm_config(
-    base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
-    use_laser: bool,
-    pyth_price_feed_id: vector<u8>,
-    ctx: &mut TxContext,
-): AMMConfig {
-    AMMConfig {
-        id: object::new(ctx),
-        base_spread_bps,
-        volatility_multiplier_bps,
-        use_laser,
-        trading_paused: false,
-        pyth_price_feed_id,
-    }
-}
 
 /// Creates a new admin capability object.
 fun new_amm_admin_cap(ctx: &mut TxContext): AMMAdminCap {
@@ -212,22 +198,10 @@ fun apply_amm_config_updates(
     config.pyth_price_feed_id = pyth_price_feed_id;
 }
 
-/// Ensures the base spread is non-zero.
-macro fun assert_valid_base_spread_bps($base_spread_bps: u64) {
-    assert!($base_spread_bps > 0, EInvalidBaseSpreadBps);
-}
-
 /// Validates all inputs for a new or updated configuration.
 macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
-    assert_valid_base_spread_bps!($base_spread_bps);
-    assert_valid_feed_id!($pyth_price_feed_id);
-}
-
-/// Validates the Pyth price feed identifier.
-///
-/// Pyth feed IDs are 32-byte identifiers.
-macro fun assert_valid_feed_id($pyth_price_feed_id: &vector<u8>) {
     let pyth_price_feed_id = $pyth_price_feed_id;
+    assert!($base_spread_bps > 0, EInvalidBaseSpreadBps);
     assert!(
         pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
@@ -235,11 +209,6 @@ macro fun assert_valid_feed_id($pyth_price_feed_id: &vector<u8>) {
 }
 
 // === View helpers ===
-
-/// Returns the required Pyth price feed identifier length.
-public(package) fun pyth_price_identifier_length(): u64 {
-    PYTH_PRICE_IDENTIFIER_LENGTH
-}
 
 /// Returns the base spread in basis points.
 public fun base_spread_bps(config: &AMMConfig): u64 {
@@ -262,8 +231,8 @@ public fun trading_paused(config: &AMMConfig): bool {
 }
 
 /// Returns the Pyth price feed ID bytes.
-public fun pyth_price_feed_id(config: &AMMConfig): &vector<u8> {
-    &config.pyth_price_feed_id
+public fun pyth_price_feed_id(config: &AMMConfig): vector<u8> {
+    config.pyth_price_feed_id
 }
 
 /// Returns the configuration object ID as an address.
@@ -276,11 +245,16 @@ public fun admin_cap_id(admin_cap: &AMMAdminCap): ID {
     admin_cap.id.to_inner()
 }
 
+/// Returns the required Pyth price feed identifier length.
+public(package) fun pyth_price_identifier_length(): u64 {
+    PYTH_PRICE_IDENTIFIER_LENGTH
+}
+
 // === Test-Only Helpers ===
 
 #[test_only]
 /// Creates the package witness and runs init for tests.
-public fun init_for_testing(ctx: &mut TxContext) {
+public fun test_init(ctx: &mut TxContext) {
     let publisher_witness = sui::test_utils::create_one_time_witness<MANAGER>();
     init(
         publisher_witness,
