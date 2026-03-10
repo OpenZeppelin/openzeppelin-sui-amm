@@ -47,7 +47,7 @@ fun init_transfers_admin_cap() {
     let sender = @0xA;
     let mut scenario = test_scenario::begin(sender);
 
-    manager::init_for_testing(scenario.ctx());
+    manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
     let admin_cap: AMMAdminCap = test_scenario::take_from_sender(&scenario);
@@ -95,7 +95,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     let use_laser = true;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    manager::init_for_testing(scenario.ctx());
+    manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
     manager::create_amm_config_and_share(
@@ -146,7 +146,7 @@ fun update_amm_config_supports_multiple_updates() {
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    manager::init_for_testing(scenario.ctx());
+    manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
     manager::create_amm_config_and_share(
@@ -225,9 +225,9 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    manager::init_for_testing(scenario.ctx());
+    manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
-    
+
     manager::create_amm_config_and_share(
         base_spread_bps,
         volatility_multiplier_bps,
@@ -281,7 +281,7 @@ fun update_amm_config_rejects_empty_feed_id() {
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    manager::init_for_testing(scenario.ctx());
+    manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
     manager::create_amm_config_and_share(
@@ -337,7 +337,7 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
-    manager::init_for_testing(scenario.ctx());
+    manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
     manager::create_amm_config_and_share(

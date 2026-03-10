@@ -254,7 +254,7 @@ public(package) fun pyth_price_identifier_length(): u64 {
 
 #[test_only]
 /// Creates the package witness and runs init for tests.
-public fun init_for_testing(ctx: &mut TxContext) {
+public fun test_init(ctx: &mut TxContext) {
     let publisher_witness = sui::test_utils::create_one_time_witness<MANAGER>();
     init(
         publisher_witness,
