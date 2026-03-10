@@ -82,7 +82,7 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
     transfer::transfer(admin_cap, ctx.sender());
 }
 
-// === Entry Functions ===
+// === Public Functions ===
 
 /// Creates, emits, and shares a new AMM configuration.
 /// Requires the admin capability used to control this config.
@@ -135,7 +135,7 @@ public fun update_amm_config_and_emit(
     });
 }
 
-// === Public Functions ===
+// === Private Functions ===
 
 /// Creates a new AMM configuration object with validated inputs.
 ///
@@ -182,8 +182,6 @@ public(package) fun update_amm_config(
     config.trading_paused = trading_paused;
     config.pyth_price_feed_id = pyth_price_feed_id;
 }
-
-// === Private Functions ===
 
 /// Validates all inputs for a new or updated configuration.
 macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
