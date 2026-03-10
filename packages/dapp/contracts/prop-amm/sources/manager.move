@@ -212,7 +212,7 @@ fun apply_amm_config_updates(
     config.pyth_price_feed_id = pyth_price_feed_id;
 }
 
-/// Ensures the base spread is nonzero.
+/// Ensures the base spread is non-zero.
 macro fun assert_valid_base_spread_bps($base_spread_bps: u64) {
     assert!($base_spread_bps > 0, EInvalidSpread);
 }
