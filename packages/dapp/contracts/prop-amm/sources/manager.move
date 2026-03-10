@@ -6,12 +6,15 @@ use sui::package;
 
 // === Constants ===
 
+const MAX_BASIS_POINTS: u64 = 10_000;
 const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
 // === Errors ===
 
 #[error]
 const EInvalidBaseSpreadBps: vector<u8> = b"base spread bps must be greater than zero";
+#[error]
+const EBaseSpreadBpsExceedsMaxBasisPoints: vector<u8> = b"base spread bps must be at most 10000";
 #[error]
 const EInvalidPythPriceFeedIdLength: vector<u8> = b"pyth price feed id must be 32 bytes";
 
@@ -185,8 +188,10 @@ public(package) fun update_amm_config(
 
 /// Validates all inputs for a new or updated configuration.
 macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
+    let base_spread_bps = $base_spread_bps;
     let pyth_price_feed_id = $pyth_price_feed_id;
-    assert!($base_spread_bps > 0, EInvalidBaseSpreadBps);
+    assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
+    assert!(base_spread_bps <= MAX_BASIS_POINTS, EBaseSpreadBpsExceedsMaxBasisPoints);
     assert!(
         pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,

@@ -279,6 +279,68 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     abort
 }
 
+#[test, expected_failure(abort_code = manager::EBaseSpreadBpsExceedsMaxBasisPoints)]
+fun create_amm_config_rejects_base_spread_bps_above_max_basis_points() {
+    let sender = @0x13;
+    let mut scenario = test_scenario::begin(sender);
+    let base_spread_bps = 10_001;
+    let volatility_multiplier_bps = 1;
+    let use_laser = false;
+    let pyth_price_feed_id = build_pyth_price_feed_id(0);
+    manager::test_init(scenario.ctx());
+    scenario.next_tx(sender);
+
+    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let _config = manager::create_amm_config(
+        &admin_cap,
+        base_spread_bps,
+        volatility_multiplier_bps,
+        use_laser,
+        pyth_price_feed_id,
+        scenario.ctx(),
+    );
+
+    abort
+}
+
+#[test, expected_failure(abort_code = manager::EBaseSpreadBpsExceedsMaxBasisPoints)]
+fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
+    let sender = @0x14;
+    let mut scenario = test_scenario::begin(sender);
+    let base_spread_bps = 1;
+    let volatility_multiplier_bps = 1;
+    let use_laser = false;
+    let trading_paused = false;
+    let pyth_price_feed_id = build_pyth_price_feed_id(0);
+
+    manager::test_init(scenario.ctx());
+    scenario.next_tx(sender);
+
+    let admin_cap = test_scenario::take_from_sender(&scenario);
+    manager::create_amm_config_and_share(
+        &admin_cap,
+        base_spread_bps,
+        volatility_multiplier_bps,
+        use_laser,
+        pyth_price_feed_id,
+        scenario.ctx(),
+    );
+    scenario.next_tx(sender);
+
+    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
+
+    config.update_amm_config(
+        &admin_cap,
+        10_001,
+        volatility_multiplier_bps,
+        use_laser,
+        trading_paused,
+        build_pyth_price_feed_id(0),
+    );
+
+    abort
+}
+
 #[test, expected_failure(abort_code = manager::EInvalidPythPriceFeedIdLength)]
 fun create_amm_config_rejects_empty_feed_id() {
     let sender = @0x11;
