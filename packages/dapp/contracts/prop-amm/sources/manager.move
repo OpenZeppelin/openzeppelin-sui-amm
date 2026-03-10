@@ -176,32 +176,14 @@ public(package) fun update_amm_config(
 ) {
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
-    config.apply_amm_config_updates(
-        base_spread_bps,
-        volatility_multiplier_bps,
-        use_laser,
-        trading_paused,
-        pyth_price_feed_id,
-    );
-}
-
-// === Private Functions ===
-
-/// Applies updates to the configuration object.
-fun apply_amm_config_updates(
-    config: &mut AMMConfig,
-    base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
-    use_laser: bool,
-    trading_paused: bool,
-    pyth_price_feed_id: vector<u8>,
-) {
     config.base_spread_bps = base_spread_bps;
     config.volatility_multiplier_bps = volatility_multiplier_bps;
     config.use_laser = use_laser;
     config.trading_paused = trading_paused;
     config.pyth_price_feed_id = pyth_price_feed_id;
 }
+
+// === Private Functions ===
 
 /// Validates all inputs for a new or updated configuration.
 macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
