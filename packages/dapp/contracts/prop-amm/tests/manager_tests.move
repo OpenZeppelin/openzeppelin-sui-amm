@@ -1,8 +1,8 @@
 /// Tests for AMM manager behavior.
 #[test_only]
-module openzeppelin_automated_market_maker::manager_tests;
+module openzeppelin_market_maker::manager_tests;
 
-use openzeppelin_automated_market_maker::manager::{
+use openzeppelin_market_maker::manager::{
     Self,
     new_amm_config_created_event,
     new_amm_config_updated_event,

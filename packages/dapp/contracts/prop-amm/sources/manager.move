@@ -1,5 +1,5 @@
 /// AMM configuration and admin controls.
-module openzeppelin_automated_market_maker::manager;
+module openzeppelin_market_maker::manager;
 
 use sui::event;
 use sui::package;
