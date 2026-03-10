@@ -110,6 +110,34 @@ jobs:
             /tmp/sui-it-*/logs/**
           if-no-files-found: ignore
 
+  move-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/setup-sui
+      - name: Run Move tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          move_packages="$(find packages/dapp/contracts -mindepth 1 -maxdepth 1 -type d | while read -r package_dir; do
+            if [ -f "$package_dir/Move.toml" ]; then
+              basename "$package_dir"
+            fi
+          done)"
+
+          for package_name in $move_packages; do
+            echo "Running Move tests for $package_name"
+            pnpm script move:test \
+              --package-path "$package_name" \
+              --network localnet \
+              --coverage \
+              --trace \
+              --test \
+              --coverage-summary
+          done
+
   security-audit:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
