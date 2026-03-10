@@ -14,6 +14,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { Readable } from "node:stream"
 import { pipeline } from "node:stream/promises"
+import { setTimeout as delay } from "node:timers/promises"
 import { URL } from "node:url"
 import { promisify } from "node:util"
 
@@ -30,6 +31,9 @@ const installDir =
   process.env.SUI_CLI_INSTALL_DIR || path.join(homeDirectory, ".local", "bin")
 const releaseQueryPageSize = 100
 const releaseQueryMaxPages = 10
+const fetchRetryableStatusCodes = new Set([408, 425, 429, 500, 502, 503, 504])
+const fetchRetryAttempts = 4
+const fetchRetryDelayMs = 750
 const suiupGitRepositoryUrl = "https://github.com/MystenLabs/sui.git"
 const suiupGitBranch = "main"
 
@@ -122,10 +126,72 @@ const apiHeaders = () => {
   return headers
 }
 
+const formatError = (error) =>
+  error instanceof Error ? error.message : String(error)
+
+const logInfo = (message) => {
+  console.log(`[sui-cli-installer] ${message}`)
+}
+
+const logWarning = (message) => {
+  console.warn(`[sui-cli-installer] ${message}`)
+}
+
+const closeResponseBody = async (response) => {
+  try {
+    await response.body?.cancel()
+  } catch {
+    return
+  }
+}
+
+const waitBeforeRetry = async (attempt) => {
+  const backoffDelayMs = fetchRetryDelayMs * 2 ** (attempt - 1)
+  await delay(backoffDelayMs)
+}
+
+const fetchWithRetry = async (url, options, label) => {
+  let lastError
+
+  for (let attempt = 1; attempt <= fetchRetryAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, options)
+      if (attempt > 1) {
+        logInfo(
+          `Fetch recovered for ${label} on attempt ${attempt}/${fetchRetryAttempts} with status ${response.status}.`
+        )
+      }
+      if (
+        !fetchRetryableStatusCodes.has(response.status) ||
+        attempt === fetchRetryAttempts
+      ) {
+        return response
+      }
+
+      logWarning(
+        `Transient response for ${label}: HTTP ${response.status}. Retrying attempt ${attempt + 1}/${fetchRetryAttempts}.`
+      )
+      await closeResponseBody(response)
+    } catch (error) {
+      lastError = error
+      if (attempt === fetchRetryAttempts) throw error
+      logWarning(
+        `Fetch error for ${label}: ${formatError(error)}. Retrying attempt ${attempt + 1}/${fetchRetryAttempts}.`
+      )
+    }
+
+    await waitBeforeRetry(attempt)
+  }
+
+  throw new Error(`Failed to fetch ${label}: ${formatError(lastError)}`)
+}
+
 const fetchReleaseByTag = async (tag) => {
-  const response = await fetch(`${releaseApiBaseUrl}/releases/tags/${tag}`, {
-    headers: apiHeaders()
-  })
+  const response = await fetchWithRetry(
+    `${releaseApiBaseUrl}/releases/tags/${tag}`,
+    { headers: apiHeaders() },
+    `release ${tag}`
+  )
 
   if (response.status === 404) return null
   if (!response.ok) {
@@ -140,7 +206,11 @@ const fetchReleasesPage = async (page) => {
   releasePageUrl.searchParams.set("per_page", String(releaseQueryPageSize))
   releasePageUrl.searchParams.set("page", String(page))
 
-  const response = await fetch(releasePageUrl, { headers: apiHeaders() })
+  const response = await fetchWithRetry(
+    releasePageUrl,
+    { headers: apiHeaders() },
+    `Sui releases page ${page}`
+  )
   if (!response.ok) {
     throw new Error(
       `Failed to fetch Sui releases page ${page}: ${response.status}`
@@ -157,16 +227,50 @@ const fetchReleasesPage = async (page) => {
 
 const resolveReleaseForSpecificVersion = async (selector) => {
   const tagCandidates = buildTagCandidatesForVersion(selector)
+  const failedCandidates = []
+
+  logInfo(
+    `Resolving Sui release for selector "${selector}" using tag candidates: ${tagCandidates.join(
+      ", "
+    )}.`
+  )
+
   for (const candidate of tagCandidates) {
-    const release = await fetchReleaseByTag(candidate)
-    if (release) return { release, tag: candidate }
+    logInfo(`Checking release metadata for tag ${candidate}.`)
+    let release
+    try {
+      release = await fetchReleaseByTag(candidate)
+    } catch (error) {
+      logWarning(
+        `Failed to fetch release metadata for ${candidate}: ${formatError(error)}.`
+      )
+      failedCandidates.push(`${candidate} (${formatError(error)})`)
+      continue
+    }
+
+    if (release) {
+      logInfo(`Resolved selector "${selector}" to release tag ${candidate}.`)
+      return { release, tag: candidate }
+    }
+
+    logInfo(`Release tag ${candidate} was not found.`)
+  }
+
+  if (failedCandidates.length) {
+    throw new Error(
+      `Failed to resolve Sui release metadata for ${selector}. Attempted candidates: ${failedCandidates.join(
+        ", "
+      )}`
+    )
   }
 
   throw new Error(`Unable to find a Sui release for ${selector}.`)
 }
 
 const resolveLatestMainnetRelease = async () => {
+  logInfo("Resolving the latest mainnet Sui release from the GitHub releases feed.")
   for (let page = 1; page <= releaseQueryMaxPages; page += 1) {
+    logInfo(`Fetching releases page ${page}/${releaseQueryMaxPages}.`)
     const releases = await fetchReleasesPage(page)
     if (!releases.length) break
 
@@ -177,6 +281,7 @@ const resolveLatestMainnetRelease = async () => {
     })
 
     if (matchingRelease) {
+      logInfo(`Resolved latest mainnet release to ${matchingRelease.tag_name}.`)
       return {
         release: matchingRelease,
         tag: matchingRelease.tag_name
@@ -208,13 +313,19 @@ const isPathReadable = async (filePath) => {
 
 const resolveSuiupBinaryPath = async () => {
   for (const binaryPath of suiupBinarySearchPaths) {
-    if (await isPathReadable(binaryPath)) return binaryPath
+    if (await isPathReadable(binaryPath)) {
+      logInfo(`Found suiup binary at ${binaryPath}.`)
+      return binaryPath
+    }
   }
 
   try {
     const { stdout } = await execFileAsync("which", ["suiup"])
     const detectedPath = stdout.trim()
-    if (detectedPath) return detectedPath
+    if (detectedPath) {
+      logInfo(`Found suiup on PATH at ${detectedPath}.`)
+      return detectedPath
+    }
   } catch {
     return null
   }
@@ -235,6 +346,9 @@ const ensureCargoIsInstalled = async () => {
 
 const installSuiup = async () => {
   await ensureCargoIsInstalled()
+  logInfo(
+    `Installing suiup from ${suiupGitRepositoryUrl} (${suiupGitBranch} branch).`
+  )
   await execFileAsync("cargo", [
     "install",
     "--locked",
@@ -250,6 +364,7 @@ const ensureSuiupBinaryPath = async () => {
   const existingSuiupBinaryPath = await resolveSuiupBinaryPath()
   if (existingSuiupBinaryPath) return existingSuiupBinaryPath
 
+  logInfo("suiup was not found; installing it with cargo.")
   await installSuiup()
   const installedSuiupBinaryPath = await resolveSuiupBinaryPath()
   if (!installedSuiupBinaryPath) {
@@ -277,7 +392,14 @@ const pickAsset = (assets) => {
     (asset.name || "").toLowerCase().includes("sui")
   )
 
-  return (preferSui.length ? preferSui : candidates)[0]
+  const selectedAsset = (preferSui.length ? preferSui : candidates)[0]
+  if (selectedAsset) {
+    logInfo(
+      `Selected release asset ${selectedAsset.name} for ${process.platform}/${process.arch}.`
+    )
+  }
+
+  return selectedAsset
 }
 
 const isChecksumAssetName = (name) =>
@@ -310,7 +432,12 @@ const pickChecksumAsset = (assets, archiveAssetName) => {
 }
 
 const downloadAsset = async (asset, destination) => {
-  const response = await fetch(asset.browser_download_url)
+  logInfo(`Downloading release asset ${asset.name} to ${destination}.`)
+  const response = await fetchWithRetry(
+    asset.browser_download_url,
+    undefined,
+    asset.browser_download_url
+  )
   if (!response.ok) {
     throw new Error(
       `Failed to download ${asset.browser_download_url}: ${response.status}`
@@ -324,7 +451,12 @@ const downloadAsset = async (asset, destination) => {
 }
 
 const downloadAssetText = async (asset) => {
-  const response = await fetch(asset.browser_download_url)
+  logInfo(`Downloading checksum asset ${asset.name}.`)
+  const response = await fetchWithRetry(
+    asset.browser_download_url,
+    undefined,
+    asset.browser_download_url
+  )
   if (!response.ok) {
     throw new Error(
       `Failed to download ${asset.browser_download_url}: ${response.status}`
@@ -406,6 +538,9 @@ const parseAssetDigest = (digestValue) => {
 const resolveExpectedChecksum = async ({ releaseAssets, archiveAsset }) => {
   const checksumFromAssetDigest = parseAssetDigest(archiveAsset?.digest)
   if (checksumFromAssetDigest) {
+    logInfo(
+      `Using checksum from release asset digest metadata for ${archiveAsset.name}.`
+    )
     return {
       checksum: checksumFromAssetDigest,
       source: `asset digest metadata on ${archiveAsset.name}`
@@ -426,6 +561,7 @@ const resolveExpectedChecksum = async ({ releaseAssets, archiveAsset }) => {
     )
   }
 
+  logInfo(`Using checksum from checksum asset ${checksumAsset.name}.`)
   return {
     checksum: checksumFromChecksumAsset,
     source: checksumAsset.name
@@ -465,9 +601,12 @@ const verifyDownloadedArchiveChecksum = async ({
       `Checksum mismatch for ${archiveAsset.name} (${source}). Expected ${expectedChecksum}, got ${actualChecksum}.`
     )
   }
+
+  logInfo(`Verified SHA256 for ${archiveAsset.name} using ${source}.`)
 }
 
 const extractArchive = async (archivePath, outputDir) => {
+  logInfo(`Extracting ${archivePath} into ${outputDir}.`)
   if (archivePath.endsWith(".zip")) {
     await execFileAsync("unzip", ["-q", archivePath, "-d", outputDir])
     return
@@ -493,7 +632,9 @@ const findBinary = async (dir) => {
 }
 
 const installWithReleaseAsset = async (selector) => {
+  logInfo(`Installing Sui CLI from release assets for selector "${selector}".`)
   const { release, tag } = await resolveReleaseForSelector(selector)
+  logInfo(`Resolved release tag ${tag}.`)
 
   const asset = pickAsset(release.assets || [])
   if (!asset) {
@@ -524,6 +665,7 @@ const installWithReleaseAsset = async (selector) => {
     throw new Error("Failed to locate sui binary in extracted archive.")
   }
 
+  logInfo(`Located sui binary at ${binaryPath}.`)
   await mkdir(installDir, { recursive: true })
   const destination = path.join(installDir, "sui")
   await copyFile(binaryPath, destination)
@@ -542,13 +684,19 @@ const resolveInstalledSuiBinaryPath = async () => {
   ]
 
   for (const candidate of binaryCandidates) {
-    if (await isPathReadable(candidate)) return candidate
+    if (await isPathReadable(candidate)) {
+      logInfo(`Resolved installed sui binary path to ${candidate}.`)
+      return candidate
+    }
   }
 
   try {
     const { stdout } = await execFileAsync("which", ["sui"])
     const detectedPath = stdout.trim()
-    if (detectedPath) return detectedPath
+    if (detectedPath) {
+      logInfo(`Resolved installed sui binary path from PATH: ${detectedPath}.`)
+      return detectedPath
+    }
   } catch {
     return "sui"
   }
@@ -574,9 +722,11 @@ const ensureSuiBinaryInInstallDirectory = async (binaryPath) => {
 
 const installWithSuiup = async (selector) => {
   const normalizedSelector = selector.toLowerCase()
+  logInfo(`Installing Sui CLI with suiup selector "${normalizedSelector}".`)
   const suiupBinaryPath = await ensureSuiupBinaryPath()
   const suiupTarget = `sui@${normalizedSelector}`
 
+  logInfo(`Using suiup binary ${suiupBinaryPath} with target ${suiupTarget}.`)
   await execFileAsync(suiupBinaryPath, ["install", "-y", suiupTarget], {
     env: process.env
   })
@@ -606,6 +756,10 @@ const installWithSuiup = async (selector) => {
 const install = async () => {
   const normalizedSelector = normalizeVersionSelectorInput(
     configuredVersionSelector
+  )
+
+  logInfo(
+    `Starting install with selector "${normalizedSelector}" into ${installDir} (platform=${process.platform}, arch=${process.arch}).`
   )
 
   if (shouldInstallWithSuiup(normalizedSelector)) {

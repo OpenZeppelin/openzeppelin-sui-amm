@@ -115,10 +115,17 @@ const createMockReleaseServer = async ({
   releaseAssetRecords,
   releasesFeedTags,
   includeChecksumAssets = true,
-  includeAssetDigest = false
+  includeAssetDigest = false,
+  transientFailuresByPath = {}
 }) => {
   const releaseAssetRecordByTag = new Map(
     releaseAssetRecords.map((record) => [record.releaseTag, record])
+  )
+  const remainingFailuresByPath = new Map(
+    Object.entries(transientFailuresByPath).map(([requestPath, config]) => [
+      requestPath,
+      { ...config }
+    ])
   )
 
   const downloadPayloadByFileName = new Map()
@@ -175,6 +182,17 @@ const createMockReleaseServer = async ({
       request.url || "/",
       serverBaseUrl || "http://127.0.0.1"
     )
+    const requestPathWithSearch = `${requestUrl.pathname}${requestUrl.search}`
+
+    const transientFailure =
+      remainingFailuresByPath.get(requestPathWithSearch) ??
+      remainingFailuresByPath.get(requestUrl.pathname)
+    if (transientFailure && transientFailure.remaining > 0) {
+      transientFailure.remaining -= 1
+      response.statusCode = transientFailure.statusCode
+      response.end(`Transient failure: ${transientFailure.statusCode}`)
+      return
+    }
 
     if (request.method !== "GET") {
       writeJsonResponse(405, { error: "Method not allowed." })
@@ -280,7 +298,8 @@ const createTestContext = async ({
   releaseTags,
   releasesFeedTags,
   includeChecksumAssets,
-  includeAssetDigest
+  includeAssetDigest,
+  transientFailuresByPath
 }) => {
   const workspaceDirectoryPath = await mkdtemp(
     path.join(tmpdir(), "install-sui-cli-test-")
@@ -294,7 +313,8 @@ const createTestContext = async ({
     releaseAssetRecords,
     releasesFeedTags,
     includeChecksumAssets,
-    includeAssetDigest
+    includeAssetDigest,
+    transientFailuresByPath
   })
 
   const cleanup = async () => {
@@ -321,6 +341,42 @@ test("installs a specific Sui CLI version selector", async () => {
     const installDirectoryPath = path.join(
       testContext.workspaceDirectoryPath,
       "specific-version-install"
+    )
+    await mkdir(installDirectoryPath, { recursive: true })
+
+    const { stdout } = await runInstallerScript({
+      releaseApiBaseUrl: testContext.releaseApiBaseUrl,
+      installDirectoryPath,
+      selector: requestedVersion
+    })
+    const installedBinaryPath = path.join(installDirectoryPath, "sui")
+    const installedBinaryContents = await readFile(installedBinaryPath, "utf8")
+
+    assert.ok(installedBinaryContents.includes(releaseTag))
+    assert.ok(stdout.includes(`(${releaseTag})`))
+  } finally {
+    await testContext.cleanup()
+  }
+})
+
+test("retries transient tag lookup failures and resolves fallback tags", async () => {
+  const requestedVersion = "1.2.3"
+  const releaseTag = `mainnet-v${requestedVersion}`
+  const testContext = await createTestContext({
+    releaseTags: [releaseTag],
+    releasesFeedTags: [releaseTag],
+    transientFailuresByPath: {
+      [`/repos/MystenLabs/sui/releases/tags/sui-v${requestedVersion}`]: {
+        remaining: 1,
+        statusCode: 502
+      }
+    }
+  })
+
+  try {
+    const installDirectoryPath = path.join(
+      testContext.workspaceDirectoryPath,
+      "fallback-version-install"
     )
     await mkdir(installDirectoryPath, { recursive: true })
 
@@ -367,6 +423,41 @@ test("installs the latest mainnet Sui CLI release", async () => {
     assert.ok(installedBinaryContents.includes(latestMainnetTag))
     assert.ok(stdout.includes(`(${latestMainnetTag})`))
     assert.ok(!installedBinaryContents.includes(olderMainnetTag))
+  } finally {
+    await testContext.cleanup()
+  }
+})
+
+test("retries transient failures for an explicit release tag", async () => {
+  const releaseTag = "mainnet-v7.6.5"
+  const testContext = await createTestContext({
+    releaseTags: [releaseTag],
+    releasesFeedTags: [releaseTag],
+    transientFailuresByPath: {
+      [`/repos/MystenLabs/sui/releases/tags/${releaseTag}`]: {
+        remaining: 1,
+        statusCode: 502
+      }
+    }
+  })
+
+  try {
+    const installDirectoryPath = path.join(
+      testContext.workspaceDirectoryPath,
+      "explicit-tag-retry-install"
+    )
+    await mkdir(installDirectoryPath, { recursive: true })
+
+    const { stdout } = await runInstallerScript({
+      releaseApiBaseUrl: testContext.releaseApiBaseUrl,
+      installDirectoryPath,
+      selector: releaseTag
+    })
+    const installedBinaryPath = path.join(installDirectoryPath, "sui")
+    const installedBinaryContents = await readFile(installedBinaryPath, "utf8")
+
+    assert.ok(installedBinaryContents.includes(releaseTag))
+    assert.ok(stdout.includes(`(${releaseTag})`))
   } finally {
     await testContext.cleanup()
   }
