@@ -1,5 +1,5 @@
 /// AMM configuration and admin controls.
-module prop_amm::manager;
+module openzeppelin_automated_market_maker::manager;
 
 use sui::event;
 use sui::package;
@@ -128,7 +128,7 @@ public fun share_amm_config(config: AMMConfig) {
 ///
 /// The returned object is owned; call `share_amm_config` to make it shared.
 /// Use `create_amm_config_and_share` to emit the creation event.
-public fun create_amm_config(
+entry fun create_amm_config(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
@@ -150,7 +150,7 @@ public fun create_amm_config(
 ///
 /// The admin capability is the authorization proof for config mutations.
 /// Use `update_amm_config_and_emit` to emit the update event.
-public fun update_amm_config(
+entry fun update_amm_config(
     config: &mut AMMConfig,
     _admin_cap: &AMMAdminCap,
     base_spread_bps: u64,

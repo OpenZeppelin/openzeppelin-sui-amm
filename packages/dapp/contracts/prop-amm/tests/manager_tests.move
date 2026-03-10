@@ -1,8 +1,8 @@
 /// Tests for AMM manager behavior.
 #[test_only]
-module prop_amm::manager_tests;
+module openzeppelin_automated_market_maker::manager_tests;
 
-use prop_amm::manager;
+use openzeppelin_automated_market_maker::manager;
 use std::unit_test::{assert_eq, assert_ref_eq};
 use sui::test_scenario::{Self, Scenario, TransactionEffects};
 

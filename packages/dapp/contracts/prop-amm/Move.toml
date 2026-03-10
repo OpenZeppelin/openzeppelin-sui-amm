@@ -1,5 +1,5 @@
 [package]
-name = "prop_amm"
+name = "openzeppelin_automated_market_maker"
 edition = "2024"
 version = "1.0.0-rc.0"
 
