@@ -217,22 +217,10 @@ fun apply_amm_config_updates(
     config.pyth_price_feed_id = pyth_price_feed_id;
 }
 
-/// Ensures the base spread is non-zero.
-macro fun assert_valid_base_spread_bps($base_spread_bps: u64) {
-    assert!($base_spread_bps > 0, EInvalidBaseSpreadBps);
-}
-
 /// Validates all inputs for a new or updated configuration.
 macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
-    assert_valid_base_spread_bps!($base_spread_bps);
-    assert_valid_feed_id!($pyth_price_feed_id);
-}
-
-/// Validates the Pyth price feed identifier.
-///
-/// Pyth feed IDs are 32-byte identifiers.
-macro fun assert_valid_feed_id($pyth_price_feed_id: &vector<u8>) {
     let pyth_price_feed_id = $pyth_price_feed_id;
+    assert!($base_spread_bps > 0, EInvalidBaseSpreadBps);
     assert!(
         pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
@@ -240,11 +228,6 @@ macro fun assert_valid_feed_id($pyth_price_feed_id: &vector<u8>) {
 }
 
 // === View helpers ===
-
-/// Returns the required Pyth price feed identifier length.
-public(package) fun pyth_price_identifier_length(): u64 {
-    PYTH_PRICE_IDENTIFIER_LENGTH
-}
 
 /// Returns the base spread in basis points.
 public fun base_spread_bps(config: &AMMConfig): u64 {
@@ -279,6 +262,11 @@ public fun config_id(config: &AMMConfig): ID {
 /// Returns the admin capability object ID.
 public fun admin_cap_id(admin_cap: &AMMAdminCap): ID {
     admin_cap.id.to_inner()
+}
+
+/// Returns the required Pyth price feed identifier length.
+public(package) fun pyth_price_identifier_length(): u64 {
+    PYTH_PRICE_IDENTIFIER_LENGTH
 }
 
 // === Test-Only Helpers ===
