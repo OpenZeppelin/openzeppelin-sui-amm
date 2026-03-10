@@ -116,8 +116,7 @@ public fun update_amm_config_and_emit(
     trading_paused: bool,
     pyth_price_feed_id: vector<u8>,
 ) {
-    update_amm_config(
-        config,
+    config.update_amm_config(
         admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
@@ -142,13 +141,14 @@ public fun create_amm_config(
 ): AMMConfig {
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
-    new_amm_config(
+    AMMConfig {
+        id: object::new(ctx),
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
+        trading_paused: false,
         pyth_price_feed_id,
-        ctx,
-    )
+    }
 }
 
 /// Updates a configuration object; requires the admin capability.
@@ -166,8 +166,7 @@ public fun update_amm_config(
 ) {
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
-    apply_amm_config_updates(
-        config,
+    config.apply_amm_config_updates(
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -177,24 +176,6 @@ public fun update_amm_config(
 }
 
 // === Private Functions ===
-
-/// Builds a configuration object with default flags.
-fun new_amm_config(
-    base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
-    use_laser: bool,
-    pyth_price_feed_id: vector<u8>,
-    ctx: &mut TxContext,
-): AMMConfig {
-    AMMConfig {
-        id: object::new(ctx),
-        base_spread_bps,
-        volatility_multiplier_bps,
-        use_laser,
-        trading_paused: false,
-        pyth_price_feed_id,
-    }
-}
 
 /// Creates a new admin capability object.
 fun new_amm_admin_cap(ctx: &mut TxContext): AMMAdminCap {
