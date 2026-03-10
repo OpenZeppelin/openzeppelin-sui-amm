@@ -85,8 +85,11 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 // === Entry Functions ===
 
 /// Creates, emits, and shares a new AMM configuration.
+/// Requires the module's singleton admin capability.
+/// Authorization relies on the invariant that this module mints that cap only in `init`.
 /// Returns the new configuration's object ID.
 public fun create_amm_config_and_share(
+    admin_cap: &AMMAdminCap,
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
@@ -94,6 +97,7 @@ public fun create_amm_config_and_share(
     ctx: &mut TxContext,
 ): ID {
     let config = create_amm_config(
+        admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -131,14 +135,18 @@ public fun update_amm_config_and_emit(
 
 /// Creates a new AMM configuration object with validated inputs.
 ///
+/// Requires the module's singleton admin capability.
+/// Authorization relies on the invariant that this module mints that cap only in `init`.
 /// Use `create_amm_config_and_share` to emit the creation event.
 public(package) fun create_amm_config(
+    admin_cap: &AMMAdminCap,
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
     pyth_price_feed_id: vector<u8>,
     ctx: &mut TxContext,
 ): AMMConfig {
+    let _ = admin_cap;
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
     AMMConfig {
@@ -153,17 +161,19 @@ public(package) fun create_amm_config(
 
 /// Updates a configuration object; requires the admin capability.
 ///
-/// The admin capability is the authorization proof for config mutations.
+/// The singleton admin capability is the authorization proof for config mutations.
+/// Authorization relies on the invariant that this module mints that cap only in `init`.
 /// Use `update_amm_config_and_emit` to emit the update event.
 public(package) fun update_amm_config(
     config: &mut AMMConfig,
-    _admin_cap: &AMMAdminCap,
+    admin_cap: &AMMAdminCap,
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
     trading_paused: bool,
     pyth_price_feed_id: vector<u8>,
 ) {
+    let _ = admin_cap;
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
     config.apply_amm_config_updates(

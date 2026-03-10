@@ -9,7 +9,7 @@ use openzeppelin_automated_market_maker::manager::{
     AMMAdminCap,
     AMMConfig
 };
-use std::unit_test::{assert_eq, assert_ref_eq};
+use std::unit_test::assert_eq;
 use sui::test_scenario;
 
 // === Helpers ===
@@ -64,7 +64,12 @@ fun create_amm_config_shares_config_and_emits_event() {
     let use_laser = true;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
+    manager::test_init(scenario.ctx());
+    scenario.next_tx(sender);
+
+    let admin_cap = test_scenario::take_from_sender(&scenario);
     let config_id = manager::create_amm_config_and_share(
+        &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -83,6 +88,7 @@ fun create_amm_config_shares_config_and_emits_event() {
     assert_eq!(config.pyth_price_feed_id(), pyth_price_feed_id);
 
     test_scenario::return_shared(config);
+    test_scenario::return_to_sender(&scenario, admin_cap);
     test_scenario::end(scenario);
 }
 
@@ -98,7 +104,9 @@ fun update_amm_config_updates_config_and_emits_event() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
+    let admin_cap = test_scenario::take_from_sender(&scenario);
     manager::create_amm_config_and_share(
+        &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -107,7 +115,6 @@ fun update_amm_config_updates_config_and_emits_event() {
     );
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
     let mut config: AMMConfig = test_scenario::take_shared(&scenario);
     let updated_base_spread_bps = 35;
     let updated_volatility_multiplier_bps = 300;
@@ -149,7 +156,9 @@ fun update_amm_config_supports_multiple_updates() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
+    let admin_cap = test_scenario::take_from_sender(&scenario);
     manager::create_amm_config_and_share(
+        &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -158,7 +167,6 @@ fun update_amm_config_supports_multiple_updates() {
     );
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
     let mut config: AMMConfig = test_scenario::take_shared(&scenario);
     let first_update_pyth_price_feed_id = build_pyth_price_feed_id(1);
 
@@ -198,18 +206,23 @@ fun update_amm_config_supports_multiple_updates() {
 
 #[test, expected_failure(abort_code = manager::EInvalidBaseSpreadBps)]
 fun create_amm_config_rejects_zero_base_spread_bps() {
+    let sender = @0x10;
+    let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 0;
     let volatility_multiplier_bps = 1;
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
-    let ctx = &mut sui::tx_context::dummy();
+    manager::test_init(scenario.ctx());
+    scenario.next_tx(sender);
 
+    let admin_cap = test_scenario::take_from_sender(&scenario);
     let _config = manager::create_amm_config(
+        &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
         pyth_price_feed_id,
-        ctx,
+        scenario.ctx(),
     );
 
     abort
@@ -228,7 +241,9 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
+    let admin_cap = test_scenario::take_from_sender(&scenario);
     manager::create_amm_config_and_share(
+        &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -237,7 +252,6 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     );
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
     let mut config: AMMConfig = test_scenario::take_shared(&scenario);
 
     config.update_amm_config(
@@ -254,18 +268,23 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
 
 #[test, expected_failure(abort_code = manager::EInvalidPythPriceFeedIdLength)]
 fun create_amm_config_rejects_empty_feed_id() {
+    let sender = @0x11;
+    let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 1;
     let volatility_multiplier_bps = 1;
     let use_laser = false;
     let pyth_price_feed_id = vector[];
-    let ctx = &mut sui::tx_context::dummy();
+    manager::test_init(scenario.ctx());
+    scenario.next_tx(sender);
 
+    let admin_cap = test_scenario::take_from_sender(&scenario);
     let _config = manager::create_amm_config(
+        &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
         pyth_price_feed_id,
-        ctx,
+        scenario.ctx(),
     );
 
     abort
@@ -284,7 +303,9 @@ fun update_amm_config_rejects_empty_feed_id() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
+    let admin_cap = test_scenario::take_from_sender(&scenario);
     manager::create_amm_config_and_share(
+        &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -293,7 +314,6 @@ fun update_amm_config_rejects_empty_feed_id() {
     );
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
     let mut config: AMMConfig = test_scenario::take_shared(&scenario);
 
     config.update_amm_config(
@@ -310,18 +330,23 @@ fun update_amm_config_rejects_empty_feed_id() {
 
 #[test, expected_failure(abort_code = manager::EInvalidPythPriceFeedIdLength)]
 fun create_amm_config_rejects_invalid_feed_id_length() {
+    let sender = @0x12;
+    let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 1;
     let volatility_multiplier_bps = 1;
     let use_laser = false;
     let pyth_price_feed_id = build_invalid_pyth_price_feed_id();
-    let ctx = &mut sui::tx_context::dummy();
+    manager::test_init(scenario.ctx());
+    scenario.next_tx(sender);
 
+    let admin_cap = test_scenario::take_from_sender(&scenario);
     let _config = manager::create_amm_config(
+        &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
         pyth_price_feed_id,
-        ctx,
+        scenario.ctx(),
     );
 
     abort
@@ -340,7 +365,9 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
+    let admin_cap = test_scenario::take_from_sender(&scenario);
     manager::create_amm_config_and_share(
+        &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
         use_laser,
@@ -349,7 +376,6 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     );
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
     let mut config: AMMConfig = test_scenario::take_shared(&scenario);
 
     config.update_amm_config(
