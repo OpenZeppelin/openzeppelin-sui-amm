@@ -53,6 +53,20 @@ public struct AMMConfigUpdatedEvent has copy, drop {
     config_id: ID,
 }
 
+/// Builds an `AMMConfigCreatedEvent` payload.
+public(package) fun new_amm_config_created_event(config_id: ID): AMMConfigCreatedEvent {
+    AMMConfigCreatedEvent {
+        config_id,
+    }
+}
+
+/// Builds an `AMMConfigCreatedEvent` payload.
+public(package) fun new_amm_config_updated_event(config_id: ID): AMMConfigUpdatedEvent {
+    AMMConfigUpdatedEvent {
+        config_id,
+    }
+}
+
 // === Init ===
 
 /// One-time publisher witness created at publish time.
@@ -71,13 +85,14 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 // === Entry Functions ===
 
 /// Creates, emits, and shares a new AMM configuration.
+/// Returns the new configuration's object ID.
 public fun create_amm_config_and_share(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     use_laser: bool,
     pyth_price_feed_id: vector<u8>,
     ctx: &mut TxContext,
-) {
+): ID {
     let config = create_amm_config(
         base_spread_bps,
         volatility_multiplier_bps,
@@ -86,8 +101,9 @@ public fun create_amm_config_and_share(
         ctx,
     );
     let config_id = config.id.to_inner();
-    event::emit(AMMConfigCreatedEvent { config_id });
-    share_amm_config(config);
+    event::emit(new_amm_config_created_event(config_id));
+    transfer::share_object(config);
+    config_id
 }
 
 /// Updates a configuration object and emits an update event.
@@ -109,9 +125,7 @@ public fun update_amm_config_and_emit(
         trading_paused,
         pyth_price_feed_id,
     );
-    event::emit(AMMConfigUpdatedEvent {
-        config_id: config.id.to_inner(),
-    });
+    event::emit(new_amm_config_updated_event(config.id.to_inner()));
 }
 
 /// Shares a configuration object.
