@@ -6,7 +6,8 @@ use prop_amm::manager::{
     Self,
     new_amm_config_created_event,
     new_amm_config_updated_event,
-    AMMAdminCap
+    AMMAdminCap,
+    AMMConfig
 };
 use std::unit_test::{assert_eq, assert_ref_eq};
 use sui::test_scenario;
@@ -123,15 +124,14 @@ fun update_amm_config_updates_config_and_emits_event() {
     scenario.next_tx(sender);
 
     let admin_cap = test_scenario::take_from_sender(&scenario);
-    let mut config = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
     let updated_base_spread_bps = 35;
     let updated_volatility_multiplier_bps = 300;
     let updated_use_laser = false;
     let updated_trading_paused = true;
     let updated_pyth_price_feed_id = build_pyth_price_feed_id(1);
 
-    manager::update_amm_config_and_emit(
-        &mut config,
+    config.update_amm_config_and_emit(
         &admin_cap,
         updated_base_spread_bps,
         updated_volatility_multiplier_bps,
@@ -177,11 +177,10 @@ fun update_amm_config_supports_multiple_updates() {
     scenario.next_tx(sender);
 
     let admin_cap = test_scenario::take_from_sender(&scenario);
-    let mut config = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
     let first_update_pyth_price_feed_id = build_pyth_price_feed_id(1);
 
-    manager::update_amm_config_and_emit(
-        &mut config,
+    config.update_amm_config_and_emit(
         &admin_cap,
         20,
         150,
@@ -193,8 +192,7 @@ fun update_amm_config_supports_multiple_updates() {
     scenario.next_tx(sender);
 
     let second_update_pyth_price_feed_id = build_pyth_price_feed_id(2);
-    manager::update_amm_config_and_emit(
-        &mut config,
+    config.update_amm_config_and_emit(
         &admin_cap,
         30,
         180,
@@ -260,10 +258,9 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     scenario.next_tx(sender);
 
     let admin_cap = test_scenario::take_from_sender(&scenario);
-    let mut config = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
 
-    manager::update_amm_config(
-        &mut config,
+    config.update_amm_config(
         &admin_cap,
         0,
         volatility_multiplier_bps,
@@ -317,10 +314,9 @@ fun update_amm_config_rejects_empty_feed_id() {
     scenario.next_tx(sender);
 
     let admin_cap = test_scenario::take_from_sender(&scenario);
-    let mut config = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
 
-    manager::update_amm_config(
-        &mut config,
+    config.update_amm_config(
         &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
@@ -374,10 +370,9 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     scenario.next_tx(sender);
 
     let admin_cap = test_scenario::take_from_sender(&scenario);
-    let mut config = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
 
-    manager::update_amm_config(
-        &mut config,
+    config.update_amm_config(
         &admin_cap,
         base_spread_bps,
         volatility_multiplier_bps,
