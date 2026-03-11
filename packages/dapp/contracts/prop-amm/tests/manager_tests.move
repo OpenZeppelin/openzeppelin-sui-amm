@@ -24,7 +24,7 @@ fun build_invalid_pyth_price_feed_id(): vector<u8> {
     vector::tabulate!(manager::pyth_price_identifier_length() - 1, |_| 0)
 }
 
-/// Asserts that `expected_event` of type `T` was emitted within current transaction 
+/// Asserts that `expected_event` of type `T` was emitted within current transaction
 /// (before `test_scenario::next_tx`).
 macro fun assert_emitted<$T>($expected_event: $T) {
     let events = sui::event::events_by_type<$T>();
