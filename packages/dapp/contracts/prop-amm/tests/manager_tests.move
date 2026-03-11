@@ -24,7 +24,8 @@ fun build_invalid_pyth_price_feed_id(): vector<u8> {
     vector::tabulate!(manager::pyth_price_identifier_length() - 1, |_| 0)
 }
 
-/// Asserts that `expected_event` of type `T` was emitted.
+/// Asserts that `expected_event` of type `T` was emitted within current transaction 
+/// (before `test_scenario::next_tx`).
 macro fun assert_emitted<$T>($expected_event: $T) {
     let events = sui::event::events_by_type<$T>();
     if (events.length() == 0) {
@@ -36,16 +37,6 @@ macro fun assert_emitted<$T>($expected_event: $T) {
         std::debug::print(&b"Assertion failed. Different events emitted:".to_string());
         std::debug::print(&events);
         std::debug::print(&b"No matching events".to_string());
-        abort
-    };
-}
-
-/// Asserts that at least one new event of type `T` was emitted.
-macro fun assert_emitted_increase<$T>($previous_count: u64) {
-    let previous_count = $previous_count;
-    let current_count = sui::event::events_by_type<$T>().length();
-    if (!(current_count > previous_count)) {
-        std::debug::print(&b"Assertion failed. No new events emitted.".to_string());
         abort
     };
 }
@@ -191,9 +182,6 @@ fun update_amm_config_supports_multiple_updates() {
     assert_emitted!(new_amm_config_updated_event(config.config_id()));
     scenario.next_tx(sender);
 
-    let previous_update_event_count = sui::event::events_by_type<
-        manager::AMMConfigUpdatedEvent,
-    >().length();
     let second_update_pyth_price_feed_id = build_pyth_price_feed_id(2);
     config.update_amm_config_and_emit(
         &admin_cap,
@@ -203,7 +191,7 @@ fun update_amm_config_supports_multiple_updates() {
         false,
         second_update_pyth_price_feed_id,
     );
-    assert_emitted_increase!<manager::AMMConfigUpdatedEvent>(previous_update_event_count);
+    assert_emitted!(new_amm_config_updated_event(config.config_id()));
     scenario.next_tx(sender);
 
     assert_eq!(config.base_spread_bps(), 30);
