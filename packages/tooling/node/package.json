@@ -17,6 +17,7 @@
     "./keypair": "./src/keypair.ts",
     "./log": "./src/log.ts",
     "./localnet": "./src/localnet.ts",
+    "./objects": "./src/objects.ts",
     "./shared-objects": "./src/shared-objects.ts",
     "./testing/assert": "./src/testing/assert.ts",
     "./testing/env": "./src/testing/env.ts",

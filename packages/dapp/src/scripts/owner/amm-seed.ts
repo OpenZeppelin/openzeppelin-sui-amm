@@ -1,0 +1,470 @@
+/**
+ * Seeds the AMM package and config for the target network.
+ */
+import yargs from "yargs"
+
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
+
+import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
+import {
+  DEFAULT_BASE_SPREAD_BPS,
+  DEFAULT_VOLATILITY_MULTIPLIER_BPS
+} from "@sui-amm/domain-core/models/amm"
+import {
+  type AmmConfigSnapshot,
+  collectAmmConfigSnapshot,
+  createAmmConfigSnapshotFromArgs,
+  resolveExistingAmmConfigIdFromArtifacts
+} from "@sui-amm/domain-node/amm"
+import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
+import { getLatestDeploymentFromArtifact } from "@sui-amm/tooling-node/artifacts"
+import { withMutedConsole } from "@sui-amm/tooling-node/console"
+import type { Tooling } from "@sui-amm/tooling-node/factory"
+import { emitJsonOutput } from "@sui-amm/tooling-node/json"
+import {
+  logKeyValueBlue,
+  logKeyValueYellow,
+  logWarning
+} from "@sui-amm/tooling-node/log"
+import {
+  doesObjectExist,
+  waitForPackageAvailability
+} from "@sui-amm/tooling-node/objects"
+import { runSuiScript } from "@sui-amm/tooling-node/process"
+import {
+  logAmmConfigOverview,
+  resolveAmmAdminCapIdFromArtifacts,
+  resolveAmmPackagePath,
+  resolvePythPriceFeedIdHex
+} from "../../utils/amm.ts"
+
+const AMM_PACKAGE_NAME = "openzeppelin_market_maker"
+
+type AmmSeedArguments = {
+  adminCapId?: string
+  ammPackageId?: string
+  baseSpreadBps?: string
+  volatilityMultiplierBps?: string
+  useLaser?: boolean
+  pythPriceFeedId?: string
+  pythPriceFeedLabel?: string
+  rePublish?: boolean
+  useCliPublish?: boolean
+  json?: boolean
+}
+
+type AmmSeedOutput = {
+  ammPackageId: string
+  ammConfigId: string
+  ammConfig: AmmConfigOverview
+  initialSharedVersion: string
+  pythPriceFeedIdHex: string
+  publishDigest?: string
+  transactionSummary?: { label?: string }
+  didPublish: boolean
+  didCreateAmmConfig: boolean
+}
+
+const resolveExplicitPackageId = async ({
+  cliArguments,
+  tooling
+}: {
+  cliArguments: AmmSeedArguments
+  tooling: Pick<Tooling, "getObjectSafe">
+}): Promise<string | undefined> => {
+  if (cliArguments.rePublish && cliArguments.ammPackageId) {
+    throw new Error(
+      "Cannot combine --re-publish with --amm-package-id; omit the package id to republish."
+    )
+  }
+
+  if (!cliArguments.ammPackageId) {
+    return undefined
+  }
+
+  const normalizedPackageId = normalizeIdOrThrow(
+    cliArguments.ammPackageId,
+    "AMM package id is required."
+  )
+  const packageExists = await doesObjectExist({
+    tooling,
+    objectId: normalizedPackageId
+  })
+
+  if (!packageExists) {
+    throw new Error(
+      `AMM package ${normalizedPackageId} was not found on the target network.`
+    )
+  }
+
+  return normalizedPackageId
+}
+
+const resolveExistingPackageId = async ({
+  tooling,
+  networkName
+}: {
+  tooling: Pick<Tooling, "getObjectSafe">
+  networkName: string
+}): Promise<string | undefined> => {
+  const latestAmmPublishArtifact =
+    await getLatestDeploymentFromArtifact(AMM_PACKAGE_NAME)(networkName)
+  const packageId = latestAmmPublishArtifact?.packageId
+
+  if (!packageId) {
+    return undefined
+  }
+
+  const normalizedPackageId = normalizeSuiObjectId(packageId)
+  const packageExists = await doesObjectExist({
+    tooling,
+    objectId: normalizedPackageId
+  })
+
+  if (packageExists) {
+    return normalizedPackageId
+  }
+
+  logWarning(
+    "Deployment artifact exists but the package object was not found on the target network. Republish will proceed."
+  )
+  logKeyValueBlue("artifactPackageId")(normalizedPackageId)
+  logKeyValueBlue("network")(networkName)
+
+  return undefined
+}
+
+const shouldUseCliPublish = ({
+  networkName,
+  useCliPublish
+}: {
+  networkName: string
+  useCliPublish?: boolean
+}) => useCliPublish ?? networkName !== "localnet"
+
+const publishAmmPackage = async ({
+  tooling,
+  cliArguments
+}: {
+  tooling: Tooling
+  cliArguments: AmmSeedArguments
+}) => {
+  const targetingLocalnet = tooling.network.networkName === "localnet"
+
+  logKeyValueBlue("Package")("Publishing AMM package.")
+
+  return tooling.publishMovePackageWithFunding({
+    packagePath: resolveAmmPackagePath(tooling),
+    withUnpublishedDependencies: targetingLocalnet,
+    allowAutoUnpublishedDependencies: targetingLocalnet,
+    clearPublishedEntry: Boolean(cliArguments.rePublish),
+    useCliPublish: shouldUseCliPublish({
+      networkName: tooling.network.networkName,
+      useCliPublish: cliArguments.useCliPublish
+    })
+  })
+}
+
+const resolveOrPublishAmmPackage = async ({
+  tooling,
+  cliArguments
+}: {
+  tooling: Tooling
+  cliArguments: AmmSeedArguments
+}): Promise<{
+  ammPackageId: string
+  publishDigest?: string
+  didPublish: boolean
+}> => {
+  const explicitPackageId = await resolveExplicitPackageId({
+    cliArguments,
+    tooling
+  })
+
+  if (explicitPackageId) {
+    return {
+      ammPackageId: explicitPackageId,
+      didPublish: false
+    }
+  }
+
+  if (!cliArguments.rePublish) {
+    const existingPackageId = await resolveExistingPackageId({
+      tooling,
+      networkName: tooling.network.networkName
+    })
+
+    if (existingPackageId) {
+      return {
+        ammPackageId: existingPackageId,
+        didPublish: false
+      }
+    }
+  } else {
+    logKeyValueYellow("Package")("Re-publish requested; forcing publish.")
+  }
+
+  const publishArtifact = await publishAmmPackage({
+    tooling,
+    cliArguments
+  })
+
+  return {
+    ammPackageId: normalizeSuiObjectId(publishArtifact.packageId),
+    publishDigest: publishArtifact.digest,
+    didPublish: true
+  }
+}
+
+const resolveExplicitAdminCapId = ({
+  cliArguments
+}: {
+  cliArguments: AmmSeedArguments
+}): string | undefined => {
+  if (cliArguments.rePublish && cliArguments.adminCapId) {
+    throw new Error(
+      "Cannot combine --re-publish with --admin-cap-id; omit the admin cap id so the fresh publish artifacts are used."
+    )
+  }
+
+  const trimmedAdminCapId = cliArguments.adminCapId?.trim()
+  if (!trimmedAdminCapId) {
+    return undefined
+  }
+
+  return normalizeIdOrThrow(
+    trimmedAdminCapId,
+    "An AMM admin cap id is required; publish the package or provide --admin-cap-id."
+  )
+}
+
+const resolveAdminCapId = async ({
+  tooling,
+  cliArguments,
+  ammPackageId
+}: {
+  tooling: Pick<Tooling, "network" | "suiClient">
+  cliArguments: AmmSeedArguments
+  ammPackageId: string
+}) => {
+  const explicitAdminCapId = resolveExplicitAdminCapId({ cliArguments })
+  if (explicitAdminCapId) {
+    return explicitAdminCapId
+  }
+
+  return resolveAmmAdminCapIdFromArtifacts({
+    tooling,
+    ammPackageId
+  })
+}
+
+const resolveOrCreateAmmConfig = async ({
+  tooling,
+  cliArguments,
+  ammPackageId
+}: {
+  tooling: Tooling
+  cliArguments: AmmSeedArguments
+  ammPackageId: string
+}): Promise<{
+  ammConfigSnapshot: AmmConfigSnapshot
+  pythPriceFeedIdHex?: string
+  transactionSummary?: { label?: string }
+  didCreate: boolean
+}> => {
+  const existingAmmConfigId = await resolveExistingAmmConfigIdFromArtifacts({
+    tooling,
+    networkName: tooling.network.networkName,
+    ammPackageId
+  })
+
+  if (existingAmmConfigId) {
+    logKeyValueYellow("Config")("Using existing AMM config.")
+
+    return {
+      ammConfigSnapshot: await collectAmmConfigSnapshot({
+        tooling,
+        ammConfigId: existingAmmConfigId
+      }),
+      didCreate: false
+    }
+  }
+
+  logKeyValueBlue("Config")("Creating AMM config.")
+
+  const adminCapId = await resolveAdminCapId({
+    tooling,
+    cliArguments,
+    ammPackageId
+  })
+  const pythPriceFeedIdHex = await resolvePythPriceFeedIdHex({
+    networkName: tooling.network.networkName,
+    pythPriceFeedId: cliArguments.pythPriceFeedId,
+    pythPriceFeedLabel: cliArguments.pythPriceFeedLabel
+  })
+  const createdAmmConfig = await createAmmConfigSnapshotFromArgs({
+    tooling,
+    ammPackageId,
+    adminCapId,
+    pythPriceFeedIdHex,
+    volatilityMultiplierBps: cliArguments.volatilityMultiplierBps,
+    baseSpreadBps: cliArguments.baseSpreadBps,
+    useLaser: cliArguments.useLaser
+  })
+
+  return {
+    ...createdAmmConfig,
+    didCreate: true
+  }
+}
+
+const buildAmmSeedOutput = ({
+  ammPackageId,
+  publishDigest,
+  didPublish,
+  didCreateAmmConfig,
+  ammConfigSnapshot,
+  pythPriceFeedIdHex,
+  transactionSummary
+}: {
+  ammPackageId: string
+  publishDigest?: string
+  didPublish: boolean
+  didCreateAmmConfig: boolean
+  ammConfigSnapshot: AmmConfigSnapshot
+  pythPriceFeedIdHex?: string
+  transactionSummary?: { label?: string }
+}): AmmSeedOutput => ({
+  ammPackageId,
+  ammConfigId: ammConfigSnapshot.ammConfigOverview.configId,
+  ammConfig: ammConfigSnapshot.ammConfigOverview,
+  initialSharedVersion: ammConfigSnapshot.initialSharedVersion,
+  pythPriceFeedIdHex:
+    pythPriceFeedIdHex ??
+    ammConfigSnapshot.ammConfigOverview.pythPriceFeedIdHex,
+  publishDigest,
+  transactionSummary,
+  didPublish,
+  didCreateAmmConfig
+})
+
+runSuiScript(
+  async (tooling, cliArguments: AmmSeedArguments) => {
+    const seedAmm = async (): Promise<AmmSeedOutput> => {
+      const { ammPackageId, publishDigest, didPublish } =
+        await resolveOrPublishAmmPackage({
+          tooling,
+          cliArguments
+        })
+
+      if (didPublish) {
+        await waitForPackageAvailability({
+          packageId: ammPackageId,
+          tooling,
+          label: "AMM package"
+        })
+      }
+
+      const {
+        ammConfigSnapshot,
+        pythPriceFeedIdHex,
+        transactionSummary,
+        didCreate
+      } = await resolveOrCreateAmmConfig({
+        tooling,
+        cliArguments,
+        ammPackageId
+      })
+
+      logAmmConfigOverview(ammConfigSnapshot.ammConfigOverview, {
+        initialSharedVersion: ammConfigSnapshot.initialSharedVersion
+      })
+
+      return buildAmmSeedOutput({
+        ammPackageId,
+        publishDigest,
+        didPublish,
+        didCreateAmmConfig: didCreate,
+        ammConfigSnapshot,
+        pythPriceFeedIdHex,
+        transactionSummary
+      })
+    }
+
+    const seedResult = cliArguments.json
+      ? await withMutedConsole(seedAmm)
+      : await seedAmm()
+
+    if (emitJsonOutput(seedResult, cliArguments.json)) {
+      return
+    }
+  },
+  yargs()
+    .option("adminCapId", {
+      alias: ["admin-cap-id"],
+      type: "string",
+      description:
+        "Admin cap object id for AMM config creation; inferred from the selected AMM publish when omitted.",
+      demandOption: false
+    })
+    .option("baseSpreadBps", {
+      alias: ["base-spread-bps"],
+      type: "string",
+      description: "Base spread in basis points (u64).",
+      default: DEFAULT_BASE_SPREAD_BPS,
+      demandOption: false
+    })
+    .option("volatilityMultiplierBps", {
+      alias: ["volatility-multiplier-bps"],
+      type: "string",
+      description: "Volatility multiplier in basis points (u64).",
+      default: DEFAULT_VOLATILITY_MULTIPLIER_BPS,
+      demandOption: false
+    })
+    .option("useLaser", {
+      alias: ["use-laser"],
+      type: "boolean",
+      default: false,
+      description: "Enable the laser pricing path for the AMM."
+    })
+    .option("pythPriceFeedId", {
+      alias: ["pyth-price-feed-id", "pyth-feed-id"],
+      type: "string",
+      description: "Pyth price feed id (32 bytes hex).",
+      demandOption: false
+    })
+    .option("pythPriceFeedLabel", {
+      alias: ["pyth-price-feed-label", "pyth-feed-label"],
+      type: "string",
+      description:
+        "Localnet artifact feed label to resolve the feed id when --pyth-price-feed-id is omitted.",
+      demandOption: false
+    })
+    .option("ammPackageId", {
+      alias: ["amm-package-id"],
+      type: "string",
+      description:
+        "Package ID for the AMM Move package; inferred from the latest publish entry when omitted.",
+      demandOption: false
+    })
+    .option("rePublish", {
+      alias: ["re-publish"],
+      type: "boolean",
+      description:
+        "Re-publish the AMM Move package even if an existing deployment artifact is present.",
+      default: false
+    })
+    .option("useCliPublish", {
+      alias: ["use-cli-publish"],
+      type: "boolean",
+      description:
+        "Publish with the Sui CLI instead of the SDK (use --no-use-cli-publish to force SDK).",
+      default: undefined
+    })
+    .option("json", {
+      type: "boolean",
+      default: false,
+      description: "Output results as JSON."
+    })
+    .strict()
+)
