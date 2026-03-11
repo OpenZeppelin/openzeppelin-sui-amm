@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import type { SuiClient } from "@mysten/sui/client"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import {
@@ -5,8 +7,8 @@ import {
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
 import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
-import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
+import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import {
   findLatestArtifactThat,
   loadDeploymentArtifacts,
@@ -15,7 +17,11 @@ import {
 } from "@sui-amm/tooling-node/artifacts"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { logKeyValueGreen, logWarning } from "@sui-amm/tooling-node/log"
-import { resolveFullPackagePath } from "@sui-amm/tooling-node/move"
+import {
+  resolveFullPackagePath,
+  syncMoveTomlDependencyReplacementEntry,
+  syncMoveTomlDependencyPublishedIds
+} from "@sui-amm/tooling-node/move"
 import type { MockArtifact } from "./mocks.ts"
 import { mockArtifactPath } from "./mocks.ts"
 
@@ -23,10 +29,61 @@ export const DEFAULT_PYTH_PRICE_FEED_LABEL = "MOCK_SUI_FEED"
 export const DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID =
   "0x1111111111111111111111111111111111111111111111111111111111111111"
 
+const AMM_DEEPBOOK_DEPENDENCY_NAME = "deepbook"
 const AMM_PACKAGE_FOLDER_NAME = "prop-amm"
 
-export const resolveAmmPackagePath = (tooling: Tooling) =>
+export const resolveAmmPackagePath = (tooling: Pick<Tooling, "suiConfig">) =>
   resolveFullPackagePath(tooling.suiConfig.paths.move, AMM_PACKAGE_FOLDER_NAME)
+
+export const syncAmmDeepbookDependencyPublishedIds = async ({
+  tooling,
+  environmentName,
+  deepbookPublishedAt,
+  deepbookOriginalId
+}: {
+  tooling: Pick<Tooling, "suiConfig">
+  environmentName: string
+  deepbookPublishedAt: string
+  deepbookOriginalId: string
+}) => {
+  const ammPackagePath = resolveAmmPackagePath(tooling)
+  const moveTomlPath = path.join(ammPackagePath, "Move.toml")
+
+  return await syncMoveTomlDependencyPublishedIds({
+    moveTomlPath,
+    environmentName,
+    dependencyName: AMM_DEEPBOOK_DEPENDENCY_NAME,
+    publishedAt: deepbookPublishedAt,
+    originalId: deepbookOriginalId
+  })
+}
+
+export const syncAmmDeepbookDependencyLocalReplacement = async ({
+  tooling,
+  environmentName,
+  deepbookContractPath
+}: {
+  tooling: Pick<Tooling, "suiConfig">
+  environmentName: string
+  deepbookContractPath: string
+}) => {
+  const ammPackagePath = resolveAmmPackagePath(tooling)
+  const moveTomlPath = path.join(ammPackagePath, "Move.toml")
+  const relativeDeepbookPath = path.relative(
+    ammPackagePath,
+    deepbookContractPath
+  )
+  const normalizedDeepbookPath = relativeDeepbookPath.startsWith(".")
+    ? relativeDeepbookPath
+    : `./${relativeDeepbookPath}`
+
+  return await syncMoveTomlDependencyReplacementEntry({
+    moveTomlPath,
+    environmentName,
+    dependencyName: AMM_DEEPBOOK_DEPENDENCY_NAME,
+    replacementEntry: `${AMM_DEEPBOOK_DEPENDENCY_NAME} = { local = "${normalizedDeepbookPath}", override = true }`
+  })
+}
 
 const resolveAmmPublishArtifact = async ({
   networkName,
