@@ -1,13 +1,16 @@
 import type { SuiClient } from "@mysten/sui/client"
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
+import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
 import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
 import {
   findLatestArtifactThat,
   loadDeploymentArtifacts,
+  loadObjectArtifacts,
   readArtifact
 } from "@sui-amm/tooling-node/artifacts"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
@@ -40,6 +43,59 @@ const resolveAmmPublishArtifact = async ({
   )
 }
 
+const isAmmAdminCapArtifact = (artifact: ObjectArtifact) =>
+  artifact.objectType?.endsWith(AMM_ADMIN_CAP_TYPE_SUFFIX)
+
+const findLatestAmmAdminCapArtifact = ({
+  objectArtifacts,
+  predicate
+}: {
+  objectArtifacts: ObjectArtifact[]
+  predicate: (artifact: ObjectArtifact) => boolean
+}) =>
+  objectArtifacts.reduceRight<ObjectArtifact | undefined>(
+    (latest, artifact) => {
+      if (latest) return latest
+      if (!isAmmAdminCapArtifact(artifact)) return undefined
+      return predicate(artifact) ? artifact : undefined
+    },
+    undefined
+  )
+
+const resolveAmmAdminCapIdFromObjectArtifacts = async ({
+  networkName,
+  publishDigest,
+  ammPackageId
+}: {
+  networkName: string
+  publishDigest?: string
+  ammPackageId: string
+}): Promise<string | undefined> => {
+  const objectArtifacts = await loadObjectArtifacts(networkName)
+  const normalizedPackageId = normalizeSuiObjectId(ammPackageId)
+
+  const adminCapFromPublishDigest = publishDigest
+    ? findLatestAmmAdminCapArtifact({
+        objectArtifacts,
+        predicate: (artifact) => artifact.digest === publishDigest
+      })
+    : undefined
+
+  if (adminCapFromPublishDigest?.objectId) {
+    return adminCapFromPublishDigest.objectId
+  }
+
+  return findLatestAmmAdminCapArtifact({
+    objectArtifacts,
+    predicate: (artifact) => artifact.packageId === normalizedPackageId
+  })?.objectId
+}
+
+const createAdminCapResolutionError = () =>
+  new Error(
+    "Unable to resolve the AMM admin cap from the latest publish transaction or object artifacts; provide --admin-cap-id or re-run publish to refresh deployments."
+  )
+
 export const resolveAmmAdminCapIdFromPublishDigest = async ({
   publishDigest,
   suiClient
@@ -68,16 +124,32 @@ export const resolveAmmAdminCapIdFromArtifacts = async ({
     ammPackageId
   })
 
-  if (!publishArtifact?.digest) {
-    throw new Error(
-      "Unable to locate the latest AMM publish artifact; provide --admin-cap-id or re-run publish to refresh deployments."
-    )
+  const adminCapIdFromObjectArtifacts =
+    await resolveAmmAdminCapIdFromObjectArtifacts({
+      networkName: tooling.network.networkName,
+      publishDigest: publishArtifact?.digest,
+      ammPackageId
+    })
+
+  if (adminCapIdFromObjectArtifacts) {
+    return adminCapIdFromObjectArtifacts
   }
 
-  return resolveAmmAdminCapIdFromPublishDigest({
-    publishDigest: publishArtifact.digest,
-    suiClient: tooling.suiClient
-  })
+  if (!publishArtifact?.digest) {
+    throw createAdminCapResolutionError()
+  }
+
+  try {
+    return await resolveAmmAdminCapIdFromPublishDigest({
+      publishDigest: publishArtifact.digest,
+      suiClient: tooling.suiClient
+    })
+  } catch (error) {
+    logWarning(
+      `Unable to recover the AMM admin cap from publish digest ${publishArtifact.digest}: ${error instanceof Error ? error.message : String(error)}`
+    )
+    throw createAdminCapResolutionError()
+  }
 }
 
 const findPriceFeedIdFromMockArtifact = (
