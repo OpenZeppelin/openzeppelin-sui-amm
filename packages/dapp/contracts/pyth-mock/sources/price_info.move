@@ -54,16 +54,21 @@ public(package) fun update_price_info_object(
     price_info_object: &mut PriceInfoObject,
     price_info: &PriceInfo,
 ) {
-    price_info_object.price_info = new_price_info(
-        price_info.attestation_time,
-        price_info.arrival_time,
-        price_info.price_feed,
-    );
+    price_info_object.price_info =
+        new_price_info(
+            price_info.attestation_time,
+            price_info.arrival_time,
+            price_info.price_feed,
+        );
+}
+
+public(package) fun current_timestamp_seconds(clock: &Clock): u64 {
+    clock::timestamp_ms(clock) / 1000
 }
 
 /// Publish and share a new mock price feed on localnet.
 public fun publish_price_feed(
-    feed_id_bytes: vector<u8>,
+    feed_id: vector<u8>,
     price_magnitude: u64,
     price_is_negative: bool,
     confidence: u64,
@@ -72,18 +77,18 @@ public fun publish_price_feed(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    let price_identifier = price_identifier::from_byte_vec(feed_id_bytes);
-    let timestamp_seconds = clock::timestamp_ms(clock) / 1000;
+    let price_identifier = price_identifier::from_byte_vec(feed_id);
+    let current_timestamp_seconds = current_timestamp_seconds(clock);
     let price_value = price::new(
         i64::new(price_magnitude, price_is_negative),
         confidence,
         i64::new(exponent_magnitude, exponent_is_negative),
-        timestamp_seconds,
+        current_timestamp_seconds,
     );
     let price_feed = price_feed::new(price_identifier, price_value, price_value);
     let price_info = new_price_info(
-        timestamp_seconds,
-        timestamp_seconds,
+        current_timestamp_seconds,
+        current_timestamp_seconds,
         price_feed,
     );
     let price_info_object = new_price_info_object(price_info, ctx);
@@ -100,21 +105,19 @@ public fun update_price_feed(
     exponent_is_negative: bool,
     clock: &Clock,
 ) {
-    let price_identifier = price_feed::get_price_identifier(
-        get_price_feed(&price_info_object.price_info),
-    );
-    let timestamp_seconds = clock::timestamp_ms(clock) / 1000;
+    let price_identifier = get_price_feed(&price_info_object.price_info).get_price_identifier();
+    let current_timestamp_seconds = current_timestamp_seconds(clock);
     let price_value = price::new(
         i64::new(price_magnitude, price_is_negative),
         confidence,
         i64::new(exponent_magnitude, exponent_is_negative),
-        timestamp_seconds,
+        current_timestamp_seconds,
     );
     let price_feed = price_feed::new(price_identifier, price_value, price_value);
     price_info_object.price_info =
         new_price_info(
-            timestamp_seconds,
-            timestamp_seconds,
+            current_timestamp_seconds,
+            current_timestamp_seconds,
             price_feed,
         );
 }
@@ -126,26 +129,21 @@ public fun new_price_info_object_for_test(
     price_info: PriceInfo,
     ctx: &mut TxContext,
 ): PriceInfoObject {
-    PriceInfoObject {
-        id: object::new(ctx),
-        price_info,
-    }
+    new_price_info_object(price_info, ctx)
 }
 
 // === Public Getters ===
 
 public fun uid_to_inner(price_info_object: &PriceInfoObject): ID {
-    object::uid_to_inner(&price_info_object.id)
+    price_info_object.id.to_inner()
 }
 
-public fun get_price_info_from_price_info_object(
-    price_info_object: &PriceInfoObject,
-): PriceInfo {
+public fun get_price_info_from_price_info_object(price_info_object: &PriceInfoObject): PriceInfo {
     price_info_object.price_info
 }
 
 public fun get_price_identifier(price_info: &PriceInfo): PriceIdentifier {
-    price_feed::get_price_identifier(&price_info.price_feed)
+    price_info.price_feed.get_price_identifier()
 }
 
 public fun get_price_feed(price_info: &PriceInfo): &PriceFeed {

@@ -1,4 +1,4 @@
-module MockCoin::mock_coin;
+module local_mock_coin::mock_coin;
 
 use sui::coin_registry;
 

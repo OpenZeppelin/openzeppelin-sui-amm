@@ -1,5 +1,5 @@
 [package]
-name = "MockCoin"
+name = "local_mock_coin"
 edition = "2024"
 
 [environments]
