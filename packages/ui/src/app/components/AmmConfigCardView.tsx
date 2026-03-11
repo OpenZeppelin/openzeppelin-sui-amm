@@ -91,10 +91,16 @@ const renderContent = (content: TAmmConfigCardContent) => {
 const AmmConfigCardView = ({
   title,
   description,
+  networkLabel,
   explorerUrl,
   ammConfigId,
   content
 }: TAmmConfigCardViewModel) => {
+  const resolvedNetworkLabel =
+    typeof networkLabel === "string" && networkLabel.trim().length > 0
+      ? networkLabel
+      : "unknown network"
+
   return (
     <section className="w-full max-w-4xl px-4">
       <div className="rounded-2xl border border-slate-300/80 bg-white/90 shadow-[0_22px_65px_-45px_rgba(15,23,42,0.45)] backdrop-blur-md transition dark:border-slate-50/30 dark:bg-slate-950/70">
@@ -105,6 +111,9 @@ const AmmConfigCardView = ({
             </h2>
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
               {description}
+            </p>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
+              {`Network: ${resolvedNetworkLabel}`}
             </p>
           </div>
         </div>
