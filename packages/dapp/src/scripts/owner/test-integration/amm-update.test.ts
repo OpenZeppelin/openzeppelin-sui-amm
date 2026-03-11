@@ -36,6 +36,10 @@ const resolveWithFaucet = () => process.env.SUI_IT_WITH_FAUCET !== "0"
 
 const UPDATED_PYTH_PRICE_FEED_ID_HEX =
   "0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+const UPDATED_BASE_SPREAD_BPS = "55"
+const UPDATED_VOLATILITY_MULTIPLIER_BPS = "555"
+const UPDATED_USE_LASER = true
+const UPDATED_TRADING_PAUSED = true
 
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
@@ -97,10 +101,10 @@ describe("owner amm-update integration", () => {
           ammPackageId,
           ammConfigId,
           adminCapId,
-          baseSpreadBps: "55",
-          volatilityMultiplierBps: "555",
-          useLaser: true,
-          tradingPaused: true,
+          baseSpreadBps: UPDATED_BASE_SPREAD_BPS,
+          volatilityMultiplierBps: UPDATED_VOLATILITY_MULTIPLIER_BPS,
+          useLaser: UPDATED_USE_LASER,
+          tradingPaused: UPDATED_TRADING_PAUSED,
           pythPriceFeedId: UPDATED_PYTH_PRICE_FEED_ID_HEX
         }
       })
@@ -119,10 +123,12 @@ describe("owner amm-update integration", () => {
       expect(output.ammConfigId).toBe(ammConfigId)
       expect(output.adminCapId).toBe(adminCapId)
       expect(output.ammConfig.configId).toBe(ammConfigId)
-      expect(output.ammConfig.baseSpreadBps).toBe("55")
-      expect(output.ammConfig.volatilityMultiplierBps).toBe("555")
-      expect(output.ammConfig.useLaser).toBe(true)
-      expect(output.ammConfig.tradingPaused).toBe(true)
+      expect(output.ammConfig.baseSpreadBps).toBe(UPDATED_BASE_SPREAD_BPS)
+      expect(output.ammConfig.volatilityMultiplierBps).toBe(
+        UPDATED_VOLATILITY_MULTIPLIER_BPS
+      )
+      expect(output.ammConfig.useLaser).toBe(UPDATED_USE_LASER)
+      expect(output.ammConfig.tradingPaused).toBe(UPDATED_TRADING_PAUSED)
       expect(normalizeHex(output.ammConfig.pythPriceFeedIdHex)).toBe(
         normalizeHex(UPDATED_PYTH_PRICE_FEED_ID_HEX)
       )
