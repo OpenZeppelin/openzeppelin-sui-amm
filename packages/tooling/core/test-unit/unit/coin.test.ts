@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from "vitest"
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils"
 import {
   buildCoinTransferTransaction,
+  fetchCoinBalances,
   normalizeCoinType,
-  resolveCoinOwnership
+  resolveCoinOwnership,
+  selectRichestCoin
 } from "../../src/coin.ts"
+import { SUI_COIN_TYPE } from "../../src/constants.ts"
 import { createSuiClientMock } from "../../../tests-integration/helpers/sui.ts"
 
 describe("coin helpers", () => {
@@ -23,6 +26,67 @@ describe("coin helpers", () => {
     })
 
     expect(transaction).toBeDefined()
+  })
+
+  it("selects the richest coin by balance", () => {
+    expect(
+      selectRichestCoin([
+        { coinObjectId: "0x1", balance: 10n },
+        { coinObjectId: "0x2", balance: 15n },
+        { coinObjectId: "0x3", balance: 12n }
+      ])
+    ).toEqual({
+      coinObjectId: "0x2",
+      balance: 15n
+    })
+  })
+
+  it("fetches SUI coin balances by default", async () => {
+    const { client, mocks } = createSuiClientMock({
+      getCoins: vi.fn().mockResolvedValue({
+        data: [
+          {
+            coinObjectId: "0x2",
+            balance: "42"
+          }
+        ],
+        hasNextPage: false,
+        nextCursor: null
+      })
+    })
+
+    await expect(
+      fetchCoinBalances({ owner: "0x1" }, { suiClient: client })
+    ).resolves.toEqual([
+      {
+        coinObjectId: normalizeSuiObjectId("0x2"),
+        balance: 42n
+      }
+    ])
+
+    expect(mocks.getCoins).toHaveBeenCalledWith({
+      owner: "0x1",
+      coinType: SUI_COIN_TYPE,
+      limit: 50,
+      cursor: undefined
+    })
+  })
+
+  it("fetches coin balances for an explicit coin type", async () => {
+    const explicitCoinType = "0x1::usdc::USDC"
+    const { client, mocks } = createSuiClientMock()
+
+    await fetchCoinBalances(
+      { owner: "0x1", coinType: explicitCoinType },
+      { suiClient: client }
+    )
+
+    expect(mocks.getCoins).toHaveBeenCalledWith({
+      owner: "0x1",
+      coinType: explicitCoinType,
+      limit: 50,
+      cursor: undefined
+    })
   })
 
   it("resolves coin ownership from object responses", async () => {
