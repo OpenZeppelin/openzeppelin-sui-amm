@@ -36,3 +36,18 @@ export const assertBytesLength = (bytes: number[], expected: number) => {
     throw new Error(`Expected ${expected} bytes, got ${bytes.length}.`)
   return bytes
 }
+
+/**
+ * Asserts that an unknown runtime value is a byte array of the expected length.
+ */
+export const assertByteArrayLength = (
+  bytes: unknown,
+  expected: number,
+  label = "bytes"
+): number[] => {
+  if (!Array.isArray(bytes) || bytes.length !== expected) {
+    throw new TypeError(`${label} must be a ${expected}-byte array.`)
+  }
+
+  return bytes
+}

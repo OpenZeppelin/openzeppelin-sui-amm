@@ -164,9 +164,13 @@ const resolveLocalnetFeedIdFromArtifacts = async ({
 }: {
   desiredLabel: string
 }) => {
-  const mockArtifact = await readArtifact<MockArtifact>(mockArtifactPath, {})
+  try {
+    const mockArtifact = await readArtifact<MockArtifact>(mockArtifactPath, {})
 
-  return findPriceFeedIdFromMockArtifact(mockArtifact, desiredLabel)
+    return findPriceFeedIdFromMockArtifact(mockArtifact, desiredLabel)
+  } catch {
+    return undefined
+  }
 }
 
 const logLocalnetPlaceholderFeedIdFallback = (desiredLabel: string) => {

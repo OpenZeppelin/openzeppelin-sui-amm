@@ -13,6 +13,12 @@ import type { Tooling } from "@sui-amm/tooling-node/factory"
 
 const AMM_PACKAGE_NAME = "openzeppelin_market_maker"
 
+const resolveExplicitId = (
+  id: string | undefined,
+  errorMessage: string
+): string | undefined =>
+  id === undefined ? undefined : normalizeIdOrThrow(id, errorMessage)
+
 export const resolveAmmPackageId = async ({
   networkName,
   ammPackageId
@@ -20,11 +26,19 @@ export const resolveAmmPackageId = async ({
   networkName: string
   ammPackageId?: string
 }): Promise<string> => {
+  const explicitAmmPackageId = resolveExplicitId(
+    ammPackageId,
+    "An AMM package id is required; publish the package or provide --amm-package-id."
+  )
+  if (explicitAmmPackageId) {
+    return explicitAmmPackageId
+  }
+
   const latestAmmPublishArtifact =
     await getLatestDeploymentFromArtifact(AMM_PACKAGE_NAME)(networkName)
 
   return normalizeIdOrThrow(
-    ammPackageId ?? latestAmmPublishArtifact?.packageId,
+    latestAmmPublishArtifact?.packageId,
     "An AMM package id is required; publish the package or provide --amm-package-id."
   )
 }
@@ -36,12 +50,20 @@ export const resolveAmmConfigId = async ({
   networkName: string
   ammConfigId?: string
 }): Promise<string> => {
+  const explicitAmmConfigId = resolveExplicitId(
+    ammConfigId,
+    "An AMM config id is required; create an AMM config first or provide --amm-config-id."
+  )
+  if (explicitAmmConfigId) {
+    return explicitAmmConfigId
+  }
+
   const latestConfigArtifact = await getLatestObjectFromArtifact(
     AMM_CONFIG_TYPE_SUFFIX
   )(networkName)
 
   return normalizeIdOrThrow(
-    ammConfigId ?? latestConfigArtifact?.objectId,
+    latestConfigArtifact?.objectId,
     "An AMM config id is required; create an AMM config first or provide --amm-config-id."
   )
 }
@@ -53,12 +75,20 @@ export const resolveAmmAdminCapId = async ({
   networkName: string
   adminCapId?: string
 }): Promise<string> => {
+  const explicitAdminCapId = resolveExplicitId(
+    adminCapId,
+    "An AMM admin cap id is required; publish the package or provide --admin-cap-id."
+  )
+  if (explicitAdminCapId) {
+    return explicitAdminCapId
+  }
+
   const latestAdminCapArtifact = await getLatestObjectFromArtifact(
     AMM_ADMIN_CAP_TYPE_SUFFIX
   )(networkName)
 
   return normalizeIdOrThrow(
-    adminCapId ?? latestAdminCapArtifact?.objectId,
+    latestAdminCapArtifact?.objectId,
     "An AMM admin cap id is required; publish the package or provide --admin-cap-id."
   )
 }

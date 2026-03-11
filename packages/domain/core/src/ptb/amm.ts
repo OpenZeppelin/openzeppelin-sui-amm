@@ -1,4 +1,8 @@
-import { assertBytesLength, hexToBytes } from "@sui-amm/tooling-core/hex"
+import {
+  assertByteArrayLength,
+  assertBytesLength,
+  hexToBytes
+} from "@sui-amm/tooling-core/hex"
 import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { newTransaction } from "@sui-amm/tooling-core/transactions"
 import { validateRequiredHexBytes } from "@sui-amm/tooling-core/utils/validation"
@@ -40,6 +44,11 @@ export const buildCreateAmmConfigTransaction = ({
   useLaser: boolean
   pythPriceFeedIdBytes: number[]
 }) => {
+  const validatedPythPriceFeedIdBytes = assertByteArrayLength(
+    pythPriceFeedIdBytes,
+    PYTH_PRICE_FEED_ID_BYTES,
+    "pythPriceFeedIdBytes"
+  )
   const transaction = newTransaction()
 
   transaction.moveCall({
@@ -49,7 +58,7 @@ export const buildCreateAmmConfigTransaction = ({
       transaction.pure.u64(baseSpreadBps),
       transaction.pure.u64(volatilityMultiplierBps),
       transaction.pure.bool(useLaser),
-      transaction.pure.vector("u8", pythPriceFeedIdBytes)
+      transaction.pure.vector("u8", validatedPythPriceFeedIdBytes)
     ]
   })
 
@@ -75,6 +84,11 @@ export const buildUpdateAmmConfigTransaction = ({
   tradingPaused: boolean
   pythPriceFeedIdBytes: number[]
 }) => {
+  const validatedPythPriceFeedIdBytes = assertByteArrayLength(
+    pythPriceFeedIdBytes,
+    PYTH_PRICE_FEED_ID_BYTES,
+    "pythPriceFeedIdBytes"
+  )
   const transaction = newTransaction()
 
   transaction.moveCall({
@@ -86,7 +100,7 @@ export const buildUpdateAmmConfigTransaction = ({
       transaction.pure.u64(volatilityMultiplierBps),
       transaction.pure.bool(useLaser),
       transaction.pure.bool(tradingPaused),
-      transaction.pure.vector("u8", pythPriceFeedIdBytes)
+      transaction.pure.vector("u8", validatedPythPriceFeedIdBytes)
     ]
   })
 

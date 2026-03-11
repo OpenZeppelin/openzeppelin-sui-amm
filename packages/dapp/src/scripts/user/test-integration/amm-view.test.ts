@@ -37,6 +37,15 @@ type PublishArtifact = {
   packageId: string
 }
 
+type CreatedAmmConfigSnapshot = {
+  ammConfigId: string
+  baseSpreadBps: bigint
+  initialSharedVersion: string
+  pythPriceFeedIdHex: string
+  useLaser: boolean
+  volatilityMultiplierBps: bigint
+}
+
 const resolveKeepTemp = () => process.env.SUI_IT_KEEP_TEMP === "1"
 
 const resolveWithFaucet = () => process.env.SUI_IT_WITH_FAUCET !== "0"
@@ -86,36 +95,63 @@ describe("amm-view script", () => {
         suiClient: context.suiClient
       })
 
-      const baseSpreadBps = 37n
-      const volatilityMultiplierBps = 420n
-      const useLaser = true
-      const pythPriceFeedIdHex = DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
-      const createTransaction = buildCreateAmmConfigTransaction({
-        packageId: rootArtifact.packageId,
-        adminCapId,
+      const createAmmConfig = async ({
         baseSpreadBps,
         volatilityMultiplierBps,
         useLaser,
-        pythPriceFeedIdBytes: parsePythPriceFeedIdBytes(pythPriceFeedIdHex)
-      })
+        pythPriceFeedIdHex
+      }: Omit<
+        CreatedAmmConfigSnapshot,
+        "ammConfigId" | "initialSharedVersion"
+      >) => {
+        const createTransaction = buildCreateAmmConfigTransaction({
+          packageId: rootArtifact.packageId,
+          adminCapId,
+          baseSpreadBps,
+          volatilityMultiplierBps,
+          useLaser,
+          pythPriceFeedIdBytes: parsePythPriceFeedIdBytes(pythPriceFeedIdHex)
+        })
 
-      const createResult = await context.signAndExecuteTransaction(
-        createTransaction,
-        publisher
-      )
-      await context.waitForFinality(createResult.digest)
-
-      const createdConfig = ensureCreatedObject(
-        AMM_CONFIG_TYPE_SUFFIX,
-        createResult
-      )
-      const ammConfigId = createdConfig.objectId
-      const initialSharedVersion = extractInitialSharedVersion(createdConfig)
-      if (!initialSharedVersion) {
-        throw new Error(
-          "Expected AMM config to include shared version metadata."
+        const createResult = await context.signAndExecuteTransaction(
+          createTransaction,
+          publisher
         )
+        await context.waitForFinality(createResult.digest)
+
+        const createdConfig = ensureCreatedObject(
+          AMM_CONFIG_TYPE_SUFFIX,
+          createResult
+        )
+        const initialSharedVersion = extractInitialSharedVersion(createdConfig)
+        if (!initialSharedVersion) {
+          throw new Error(
+            "Expected AMM config to include shared version metadata."
+          )
+        }
+
+        return {
+          ammConfigId: createdConfig.objectId,
+          baseSpreadBps,
+          initialSharedVersion,
+          pythPriceFeedIdHex,
+          useLaser,
+          volatilityMultiplierBps
+        }
       }
+
+      await createAmmConfig({
+        baseSpreadBps: 37n,
+        volatilityMultiplierBps: 420n,
+        useLaser: false,
+        pythPriceFeedIdHex: DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
+      })
+      const latestAmmConfig = await createAmmConfig({
+        baseSpreadBps: 58n,
+        volatilityMultiplierBps: 777n,
+        useLaser: true,
+        pythPriceFeedIdHex: DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
+      })
 
       const scriptRunner = createSuiScriptRunner(context)
       const result = await scriptRunner.runScript(
@@ -139,17 +175,21 @@ describe("amm-view script", () => {
         throw new Error("amm-view output did not include shared version.")
       }
 
-      expect(parsed.ammConfig.configId).toBe(ammConfigId)
-      expect(parsed.ammConfig.baseSpreadBps).toBe(baseSpreadBps.toString())
-      expect(parsed.ammConfig.volatilityMultiplierBps).toBe(
-        volatilityMultiplierBps.toString()
+      expect(parsed.ammConfig.configId).toBe(latestAmmConfig.ammConfigId)
+      expect(parsed.ammConfig.baseSpreadBps).toBe(
+        latestAmmConfig.baseSpreadBps.toString()
       )
-      expect(parsed.ammConfig.useLaser).toBe(useLaser)
+      expect(parsed.ammConfig.volatilityMultiplierBps).toBe(
+        latestAmmConfig.volatilityMultiplierBps.toString()
+      )
+      expect(parsed.ammConfig.useLaser).toBe(latestAmmConfig.useLaser)
       expect(parsed.ammConfig.tradingPaused).toBe(false)
       expect(normalizeHex(parsed.ammConfig.pythPriceFeedIdHex)).toBe(
-        normalizeHex(pythPriceFeedIdHex)
+        normalizeHex(latestAmmConfig.pythPriceFeedIdHex)
       )
-      expect(parsed.initialSharedVersion).toBe(initialSharedVersion)
+      expect(parsed.initialSharedVersion).toBe(
+        latestAmmConfig.initialSharedVersion
+      )
     })
   })
 })

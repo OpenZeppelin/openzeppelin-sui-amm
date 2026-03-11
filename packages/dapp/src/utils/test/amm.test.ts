@@ -124,6 +124,21 @@ describe("resolvePythPriceFeedIdHex", () => {
       "No localnet feed artifact found for UNKNOWN_FEED; using a deterministic placeholder feed id."
     )
   })
+
+  it("falls back to the deterministic localnet feed id when the mock artifact cannot be read", async () => {
+    artifactMocks.readArtifact.mockRejectedValue(
+      new Error("mock artifact is malformed")
+    )
+
+    const resolved = await resolvePythPriceFeedIdHex({
+      networkName: "localnet"
+    })
+
+    expect(resolved).toBe(DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID)
+    expect(logMocks.logWarning).toHaveBeenCalledWith(
+      "No localnet feed artifact found for MOCK_SUI_FEED; using a deterministic placeholder feed id."
+    )
+  })
 })
 
 describe("resolveAmmAdminCapIdFromArtifacts", () => {
