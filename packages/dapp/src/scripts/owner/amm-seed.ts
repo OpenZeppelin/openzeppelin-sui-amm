@@ -6,11 +6,7 @@ import yargs from "yargs"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
 
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
-import {
-  DEFAULT_BASE_SPREAD_BPS,
-  DEFAULT_VOLATILITY_MULTIPLIER_BPS,
-  resolveAmmConfigInputs
-} from "@sui-amm/domain-core/models/amm"
+import { resolveAmmConfigInputs } from "@sui-amm/domain-core/models/amm"
 import {
   type AmmConfigSnapshot,
   collectAmmConfigSnapshot,
@@ -50,6 +46,7 @@ type AmmSeedArguments = {
   useLaser?: boolean
   pythPriceFeedId?: string
   pythPriceFeedLabel?: string
+  allowConfigMismatch?: boolean
   rePublish?: boolean
   useCliPublish?: boolean
   json?: boolean
@@ -288,6 +285,129 @@ const resolveAdminCapId = async ({
   })
 }
 
+const shouldResolveExplicitPythPriceFeedId = ({
+  cliArguments
+}: {
+  cliArguments: Pick<AmmSeedArguments, "pythPriceFeedId" | "pythPriceFeedLabel">
+}) =>
+  Boolean(cliArguments.pythPriceFeedId?.trim()) ||
+  Boolean(cliArguments.pythPriceFeedLabel?.trim())
+
+const resolveExpectedPythPriceFeedIdHex = async ({
+  networkName,
+  cliArguments,
+  existingOverview
+}: {
+  networkName: string
+  cliArguments: AmmSeedArguments
+  existingOverview?: AmmConfigOverview
+}) => {
+  if (
+    existingOverview &&
+    !shouldResolveExplicitPythPriceFeedId({ cliArguments })
+  ) {
+    return existingOverview.pythPriceFeedIdHex
+  }
+
+  return resolvePythPriceFeedIdHex({
+    networkName,
+    pythPriceFeedId: cliArguments.pythPriceFeedId,
+    pythPriceFeedLabel: cliArguments.pythPriceFeedLabel
+  })
+}
+
+const resolveExpectedExistingAmmConfigInputs = async ({
+  networkName,
+  cliArguments,
+  existingOverview
+}: {
+  networkName: string
+  cliArguments: AmmSeedArguments
+  existingOverview: AmmConfigOverview
+}) =>
+  resolveAmmConfigInputs({
+    pythPriceFeedIdHex: await resolveExpectedPythPriceFeedIdHex({
+      networkName,
+      cliArguments,
+      existingOverview
+    }),
+    volatilityMultiplierBps:
+      cliArguments.volatilityMultiplierBps ??
+      existingOverview.volatilityMultiplierBps,
+    baseSpreadBps: cliArguments.baseSpreadBps ?? existingOverview.baseSpreadBps,
+    useLaser: cliArguments.useLaser ?? existingOverview.useLaser
+  })
+
+const collectAmmConfigInputMismatches = ({
+  existingOverview,
+  expectedInputs
+}: {
+  existingOverview: AmmConfigOverview
+  expectedInputs: ReturnType<typeof resolveAmmConfigInputs>
+}) => {
+  const mismatches: string[] = []
+  const expectedBaseSpreadBps = expectedInputs.baseSpreadBps.toString()
+  const expectedVolatilityMultiplierBps =
+    expectedInputs.volatilityMultiplierBps.toString()
+
+  if (
+    normalizeHex(existingOverview.pythPriceFeedIdHex) !==
+    normalizeHex(expectedInputs.pythPriceFeedIdHex)
+  ) {
+    mismatches.push(
+      `pythPriceFeedIdHex expected ${expectedInputs.pythPriceFeedIdHex} but got ${existingOverview.pythPriceFeedIdHex}`
+    )
+  }
+
+  if (existingOverview.baseSpreadBps !== expectedBaseSpreadBps) {
+    mismatches.push(
+      `baseSpreadBps expected ${expectedBaseSpreadBps} but got ${existingOverview.baseSpreadBps}`
+    )
+  }
+
+  if (existingOverview.volatilityMultiplierBps !== expectedVolatilityMultiplierBps) {
+    mismatches.push(
+      `volatilityMultiplierBps expected ${expectedVolatilityMultiplierBps} but got ${existingOverview.volatilityMultiplierBps}`
+    )
+  }
+
+  if (existingOverview.useLaser !== expectedInputs.useLaser) {
+    mismatches.push(
+      `useLaser expected ${expectedInputs.useLaser} but got ${existingOverview.useLaser}`
+    )
+  }
+
+  return mismatches
+}
+
+const handleAmmConfigMismatches = ({
+  mismatches,
+  allowConfigMismatch
+}: {
+  mismatches: string[]
+  allowConfigMismatch?: boolean
+}) => {
+  if (mismatches.length === 0) {
+    return
+  }
+
+  if (allowConfigMismatch) {
+    logWarning(
+      "Existing AMM config does not match the requested seed inputs; reusing it because --allow-config-mismatch was provided."
+    )
+    mismatches.forEach((mismatch) => {
+      logWarning(`- ${mismatch}`)
+    })
+    return
+  }
+
+  throw new Error(
+    `Existing AMM config does not match requested seed inputs:\n- ${mismatches.join(
+      "\n- "
+    )}`
+  )
+}
+
 const resolveOrCreateAmmConfig = async ({
   tooling,
   cliArguments,
@@ -311,29 +431,22 @@ const resolveOrCreateAmmConfig = async ({
   if (existingAmmConfigId) {
     logKeyValueYellow("Config")("Using existing AMM config.")
 
-    const [ammConfigSnapshot, resolvedAdminCapId, resolvedPythPriceFeedIdHex] =
-      await Promise.all([
-        collectAmmConfigSnapshot({
-          tooling,
-          ammConfigId: existingAmmConfigId
-        }),
-        resolveAdminCapId({
-          tooling,
-          cliArguments,
-          ammPackageId
-        }),
-        resolvePythPriceFeedIdHex({
-          networkName: tooling.network.networkName,
-          pythPriceFeedId: cliArguments.pythPriceFeedId,
-          pythPriceFeedLabel: cliArguments.pythPriceFeedLabel
-        })
-      ])
+    const [ammConfigSnapshot, resolvedAdminCapId] = await Promise.all([
+      collectAmmConfigSnapshot({
+        tooling,
+        ammConfigId: existingAmmConfigId
+      }),
+      resolveAdminCapId({
+        tooling,
+        cliArguments,
+        ammPackageId
+      })
+    ])
 
-    const expectedInputs = resolveAmmConfigInputs({
-      pythPriceFeedIdHex: resolvedPythPriceFeedIdHex,
-      volatilityMultiplierBps: cliArguments.volatilityMultiplierBps,
-      baseSpreadBps: cliArguments.baseSpreadBps,
-      useLaser: cliArguments.useLaser
+    const expectedInputs = await resolveExpectedExistingAmmConfigInputs({
+      networkName: tooling.network.networkName,
+      cliArguments,
+      existingOverview: ammConfigSnapshot.ammConfigOverview
     })
 
     const artifactAdminCapId = await resolveAmmAdminCapIdFromArtifacts({
@@ -341,41 +454,11 @@ const resolveOrCreateAmmConfig = async ({
       ammPackageId
     })
 
-    const mismatches: string[] = []
     const existingOverview = ammConfigSnapshot.ammConfigOverview
-    const expectedBaseSpreadBps = expectedInputs.baseSpreadBps.toString()
-    const expectedVolatilityMultiplierBps =
-      expectedInputs.volatilityMultiplierBps.toString()
-
-    if (
-      normalizeHex(existingOverview.pythPriceFeedIdHex) !==
-      normalizeHex(expectedInputs.pythPriceFeedIdHex)
-    ) {
-      mismatches.push(
-        `pythPriceFeedIdHex expected ${expectedInputs.pythPriceFeedIdHex} but got ${existingOverview.pythPriceFeedIdHex}`
-      )
-    }
-
-    if (existingOverview.baseSpreadBps !== expectedBaseSpreadBps) {
-      mismatches.push(
-        `baseSpreadBps expected ${expectedBaseSpreadBps} but got ${existingOverview.baseSpreadBps}`
-      )
-    }
-
-    if (
-      existingOverview.volatilityMultiplierBps !==
-      expectedVolatilityMultiplierBps
-    ) {
-      mismatches.push(
-        `volatilityMultiplierBps expected ${expectedVolatilityMultiplierBps} but got ${existingOverview.volatilityMultiplierBps}`
-      )
-    }
-
-    if (existingOverview.useLaser !== expectedInputs.useLaser) {
-      mismatches.push(
-        `useLaser expected ${expectedInputs.useLaser} but got ${existingOverview.useLaser}`
-      )
-    }
+    const mismatches = collectAmmConfigInputMismatches({
+      existingOverview,
+      expectedInputs
+    })
 
     if (
       normalizeSuiObjectId(artifactAdminCapId) !==
@@ -386,13 +469,10 @@ const resolveOrCreateAmmConfig = async ({
       )
     }
 
-    if (mismatches.length > 0) {
-      throw new Error(
-        `Existing AMM config does not match requested seed inputs:\n- ${mismatches.join(
-          "\n- "
-        )}`
-      )
-    }
+    handleAmmConfigMismatches({
+      mismatches,
+      allowConfigMismatch: cliArguments.allowConfigMismatch
+    })
 
     return {
       ammConfigSnapshot,
@@ -520,22 +600,22 @@ runSuiScript(
     .option("baseSpreadBps", {
       alias: ["base-spread-bps"],
       type: "string",
-      description: "Base spread in basis points (u64).",
-      default: DEFAULT_BASE_SPREAD_BPS,
+      description:
+        "Base spread in basis points (u64); defaults to the current config value when reusing, otherwise the AMM default.",
       demandOption: false
     })
     .option("volatilityMultiplierBps", {
       alias: ["volatility-multiplier-bps"],
       type: "string",
-      description: "Volatility multiplier in basis points (u64).",
-      default: DEFAULT_VOLATILITY_MULTIPLIER_BPS,
+      description:
+        "Volatility multiplier in basis points (u64); defaults to the current config value when reusing, otherwise the AMM default.",
       demandOption: false
     })
     .option("useLaser", {
       alias: ["use-laser"],
       type: "boolean",
-      default: false,
-      description: "Enable the laser pricing path for the AMM."
+      description:
+        "Enable the laser pricing path for the AMM; defaults to the current config value when reusing, otherwise false."
     })
     .option("pythPriceFeedId", {
       alias: ["pyth-price-feed-id", "pyth-feed-id"],
