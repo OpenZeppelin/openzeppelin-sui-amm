@@ -209,10 +209,12 @@ fun register_balance_manager_rejects_non_owner() {
 
     scenario.next_tx(OWNER_ADDRESS);
 
+    let trader_account: TraderAccount = scenario.take_from_sender();
+
     scenario.next_tx(OTHER_ADDRESS);
 
     let mut registry: Registry = scenario.take_shared_by_id(registry_id);
-    let trader_account: TraderAccount = scenario.take_from_address(OWNER_ADDRESS);
+    let trader_account: TraderAccount = scenario.take_from_sender();
     let balance_manager: BalanceManager = scenario.take_shared_by_id(balance_manager_id);
 
     trader_account.register_balance_manager(
