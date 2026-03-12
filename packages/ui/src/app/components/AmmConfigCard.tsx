@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import useAmmConfigCardViewModel from "../hooks/useAmmConfigCardViewModel"
 import AmmConfigCardView from "./AmmConfigCardView"
 import UpdateAmmConfigModal from "./UpdateAmmConfigModal"
@@ -9,6 +9,13 @@ const AmmConfigCard = () => {
   const { viewModel, ammConfig, canUpdateConfig, applyAmmConfigUpdate } =
     useAmmConfigCardViewModel()
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (!canUpdateConfig || !viewModel.ammConfigId) {
+      setIsUpdateModalOpen(false)
+    }
+  }, [canUpdateConfig, viewModel.ammConfigId])
+
   const handleOpenUpdateModal = canUpdateConfig
     ? () => setIsUpdateModalOpen(true)
     : undefined
