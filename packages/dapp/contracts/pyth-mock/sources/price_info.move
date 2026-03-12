@@ -4,7 +4,7 @@ use pyth::i64;
 use pyth::price;
 use pyth::price_feed::{Self, PriceFeed};
 use pyth::price_identifier::{Self, PriceIdentifier};
-use sui::clock::{Self, Clock};
+use sui::clock::Clock;
 
 // === Structs ===
 
@@ -63,7 +63,7 @@ public(package) fun update_price_info_object(
 }
 
 public(package) fun current_timestamp_seconds(clock: &Clock): u64 {
-    clock::timestamp_ms(clock) / 1000
+    clock.timestamp_ms() / 1000
 }
 
 /// Publish and share a new mock price feed on localnet.

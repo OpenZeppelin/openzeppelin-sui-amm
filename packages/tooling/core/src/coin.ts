@@ -113,13 +113,14 @@ export const fetchCoinBalances = async (
   },
   { suiClient }: ToolingCoreContext
 ): Promise<SuiCoinBalance[]> => {
+  const normalizedCoinType = normalizeCoinType(coinType)
   const coins: SuiCoinBalance[] = []
   let cursor: string | undefined = undefined
 
   do {
     const page = await suiClient.getCoins({
       owner,
-      coinType,
+      coinType: normalizedCoinType,
       limit: 50,
       cursor
     })

@@ -66,14 +66,14 @@ describe("coin helpers", () => {
 
     expect(mocks.getCoins).toHaveBeenCalledWith({
       owner: "0x1",
-      coinType: SUI_COIN_TYPE,
+      coinType: normalizeCoinType(SUI_COIN_TYPE),
       limit: 50,
       cursor: undefined
     })
   })
 
   it("fetches coin balances for an explicit coin type", async () => {
-    const explicitCoinType = "0x1::usdc::USDC"
+    const explicitCoinType = " 0x1::usdc::USDC "
     const { client, mocks } = createSuiClientMock()
 
     await fetchCoinBalances(
@@ -83,9 +83,63 @@ describe("coin helpers", () => {
 
     expect(mocks.getCoins).toHaveBeenCalledWith({
       owner: "0x1",
-      coinType: explicitCoinType,
+      coinType: normalizeCoinType(explicitCoinType),
       limit: 50,
       cursor: undefined
+    })
+  })
+
+  it("fetches coin balances across multiple pages", async () => {
+    const { client, mocks } = createSuiClientMock({
+      getCoins: vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: [
+            {
+              coinObjectId: "0x2",
+              balance: "10"
+            }
+          ],
+          hasNextPage: true,
+          nextCursor: "cursor-1"
+        })
+        .mockResolvedValueOnce({
+          data: [
+            {
+              coinObjectId: "0x3",
+              balance: "20"
+            }
+          ],
+          hasNextPage: false,
+          nextCursor: null
+        })
+    })
+
+    await expect(
+      fetchCoinBalances({ owner: "0x1" }, { suiClient: client })
+    ).resolves.toEqual([
+      {
+        coinObjectId: normalizeSuiObjectId("0x2"),
+        balance: 10n
+      },
+      {
+        coinObjectId: normalizeSuiObjectId("0x3"),
+        balance: 20n
+      }
+    ])
+
+    expect(mocks.getCoins).toHaveBeenNthCalledWith(1, {
+      owner: "0x1",
+      coinType: normalizeCoinType(SUI_COIN_TYPE),
+      limit: 50,
+      cursor: undefined
+    })
+
+    expect(mocks.getCoins).toHaveBeenNthCalledWith(2, {
+      owner: "0x1",
+      coinType: normalizeCoinType(SUI_COIN_TYPE),
+      limit: 50,
+      cursor: "cursor-1"
     })
   })
 

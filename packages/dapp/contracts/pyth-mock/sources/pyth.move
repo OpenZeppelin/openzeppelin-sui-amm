@@ -6,8 +6,7 @@ use sui::clock::Clock;
 
 // === Constants ===
 
-#[error]
-const EPriceTooOld: vector<u8> = b"price is older than the allowed maximum age";
+const EStalePriceUpdate: u64 = 3;
 
 // === Public Functions ===
 
@@ -41,5 +40,5 @@ fun abs_diff(x: u64, y: u64): u64 {
 fun assert_price_age_within_limit(price: &Price, clock: &Clock, max_age_secs: u64) {
     let current_timestamp_seconds = price_info::current_timestamp_seconds(clock);
     let age = abs_diff(current_timestamp_seconds, price.get_timestamp());
-    assert!(age < max_age_secs, EPriceTooOld);
+    assert!(age < max_age_secs, EStalePriceUpdate);
 }
