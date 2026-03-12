@@ -43,7 +43,7 @@ const expectSeededAmmConfigValues = (output: CompleteAmmSeedOutput) => {
   )
   const { pythPriceFeedIdHex } = output
   expect(pythPriceFeedIdHex).toBeDefined()
-  // @ts-expect-error WOuld have throw before so it is defined
+  // @ts-expect-error Would have throw before so it is defined
   expect(normalizeHex(pythPriceFeedIdHex)).toBe(
     normalizeHex(SEEDED_PYTH_PRICE_FEED_ID)
   )
