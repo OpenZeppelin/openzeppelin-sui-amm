@@ -56,20 +56,6 @@ public struct AMMConfigUpdatedEvent has copy, drop {
     config_id: ID,
 }
 
-/// Builds an `AMMConfigCreatedEvent` payload.
-public(package) fun new_amm_config_created_event(config_id: ID): AMMConfigCreatedEvent {
-    AMMConfigCreatedEvent {
-        config_id,
-    }
-}
-
-/// Builds an `AMMConfigCreatedEvent` payload.
-public(package) fun new_amm_config_updated_event(config_id: ID): AMMConfigUpdatedEvent {
-    AMMConfigUpdatedEvent {
-        config_id,
-    }
-}
-
 // === Init ===
 
 /// One-time publisher witness created at publish time.

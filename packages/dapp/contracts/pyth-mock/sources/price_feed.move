@@ -17,11 +17,7 @@ public struct PriceFeed has copy, drop, store {
 
 // === Public Functions ===
 
-public fun new(
-    price_identifier: PriceIdentifier,
-    price: Price,
-    ema_price: Price,
-): PriceFeed {
+public fun new(price_identifier: PriceIdentifier, price: Price, ema_price: Price): PriceFeed {
     PriceFeed {
         price_identifier,
         price,

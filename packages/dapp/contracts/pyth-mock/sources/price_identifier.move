@@ -16,10 +16,7 @@ public struct PriceIdentifier has copy, drop, store {
 // === Public Functions ===
 
 public fun from_byte_vec(bytes: vector<u8>): PriceIdentifier {
-    assert!(
-        vector::length(&bytes) == IDENTIFIER_BYTES_LENGTH,
-        E_INCORRECT_IDENTIFIER_LENGTH,
-    );
+    assert!(vector::length(&bytes) == IDENTIFIER_BYTES_LENGTH, E_INCORRECT_IDENTIFIER_LENGTH);
     PriceIdentifier { bytes }
 }
 
