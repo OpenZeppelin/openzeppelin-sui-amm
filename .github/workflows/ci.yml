@@ -111,9 +111,7 @@ jobs:
             /tmp/sui-it-*/logs/**
           if-no-files-found: ignore
 
-
   security-audit:
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

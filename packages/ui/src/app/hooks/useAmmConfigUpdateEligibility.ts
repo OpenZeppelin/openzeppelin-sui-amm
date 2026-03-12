@@ -65,8 +65,11 @@ const useAmmConfigUpdateEligibility = (ammConfigId?: string) => {
           status: "ready",
           canUpdate: Boolean(adminCapId)
         })
-      } catch {
+      } catch (error) {
         if (!active) return
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to check AMM config update eligibility.", error)
+        }
         setState({ status: "error", canUpdate: false })
       }
     }
@@ -79,7 +82,8 @@ const useAmmConfigUpdateEligibility = (ammConfigId?: string) => {
   }, [ammConfigId, suiClient, walletAddress])
 
   return {
-    canUpdateConfig: state.canUpdate
+    canUpdateConfig: state.canUpdate,
+    status: state.status
   }
 }
 

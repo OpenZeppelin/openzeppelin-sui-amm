@@ -28,6 +28,12 @@ const ConfigTile = ({
   )
 }
 
+const assertUnreachable = (value: never): never => {
+  throw new Error(
+    `Unhandled AMM config content state: ${JSON.stringify(value)}`
+  )
+}
+
 const renderContent = (content: TAmmConfigCardContent) => {
   switch (content.state) {
     case "loading":
@@ -80,13 +86,9 @@ const renderContent = (content: TAmmConfigCardContent) => {
         </div>
       )
     }
-    default:
-      return (
-        <div className="rounded-xl border border-dashed border-slate-300/60 p-4 text-sm text-slate-500 dark:border-slate-100/20 dark:text-slate-200/70">
-          No AMM config loaded yet.
-        </div>
-      )
   }
+
+  return assertUnreachable(content)
 }
 
 const AmmConfigCardView = ({
