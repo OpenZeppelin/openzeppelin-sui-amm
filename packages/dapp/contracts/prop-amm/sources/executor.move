@@ -3,6 +3,7 @@ module openzeppelin_market_maker::executor;
 
 use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, WithdrawCap};
 use deepbook::registry::Registry;
+use sui::event;
 use sui::table::{Self, Table};
 
 // === Errors ===
@@ -43,6 +44,43 @@ public struct TraderAccount has key {
     active_orders: Table<ID, vector<ID>>,
 }
 
+// === Events ===
+
+/// Emitted when a trader account is created.
+public struct TraderAccountCreatedEvent has copy, drop {
+    /// ID of the trader account object.
+    trader_account_id: ID,
+    /// Owner of the trader account.
+    owner: address,
+    /// Linked DeepBook balance manager ID.
+    balance_manager_id: ID,
+    /// Trade capability ID retained by the owner.
+    trade_cap_id: Option<ID>,
+    /// Deposit capability ID retained by the owner.
+    deposit_cap_id: Option<ID>,
+    /// Withdraw capability ID retained by the owner.
+    withdraw_cap_id: Option<ID>,
+}
+
+/// Builds a `TraderAccountCreatedEvent` payload.
+public(package) fun new_trader_account_created_event(
+    trader_account_id: ID,
+    owner: address,
+    balance_manager_id: ID,
+    trade_cap_id: Option<ID>,
+    deposit_cap_id: Option<ID>,
+    withdraw_cap_id: Option<ID>,
+): TraderAccountCreatedEvent {
+    TraderAccountCreatedEvent {
+        trader_account_id,
+        owner,
+        balance_manager_id,
+        trade_cap_id,
+        deposit_cap_id,
+        withdraw_cap_id,
+    }
+}
+
 // === Public Functions ===
 
 /// Registers the balance manager in the DeepBook registry.
@@ -52,8 +90,11 @@ public fun register_balance_manager(
     registry: &mut Registry,
     ctx: &mut TxContext,
 ) {
-    assert_trader_account_owner(trader_account, ctx);
-    assert_balance_manager_matches_account(trader_account, balance_manager);
+    assert!(ctx.sender() == trader_account.owner, ENotTraderAccountOwner);
+    assert!(
+        trader_account.balance_manager_id == balance_manager::id(balance_manager),
+        EBalanceManagerMismatch,
+    );
 
     balance_manager::register_balance_manager(balance_manager, registry, ctx);
 }
@@ -75,7 +116,7 @@ public(package) fun create_trader_account_components(
     deepbook_registry: &Registry,
     owner: address,
     ctx: &mut TxContext,
-): (BalanceManager, DepositCap, WithdrawCap, TradeCap, TraderAccount, CapIds) {
+): (BalanceManager, DepositCap, WithdrawCap, TradeCap, TraderAccount) {
     let (
         balance_manager,
         deposit_cap,
@@ -87,16 +128,15 @@ public(package) fun create_trader_account_components(
         ctx,
     );
 
-    let (trader_account, cap_ids) = create_trader_account_with_cap_ids(
-        &balance_manager,
-        &trade_cap,
-        &deposit_cap,
-        &withdraw_cap,
+    let cap_ids = create_cap_ids(&trade_cap, &deposit_cap, &withdraw_cap);
+    let trader_account = create_trader_account(
         owner,
+        balance_manager::id(&balance_manager),
+        cap_ids,
         ctx,
     );
 
-    (balance_manager, deposit_cap, withdraw_cap, trade_cap, trader_account, cap_ids)
+    (balance_manager, deposit_cap, withdraw_cap, trade_cap, trader_account)
 }
 
 /// Creates a trader account with empty active orders.
@@ -106,49 +146,29 @@ public(package) fun create_trader_account(
     cap_ids: CapIds,
     ctx: &mut TxContext,
 ): TraderAccount {
-    TraderAccount {
+    let trade_cap_id = cap_ids.trade_cap_id;
+    let deposit_cap_id = cap_ids.deposit_cap_id;
+    let withdraw_cap_id = cap_ids.withdraw_cap_id;
+    let trader_account = TraderAccount {
         id: object::new(ctx),
         owner,
         balance_manager_id,
         cap_ids,
         active_orders: table::new(ctx),
-    }
-}
+    };
 
-/// Ensures the transaction sender owns the trader account.
-fun assert_trader_account_owner(trader_account: &TraderAccount, ctx: &TxContext) {
-    assert!(ctx.sender() == trader_account.owner, ENotTraderAccountOwner);
-}
-
-/// Ensures the balance manager matches the trader account.
-fun assert_balance_manager_matches_account(
-    trader_account: &TraderAccount,
-    balance_manager: &BalanceManager,
-) {
-    assert!(
-        trader_account.balance_manager_id == balance_manager::id(balance_manager),
-        EBalanceManagerMismatch,
-    );
-}
-
-/// Creates a trader account and the associated cap ID metadata.
-fun create_trader_account_with_cap_ids(
-    balance_manager: &BalanceManager,
-    trade_cap: &TradeCap,
-    deposit_cap: &DepositCap,
-    withdraw_cap: &WithdrawCap,
-    owner: address,
-    ctx: &mut TxContext,
-): (TraderAccount, CapIds) {
-    let cap_ids = create_cap_ids(trade_cap, deposit_cap, withdraw_cap);
-    let trader_account = create_trader_account(
-        owner,
-        balance_manager::id(balance_manager),
-        copy cap_ids,
-        ctx,
+    event::emit(
+        new_trader_account_created_event(
+            trader_account_id(&trader_account),
+            owner,
+            balance_manager_id,
+            trade_cap_id,
+            deposit_cap_id,
+            withdraw_cap_id,
+        ),
     );
 
-    (trader_account, cap_ids)
+    trader_account
 }
 
 /// Captures the cap IDs for storage in the trader account.

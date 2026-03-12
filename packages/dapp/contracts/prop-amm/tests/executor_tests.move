@@ -4,7 +4,7 @@ module openzeppelin_market_maker::executor_tests;
 
 use deepbook::balance_manager;
 use deepbook::registry;
-use openzeppelin_market_maker::executor;
+use openzeppelin_market_maker::executor::{Self, new_trader_account_created_event};
 use std::unit_test::{assert_eq, destroy};
 use sui::dynamic_field;
 use sui::test_scenario;
@@ -19,6 +19,22 @@ const OWNER_ADDRESS: address = @0xB;
 const OTHER_ADDRESS: address = @0xC;
 
 // === Helpers ===
+
+/// Asserts that `expected_event` of type `T` was emitted within current transaction.
+macro fun assert_emitted<$T>($expected_event: $T) {
+    let events = sui::event::events_by_type<$T>();
+    if (events.length() == 0) {
+        std::debug::print(&b"Assertion failed. No events emitted.".to_string());
+        abort
+    };
+    let emitted = events.any!(|event| event == $expected_event);
+    if (!emitted) {
+        std::debug::print(&b"Assertion failed. Different events emitted:".to_string());
+        std::debug::print(&events);
+        std::debug::print(&b"No matching events".to_string());
+        abort
+    };
+}
 
 /// Creates a registry and advances the scenario.
 fun create_registry_and_advance_scenario(
@@ -41,7 +57,10 @@ fun authorize_app_and_initialize_balance_manager_map(
 ) {
     test_scenario::next_tx(scenario, sender);
     {
-        let mut registry = take_registry_from_scenario(scenario, registry_id);
+        let mut registry = test_scenario::take_shared_by_id<registry::Registry>(
+            scenario,
+            registry_id,
+        );
         let admin_cap = registry::get_admin_cap_for_testing(test_scenario::ctx(scenario));
         registry::authorize_app<executor::PropAmmApp>(&mut registry, &admin_cap);
         registry::init_balance_manager_map(
@@ -49,7 +68,7 @@ fun authorize_app_and_initialize_balance_manager_map(
             &admin_cap,
             test_scenario::ctx(scenario),
         );
-        return_registry_to_scenario(registry);
+        test_scenario::return_shared(registry);
         destroy(admin_cap);
     };
 }
@@ -62,10 +81,13 @@ fun authorize_app_without_balance_manager_map(
 ) {
     test_scenario::next_tx(scenario, sender);
     {
-        let mut registry = take_registry_from_scenario(scenario, registry_id);
+        let mut registry = test_scenario::take_shared_by_id<registry::Registry>(
+            scenario,
+            registry_id,
+        );
         let admin_cap = registry::get_admin_cap_for_testing(test_scenario::ctx(scenario));
         registry::authorize_app<executor::PropAmmApp>(&mut registry, &admin_cap);
-        return_registry_to_scenario(registry);
+        test_scenario::return_shared(registry);
         destroy(admin_cap);
     };
 }
@@ -80,14 +102,16 @@ fun create_trader_account_and_advance_scenario(
     let balance_manager_id;
     test_scenario::next_tx(scenario, sender);
     {
-        let registry = take_registry_from_scenario(scenario, registry_id);
+        let registry = test_scenario::take_shared_by_id<registry::Registry>(
+            scenario,
+            registry_id,
+        );
         let (
             balance_manager,
             deposit_cap,
             withdraw_cap,
             trade_cap,
             trader_account,
-            _,
         ) = executor::create_trader_account_components(
             &registry,
             owner,
@@ -110,7 +134,7 @@ fun create_trader_account_and_advance_scenario(
         executor::transfer_trader_account_to_owner(trader_account);
         transfer::public_share_object(balance_manager);
 
-        return_registry_to_scenario(registry);
+        test_scenario::return_shared(registry);
     };
     test_scenario::next_tx(scenario, sender);
     balance_manager_id
@@ -141,67 +165,6 @@ fun prepare_authorized_registry_and_trader_account(
     (registry_id, balance_manager_id)
 }
 
-/// Takes the registry from the scenario by ID.
-fun take_registry_from_scenario(
-    scenario: &test_scenario::Scenario,
-    registry_id: ID,
-): registry::Registry {
-    test_scenario::take_shared_by_id<registry::Registry>(scenario, registry_id)
-}
-
-/// Returns the registry to the scenario.
-fun return_registry_to_scenario(registry: registry::Registry) {
-    test_scenario::return_shared(registry);
-}
-
-/// Takes a shared balance manager from the scenario by ID.
-fun take_shared_balance_manager_from_scenario(
-    scenario: &test_scenario::Scenario,
-    balance_manager_id: ID,
-): balance_manager::BalanceManager {
-    test_scenario::take_shared_by_id<balance_manager::BalanceManager>(
-        scenario,
-        balance_manager_id,
-    )
-}
-
-/// Returns a shared balance manager to the scenario.
-fun return_shared_balance_manager_to_scenario(balance_manager: balance_manager::BalanceManager) {
-    test_scenario::return_shared(balance_manager);
-}
-
-/// Takes the trader account from the scenario.
-fun take_trader_account_from_scenario(scenario: &test_scenario::Scenario): executor::TraderAccount {
-    test_scenario::take_from_sender<executor::TraderAccount>(scenario)
-}
-
-/// Returns the trader account to the scenario.
-fun return_trader_account_to_scenario(
-    scenario: &test_scenario::Scenario,
-    trader_account: executor::TraderAccount,
-) {
-    test_scenario::return_to_sender(scenario, trader_account);
-}
-
-/// Takes the trade cap from the scenario.
-fun take_trade_cap_from_scenario(scenario: &test_scenario::Scenario): balance_manager::TradeCap {
-    test_scenario::take_from_sender<balance_manager::TradeCap>(scenario)
-}
-
-/// Takes the deposit cap from the scenario.
-fun take_deposit_cap_from_scenario(
-    scenario: &test_scenario::Scenario,
-): balance_manager::DepositCap {
-    test_scenario::take_from_sender<balance_manager::DepositCap>(scenario)
-}
-
-/// Takes the withdraw cap from the scenario.
-fun take_withdraw_cap_from_scenario(
-    scenario: &test_scenario::Scenario,
-): balance_manager::WithdrawCap {
-    test_scenario::take_from_sender<balance_manager::WithdrawCap>(scenario)
-}
-
 /// Returns all caps to the scenario.
 fun return_caps_to_scenario(
     scenario: &test_scenario::Scenario,
@@ -224,10 +187,10 @@ fun take_owner_side_trader_account_bundle(
     balance_manager::TradeCap,
 ) {
     (
-        take_trader_account_from_scenario(scenario),
-        take_deposit_cap_from_scenario(scenario),
-        take_withdraw_cap_from_scenario(scenario),
-        take_trade_cap_from_scenario(scenario),
+        test_scenario::take_from_sender<executor::TraderAccount>(scenario),
+        test_scenario::take_from_sender<balance_manager::DepositCap>(scenario),
+        test_scenario::take_from_sender<balance_manager::WithdrawCap>(scenario),
+        test_scenario::take_from_sender<balance_manager::TradeCap>(scenario),
     )
 }
 
@@ -237,8 +200,11 @@ fun take_trader_account_and_bound_balance_manager(
     balance_manager_id: ID,
 ): (executor::TraderAccount, balance_manager::BalanceManager) {
     (
-        take_trader_account_from_scenario(scenario),
-        take_shared_balance_manager_from_scenario(scenario, balance_manager_id),
+        test_scenario::take_from_sender<executor::TraderAccount>(scenario),
+        test_scenario::take_shared_by_id<balance_manager::BalanceManager>(
+            scenario,
+            balance_manager_id,
+        ),
     )
 }
 
@@ -269,14 +235,16 @@ fun create_trader_account_constructor_happy_path() {
 
     test_scenario::next_tx(&mut scenario, ADMIN_ADDRESS);
     {
-        let registry = take_registry_from_scenario(&scenario, registry_id);
+        let registry = test_scenario::take_shared_by_id<registry::Registry>(
+            &scenario,
+            registry_id,
+        );
         let (
             balance_manager,
             deposit_cap,
             withdraw_cap,
             trade_cap,
             trader_account,
-            _,
         ) = executor::create_trader_account_components(
             &registry,
             OWNER_ADDRESS,
@@ -292,8 +260,18 @@ fun create_trader_account_constructor_happy_path() {
             object::id(&deposit_cap),
             object::id(&withdraw_cap),
         );
+        assert_emitted!(
+            new_trader_account_created_event(
+                executor::trader_account_id(&trader_account),
+                OWNER_ADDRESS,
+                balance_manager_id,
+                option::some(object::id(&trade_cap)),
+                option::some(object::id(&deposit_cap)),
+                option::some(object::id(&withdraw_cap)),
+            ),
+        );
 
-        return_registry_to_scenario(registry);
+        test_scenario::return_shared(registry);
         transfer::public_share_object(balance_manager);
         transfer::public_transfer(deposit_cap, OWNER_ADDRESS);
         transfer::public_transfer(withdraw_cap, OWNER_ADDRESS);
@@ -312,14 +290,16 @@ fun create_trader_account_constructor_rejects_unauthorized_app() {
 
     test_scenario::next_tx(&mut scenario, ADMIN_ADDRESS);
     {
-        let registry = take_registry_from_scenario(&scenario, registry_id);
+        let registry = test_scenario::take_shared_by_id<registry::Registry>(
+            &scenario,
+            registry_id,
+        );
         let (
             balance_manager,
             deposit_cap,
             withdraw_cap,
             trade_cap,
             trader_account,
-            _,
         ) = executor::create_trader_account_components(
             &registry,
             OWNER_ADDRESS,
@@ -328,7 +308,7 @@ fun create_trader_account_constructor_rejects_unauthorized_app() {
 
         transfer::public_share_object(balance_manager);
         return_caps_to_scenario(&scenario, deposit_cap, withdraw_cap, trade_cap);
-        return_trader_account_to_scenario(&scenario, trader_account);
+        test_scenario::return_to_sender(&scenario, trader_account);
     };
     abort
 }
@@ -354,7 +334,7 @@ fun create_trader_account_ptb_happy_path() {
             withdraw_cap,
             trade_cap,
         ) = take_owner_side_trader_account_bundle(&scenario);
-        let balance_manager = take_shared_balance_manager_from_scenario(
+        let balance_manager = test_scenario::take_shared_by_id<balance_manager::BalanceManager>(
             &scenario,
             balance_manager_id,
         );
@@ -367,9 +347,9 @@ fun create_trader_account_ptb_happy_path() {
         );
         assert_eq!(balance_manager::owner(&balance_manager), OWNER_ADDRESS);
 
-        return_shared_balance_manager_to_scenario(balance_manager);
+        test_scenario::return_shared(balance_manager);
         return_caps_to_scenario(&scenario, deposit_cap, withdraw_cap, trade_cap);
-        return_trader_account_to_scenario(&scenario, trader_account);
+        test_scenario::return_to_sender(&scenario, trader_account);
     };
 
     test_scenario::end(scenario);
@@ -383,14 +363,16 @@ fun create_trader_account_ptb_rejects_unauthorized_app() {
 
     test_scenario::next_tx(&mut scenario, ADMIN_ADDRESS);
     {
-        let registry = take_registry_from_scenario(&scenario, registry_id);
+        let registry = test_scenario::take_shared_by_id<registry::Registry>(
+            &scenario,
+            registry_id,
+        );
         let (
             balance_manager,
             deposit_cap,
             withdraw_cap,
             trade_cap,
             trader_account,
-            _,
         ) = executor::create_trader_account_components(
             &registry,
             OWNER_ADDRESS,
@@ -398,7 +380,7 @@ fun create_trader_account_ptb_rejects_unauthorized_app() {
         );
         transfer::public_share_object(balance_manager);
         return_caps_to_scenario(&scenario, deposit_cap, withdraw_cap, trade_cap);
-        return_trader_account_to_scenario(&scenario, trader_account);
+        test_scenario::return_to_sender(&scenario, trader_account);
     };
     abort
 }
@@ -418,7 +400,10 @@ fun register_balance_manager_happy_path() {
 
     test_scenario::next_tx(&mut scenario, OWNER_ADDRESS);
     {
-        let mut registry = take_registry_from_scenario(&scenario, registry_id);
+        let mut registry = test_scenario::take_shared_by_id<registry::Registry>(
+            &scenario,
+            registry_id,
+        );
         let (trader_account, balance_manager) = take_trader_account_and_bound_balance_manager(
             &scenario,
             balance_manager_id,
@@ -436,9 +421,9 @@ fun register_balance_manager_happy_path() {
         );
         assert_eq!(vec_set::contains(&balance_manager_ids, &balance_manager_id), true);
 
-        return_registry_to_scenario(registry);
-        return_shared_balance_manager_to_scenario(balance_manager);
-        return_trader_account_to_scenario(&scenario, trader_account);
+        test_scenario::return_shared(registry);
+        test_scenario::return_shared(balance_manager);
+        test_scenario::return_to_sender(&scenario, trader_account);
     };
 
     test_scenario::end(scenario);
@@ -457,7 +442,10 @@ fun register_balance_manager_is_idempotent() {
 
     test_scenario::next_tx(&mut scenario, OWNER_ADDRESS);
     {
-        let mut registry = take_registry_from_scenario(&scenario, registry_id);
+        let mut registry = test_scenario::take_shared_by_id<registry::Registry>(
+            &scenario,
+            registry_id,
+        );
         let (trader_account, balance_manager) = take_trader_account_and_bound_balance_manager(
             &scenario,
             balance_manager_id,
@@ -483,9 +471,9 @@ fun register_balance_manager_is_idempotent() {
         assert_eq!(vec_set::length(&balance_manager_ids), 1);
         assert_eq!(vec_set::contains(&balance_manager_ids, &balance_manager_id), true);
 
-        return_registry_to_scenario(registry);
-        return_shared_balance_manager_to_scenario(balance_manager);
-        return_trader_account_to_scenario(&scenario, trader_account);
+        test_scenario::return_shared(registry);
+        test_scenario::return_shared(balance_manager);
+        test_scenario::return_to_sender(&scenario, trader_account);
     };
 
     test_scenario::end(scenario);
@@ -504,7 +492,10 @@ fun register_balance_manager_rejects_missing_balance_manager_map() {
 
     test_scenario::next_tx(&mut scenario, OWNER_ADDRESS);
     {
-        let mut registry = take_registry_from_scenario(&scenario, registry_id);
+        let mut registry = test_scenario::take_shared_by_id<registry::Registry>(
+            &scenario,
+            registry_id,
+        );
         let (trader_account, balance_manager) = take_trader_account_and_bound_balance_manager(
             &scenario,
             balance_manager_id,
@@ -516,9 +507,9 @@ fun register_balance_manager_rejects_missing_balance_manager_map() {
             test_scenario::ctx(&mut scenario),
         );
 
-        return_registry_to_scenario(registry);
-        return_shared_balance_manager_to_scenario(balance_manager);
-        return_trader_account_to_scenario(&scenario, trader_account);
+        test_scenario::return_shared(registry);
+        test_scenario::return_shared(balance_manager);
+        test_scenario::return_to_sender(&scenario, trader_account);
     };
     abort
 }
@@ -536,12 +527,15 @@ fun register_balance_manager_rejects_non_owner() {
 
     test_scenario::next_tx(&mut scenario, OTHER_ADDRESS);
     {
-        let mut registry = take_registry_from_scenario(&scenario, registry_id);
+        let mut registry = test_scenario::take_shared_by_id<registry::Registry>(
+            &scenario,
+            registry_id,
+        );
         let trader_account = test_scenario::take_from_address<executor::TraderAccount>(
             &scenario,
             OWNER_ADDRESS,
         );
-        let balance_manager = take_shared_balance_manager_from_scenario(
+        let balance_manager = test_scenario::take_shared_by_id<balance_manager::BalanceManager>(
             &scenario,
             balance_manager_id,
         );
@@ -553,8 +547,8 @@ fun register_balance_manager_rejects_non_owner() {
             test_scenario::ctx(&mut scenario),
         );
 
-        return_registry_to_scenario(registry);
-        return_shared_balance_manager_to_scenario(balance_manager);
+        test_scenario::return_shared(registry);
+        test_scenario::return_shared(balance_manager);
         executor::transfer_trader_account_to_owner(trader_account);
     };
     abort
@@ -573,8 +567,11 @@ fun register_balance_manager_rejects_mismatched_balance_manager() {
 
     test_scenario::next_tx(&mut scenario, OWNER_ADDRESS);
     {
-        let mut registry = take_registry_from_scenario(&scenario, registry_id);
-        let trader_account = take_trader_account_from_scenario(&scenario);
+        let mut registry = test_scenario::take_shared_by_id<registry::Registry>(
+            &scenario,
+            registry_id,
+        );
+        let trader_account = test_scenario::take_from_sender<executor::TraderAccount>(&scenario);
         let other_balance_manager = balance_manager::new(
             test_scenario::ctx(&mut scenario),
         );
@@ -586,7 +583,7 @@ fun register_balance_manager_rejects_mismatched_balance_manager() {
             test_scenario::ctx(&mut scenario),
         );
 
-        return_registry_to_scenario(registry);
+        test_scenario::return_shared(registry);
         executor::transfer_trader_account_to_owner(trader_account);
         transfer::public_share_object(other_balance_manager);
     };
