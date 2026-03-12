@@ -4,12 +4,7 @@ module openzeppelin_market_maker::executor_tests;
 
 use deepbook::balance_manager::{Self, BalanceManager};
 use deepbook::registry::{Self, Registry};
-use openzeppelin_market_maker::executor::{
-    Self,
-    PropAmmApp,
-    TraderAccount,
-    new_trader_account_created_event
-};
+use openzeppelin_market_maker::executor::{Self, PropAmmApp, TraderAccount};
 use std::unit_test::{assert_eq, destroy};
 use sui::test_scenario;
 use sui::vec_set;
@@ -17,21 +12,6 @@ use sui::vec_set;
 const ADMIN_ADDRESS: address = @0xA;
 const OWNER_ADDRESS: address = @0xB;
 const OTHER_ADDRESS: address = @0xC;
-
-macro fun assert_emitted<$T>($expected_event: $T) {
-    let events = sui::event::events_by_type<$T>();
-    if (events.length() == 0) {
-        std::debug::print(&b"Assertion failed. No events emitted.".to_string());
-        abort
-    };
-    let emitted = events.any!(|event| event == $expected_event);
-    if (!emitted) {
-        std::debug::print(&b"Assertion failed. Different events emitted:".to_string());
-        std::debug::print(&events);
-        std::debug::print(&b"No matching events".to_string());
-        abort
-    };
-}
 
 fun create_registry(scenario: &mut test_scenario::Scenario): ID {
     scenario.next_tx(ADMIN_ADDRESS);
@@ -78,7 +58,7 @@ fun create_and_publish_trader_account(
     transfer::public_transfer(deposit_cap, owner);
     transfer::public_transfer(withdraw_cap, owner);
     transfer::public_transfer(trade_cap, owner);
-    executor::transfer_trader_account_to_owner(trader_account);
+    transfer::transfer(trader_account, owner);
     transfer::public_share_object(balance_manager);
     test_scenario::return_shared(registry);
 
@@ -111,21 +91,11 @@ fun create_trader_account_components_happy_path() {
     assert_eq!(trader_account.trade_cap_id(), option::some(object::id(&trade_cap)));
     assert_eq!(trader_account.deposit_cap_id(), option::some(object::id(&deposit_cap)));
     assert_eq!(trader_account.withdraw_cap_id(), option::some(object::id(&withdraw_cap)));
-    assert_emitted!(
-        new_trader_account_created_event(
-            trader_account.trader_account_id(),
-            OWNER_ADDRESS,
-            balance_manager.id(),
-            option::some(object::id(&trade_cap)),
-            option::some(object::id(&deposit_cap)),
-            option::some(object::id(&withdraw_cap)),
-        ),
-    );
 
     transfer::public_transfer(deposit_cap, OWNER_ADDRESS);
     transfer::public_transfer(withdraw_cap, OWNER_ADDRESS);
     transfer::public_transfer(trade_cap, OWNER_ADDRESS);
-    executor::transfer_trader_account_to_owner(trader_account);
+    transfer::transfer(trader_account, OWNER_ADDRESS);
     transfer::public_share_object(balance_manager);
     test_scenario::return_shared(registry);
 
@@ -156,7 +126,7 @@ fun create_trader_account_components_rejects_unauthorized_app() {
     transfer::public_transfer(deposit_cap, OWNER_ADDRESS);
     transfer::public_transfer(withdraw_cap, OWNER_ADDRESS);
     transfer::public_transfer(trade_cap, OWNER_ADDRESS);
-    executor::transfer_trader_account_to_owner(trader_account);
+    transfer::transfer(trader_account, OWNER_ADDRESS);
     transfer::public_share_object(balance_manager);
     test_scenario::return_shared(registry);
 
@@ -210,6 +180,7 @@ fun register_balance_manager_rejects_non_owner() {
     scenario.next_tx(OWNER_ADDRESS);
 
     let trader_account: TraderAccount = scenario.take_from_sender();
+    transfer::transfer(trader_account, OTHER_ADDRESS);
 
     scenario.next_tx(OTHER_ADDRESS);
 
