@@ -16,7 +16,7 @@ permissions:
 env:
   NODE_VERSION: "22.21.1"
   PNPM_VERSION: "10"
-  SUI_CLI_VERSION: "1.63.0"
+  SUI_CLI_VERSION: "1.63.1"
   CI: true
 
 jobs:
@@ -112,7 +112,6 @@ jobs:
           if-no-files-found: ignore
 
   security-audit:
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

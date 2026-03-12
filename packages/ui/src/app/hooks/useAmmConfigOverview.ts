@@ -42,7 +42,11 @@ const useAmmConfigOverview = (ammConfigId?: string) => {
       }
     }
 
-    setState({ status: "loading" })
+    setState((previous) => ({
+      ...previous,
+      status: "loading",
+      error: undefined
+    }))
 
     const load = async () => {
       try {
@@ -51,13 +55,14 @@ const useAmmConfigOverview = (ammConfigId?: string) => {
         setState({ status: "success", ammConfig })
       } catch (error) {
         if (!active) return
-        setState({
+        setState((previous) => ({
+          ...previous,
           status: "error",
           error:
             error instanceof Error
               ? error.message
               : "Unable to load AMM config."
-        })
+        }))
       }
     }
 

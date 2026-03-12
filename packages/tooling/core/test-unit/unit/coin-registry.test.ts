@@ -7,6 +7,8 @@ import {
   resolveCurrencyObjectId
 } from "../../src/coin-registry.ts"
 
+const encodeBase64 = (value: string): string => btoa(value)
+
 const dynamicFieldMock = vi.hoisted(() => ({
   getAllDynamicFields: vi.fn()
 }))
@@ -51,13 +53,13 @@ describe("coin registry helpers", () => {
             content: {
               fields: {
                 symbol: {
-                  fields: { bytes: Buffer.from("SUI").toString("base64") }
+                  fields: { bytes: encodeBase64("SUI") }
                 },
                 name: {
-                  fields: { bytes: Buffer.from("Sui").toString("base64") }
+                  fields: { bytes: encodeBase64("Sui") }
                 },
                 description: {
-                  fields: { bytes: Buffer.from("coin").toString("base64") }
+                  fields: { bytes: encodeBase64("coin") }
                 },
                 decimals: 9
               }
