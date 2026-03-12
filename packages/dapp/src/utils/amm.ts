@@ -4,9 +4,17 @@ import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
-import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
-import type { PublishArtifact } from "@sui-amm/tooling-core/types"
+import {
+  resolveAmmAdminCapStoreId,
+  resolveOwnedAmmAdminCapId
+} from "@sui-amm/domain-node/amm"
+import {
+  normalizeIdOrThrow,
+  type ObjectArtifact
+} from "@sui-amm/tooling-core/object"
 import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
+import type { PublishArtifact } from "@sui-amm/tooling-core/types"
+import { resolveSignerAddress } from "@sui-amm/tooling-node/account"
 import {
   findLatestArtifactThat,
   loadDeploymentArtifacts,
@@ -18,6 +26,7 @@ import { logKeyValueGreen, logWarning } from "@sui-amm/tooling-node/log"
 import { resolveFullPackagePath } from "@sui-amm/tooling-node/move"
 import type { MockArtifact } from "./mocks.ts"
 import { mockArtifactPath } from "./mocks.ts"
+import { buildClaimAmmAdminCapTransaction } from "@sui-amm/domain-core/ptb/amm"
 
 export const DEFAULT_PYTH_PRICE_FEED_LABEL = "MOCK_SUI_FEED"
 export const DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID =
@@ -238,4 +247,104 @@ export const logAmmConfigOverview = (
   }
 
   console.log("")
+}
+
+export const claimAmmAdminCapFromStore = async ({
+  tooling,
+  ammPackageId,
+  adminCapStoreId,
+  devInspect,
+  summaryLabel = "claim-amm-admin-cap"
+}: {
+  tooling: Pick<
+    Tooling,
+    | "executeTransactionWithSummary"
+    | "getMutableSharedObject"
+    | "loadedEd25519KeyPair"
+  >
+  ammPackageId: string
+  adminCapStoreId: string
+  devInspect?: boolean
+  summaryLabel?: string
+}) => {
+  const adminCapStore = await tooling.getMutableSharedObject({
+    objectId: adminCapStoreId
+  })
+  const claimTransaction = buildClaimAmmAdminCapTransaction({
+    packageId: ammPackageId,
+    adminCapStore
+  })
+
+  return await tooling.executeTransactionWithSummary({
+    transaction: claimTransaction,
+    signer: tooling.loadedEd25519KeyPair,
+    summaryLabel,
+    devInspect
+  })
+}
+
+export const resolveAmmAdminCapIdOrClaim = async ({
+  tooling,
+  ammPackageId,
+  adminCapId,
+  devInspect,
+  dryRun
+}: {
+  tooling: Pick<
+    Tooling,
+    | "executeTransactionWithSummary"
+    | "getMutableSharedObject"
+    | "loadedEd25519KeyPair"
+    | "network"
+    | "suiClient"
+  >
+  ammPackageId: string
+  adminCapId?: string
+  devInspect?: boolean
+  dryRun?: boolean
+}): Promise<string> => {
+  const trimmedAdminCapId = adminCapId?.trim()
+  if (trimmedAdminCapId)
+    return normalizeIdOrThrow(
+      trimmedAdminCapId,
+      "AMM admin cap id is required; provide --admin-cap-id."
+    )
+
+  const ownerAddress = resolveSignerAddress(tooling.loadedEd25519KeyPair)
+
+  const ownedAdminCapId = await resolveOwnedAmmAdminCapId({
+    ammPackageId,
+    ownerAddress,
+    suiClient: tooling.suiClient
+  })
+  if (ownedAdminCapId) return ownedAdminCapId
+
+  if (dryRun)
+    throw new Error(
+      "AMM admin cap id is required in --dry-run mode. Provide --admin-cap-id or run without --dry-run to claim from the admin cap store."
+    )
+
+  const adminCapStoreId = await resolveAmmAdminCapStoreId({
+    networkName: tooling.network.networkName,
+    ammPackageId,
+    suiClient: tooling.suiClient
+  })
+  await claimAmmAdminCapFromStore({
+    tooling,
+    ammPackageId,
+    adminCapStoreId,
+    devInspect
+  })
+
+  const claimedAdminCapId = await resolveOwnedAmmAdminCapId({
+    suiClient: tooling.suiClient,
+    ammPackageId,
+    ownerAddress
+  })
+  if (!claimedAdminCapId)
+    throw new Error(
+      "Unable to resolve the AMM admin cap after claiming; provide --admin-cap-id and retry."
+    )
+
+  return claimedAdminCapId
 }

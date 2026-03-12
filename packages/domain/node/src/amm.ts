@@ -1,21 +1,32 @@
+import type { SuiClient } from "@mysten/sui/client"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
+  AMM_ADMIN_CAP_STORE_TYPE_SUFFIX,
   AMM_ADMIN_CAP_TYPE_SUFFIX,
   AMM_CONFIG_TYPE_SUFFIX,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
 import { buildCreateAmmConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
-import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
 import {
+  getAllOwnedObjectsByFilter,
+  normalizeIdOrThrow
+} from "@sui-amm/tooling-core/object"
+import type { PublishArtifact } from "@sui-amm/tooling-core/types"
+import {
+  findLatestArtifactThat,
   getLatestDeploymentFromArtifact,
   getLatestObjectFromArtifact,
+  loadDeploymentArtifacts,
   loadObjectArtifacts
 } from "@sui-amm/tooling-node/artifacts"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { doesObjectExist } from "@sui-amm/tooling-node/objects"
-import { requireCreatedArtifactIdBySuffix } from "@sui-amm/tooling-node/transactions"
+import {
+  ensureCreatedObject,
+  requireCreatedArtifactIdBySuffix
+} from "@sui-amm/tooling-node/transactions"
 
 const AMM_PACKAGE_NAME = "openzeppelin_market_maker"
 
@@ -266,4 +277,86 @@ export const createAmmConfigSnapshotFromArgs = async ({
     ...createdAmmConfig,
     pythPriceFeedIdHex: ammConfigInputs.pythPriceFeedIdHex
   }
+}
+
+export const resolveOwnedAmmAdminCapId = async ({
+  ammPackageId,
+  ownerAddress,
+  suiClient
+}: {
+  ammPackageId: string
+  ownerAddress: string
+  suiClient: SuiClient
+}): Promise<string | undefined> => {
+  const adminCaps = await getAllOwnedObjectsByFilter(
+    {
+      ownerAddress,
+      filter: {
+        StructType: `${normalizeSuiObjectId(ammPackageId)}${AMM_ADMIN_CAP_TYPE_SUFFIX}`
+      }
+    },
+    { suiClient }
+  )
+
+  return adminCaps[0]?.objectId
+}
+
+export const resolveAmmAdminCapStoreIdFromPublishDigest = async ({
+  publishDigest,
+  suiClient
+}: {
+  publishDigest: string
+  suiClient: SuiClient
+}): Promise<string> => {
+  const publishTransaction = await suiClient.getTransactionBlock({
+    digest: publishDigest,
+    options: { showObjectChanges: true }
+  })
+
+  return ensureCreatedObject(
+    AMM_ADMIN_CAP_STORE_TYPE_SUFFIX,
+    publishTransaction
+  ).objectId
+}
+
+export const resolveAmmAdminCapStoreId = async ({
+  networkName,
+  ammPackageId,
+  suiClient
+}: {
+  networkName: string
+  ammPackageId: string
+  suiClient: SuiClient
+}): Promise<string> => {
+  const publishArtifact = await resolveAmmPublishArtifactById({
+    networkName,
+    ammPackageId
+  })
+
+  if (!publishArtifact?.digest)
+    throw new Error(
+      "Unable to locate the latest AMM publish artifact; provide --admin-cap-id or re-run publish to refresh deployments."
+    )
+
+  return resolveAmmAdminCapStoreIdFromPublishDigest({
+    publishDigest: publishArtifact.digest,
+    suiClient
+  })
+}
+
+const resolveAmmPublishArtifactById = async ({
+  networkName,
+  ammPackageId
+}: {
+  networkName: string
+  ammPackageId: string
+}): Promise<PublishArtifact | undefined> => {
+  const normalizedPackageId = normalizeSuiObjectId(ammPackageId)
+  const deploymentArtifacts = await loadDeploymentArtifacts(networkName)
+
+  return findLatestArtifactThat(
+    (artifact) =>
+      normalizeSuiObjectId(artifact.packageId) === normalizedPackageId,
+    deploymentArtifacts
+  )
 }

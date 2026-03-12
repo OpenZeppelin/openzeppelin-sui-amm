@@ -17,6 +17,10 @@ export type MockArtifact = Partial<{
     metadataObjectId?: string
     mintedCoinObjectId?: string
   }[]
+  deepbookPackageId: string
+  deepbookTokenPackageId: string
+  deepbookRegistryId: string
+  deepbookAdminCapId: string
 }>
 
 export type CoinArtifact = NonNullable<MockArtifact["coins"]>[number]
