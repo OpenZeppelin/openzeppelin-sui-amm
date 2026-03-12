@@ -9,6 +9,8 @@ import {
   shortenId
 } from "../../../src/utils/formatters.ts"
 
+const encodeBase64 = (value: string): string => btoa(value)
+
 describe("formatters", () => {
   it("parses vector<u8> into number arrays", () => {
     expect(asNumberArray([1, 2, 3])).toEqual([1, 2, 3])
@@ -22,7 +24,7 @@ describe("formatters", () => {
   })
 
   it("reads Move strings from base64 bytes", () => {
-    const bytes = Buffer.from("hello").toString("base64")
+    const bytes = encodeBase64("hello")
     expect(readMoveString({ fields: { bytes } })).toBe("hello")
   })
 

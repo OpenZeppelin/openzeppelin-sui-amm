@@ -11,6 +11,6 @@
     "@sui-amm/tooling-core": "workspace:*",
     "@sui-amm/tooling-node": "workspace:*",
     "@types/node": "^22.19.2",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.0"
   }
 }

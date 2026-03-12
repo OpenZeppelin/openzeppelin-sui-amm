@@ -5,6 +5,7 @@ import type {
   TAmmConfigCardContent,
   TAmmConfigCardViewModel
 } from "../types/TAmmConfigCard"
+import Button from "./Button"
 import CopyableId from "./CopyableId"
 import Loading from "./Loading"
 
@@ -24,6 +25,12 @@ const ConfigTile = ({
         {children}
       </div>
     </div>
+  )
+}
+
+const assertUnreachable = (value: never): never => {
+  throw new Error(
+    `Unhandled AMM config content state: ${JSON.stringify(value)}`
   )
 }
 
@@ -79,28 +86,25 @@ const renderContent = (content: TAmmConfigCardContent) => {
         </div>
       )
     }
-    default:
-      return (
-        <div className="rounded-xl border border-dashed border-slate-300/60 p-4 text-sm text-slate-500 dark:border-slate-100/20 dark:text-slate-200/70">
-          No AMM config loaded yet.
-        </div>
-      )
   }
+
+  return assertUnreachable(content)
 }
 
 const AmmConfigCardView = ({
   title,
   description,
-  networkLabel,
   explorerUrl,
   ammConfigId,
-  content
-}: TAmmConfigCardViewModel) => {
-  const resolvedNetworkLabel =
-    typeof networkLabel === "string" && networkLabel.trim().length > 0
-      ? networkLabel
-      : "unknown network"
-
+  content,
+  onOpenUpdateModal,
+  updateDisabled,
+  updateTooltip
+}: TAmmConfigCardViewModel & {
+  onOpenUpdateModal?: () => void
+  updateDisabled?: boolean
+  updateTooltip?: string
+}) => {
   return (
     <section className="w-full max-w-4xl px-4">
       <div className="rounded-2xl border border-slate-300/80 bg-white/90 shadow-[0_22px_65px_-45px_rgba(15,23,42,0.45)] backdrop-blur-md transition dark:border-slate-50/30 dark:bg-slate-950/70">
@@ -112,10 +116,20 @@ const AmmConfigCardView = ({
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
               {description}
             </p>
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
-              {`Network: ${resolvedNetworkLabel}`}
-            </p>
           </div>
+          {onOpenUpdateModal ? (
+            <div className="ml-auto flex items-center">
+              <Button
+                variant="secondary"
+                size="compact"
+                onClick={onOpenUpdateModal}
+                disabled={updateDisabled}
+                tooltip={updateTooltip}
+              >
+                Update config
+              </Button>
+            </div>
+          ) : undefined}
         </div>
         <div className="space-y-4 px-6 py-5">
           <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
