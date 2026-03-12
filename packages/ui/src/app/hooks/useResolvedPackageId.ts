@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import {
-  CONTRACT_PACKAGE_ID_NOT_DEFINED,
+  CONTRACT_PACKAGE_ID_UNDEFINED,
   CONTRACT_PACKAGE_VARIABLE_NAME
 } from "../config/network"
 import { resolveConfiguredId } from "../helpers/network"
@@ -13,7 +13,7 @@ const useResolvedPackageId = () => {
   const rawPackageId = useNetworkVariable(CONTRACT_PACKAGE_VARIABLE_NAME)
 
   return useMemo(
-    () => resolveConfiguredId(rawPackageId, CONTRACT_PACKAGE_ID_NOT_DEFINED),
+    () => resolveConfiguredId(rawPackageId, CONTRACT_PACKAGE_ID_UNDEFINED),
     [rawPackageId]
   )
 }

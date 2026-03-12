@@ -332,7 +332,7 @@ export const useUpdateAmmConfigModalState = ({
     let failureStage: "prepare" | "execute" | "fetch" | "refresh" = "prepare"
 
     try {
-      const updateInputs = await resolveAmmConfigInputs({
+      const updateInputs = resolveAmmConfigInputs({
         baseSpreadBps: formState.baseSpreadBps.trim(),
         volatilityMultiplierBps: formState.volatilityMultiplierBps.trim(),
         useLaser: formState.useLaser,
@@ -417,6 +417,7 @@ export const useUpdateAmmConfigModalState = ({
           configId,
           suiClient
         )
+        // If refreshedOverview is stale relative to optimisticOverview, keep the optimistic summary/state.
         if (!ammConfigMatches(refreshedOverview, optimisticOverview)) return
         setTransactionState({
           status: "success",

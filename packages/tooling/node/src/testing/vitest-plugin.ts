@@ -1,10 +1,14 @@
-import type { UserConfig } from "vitest/config"
+import type { TestUserConfig } from "vitest/config"
 
-export type ToolingVitestPluginOptions = {
-  test?: UserConfig["test"]
+type ToolingVitestConfig = {
+  test?: TestUserConfig
 }
 
-const DEFAULT_TEST_OPTIONS: NonNullable<UserConfig["test"]> = {
+export type ToolingVitestPluginOptions = {
+  test?: TestUserConfig
+}
+
+const DEFAULT_TEST_OPTIONS: NonNullable<TestUserConfig> = {
   environment: "node",
   restoreMocks: true,
   clearMocks: true,
@@ -12,8 +16,8 @@ const DEFAULT_TEST_OPTIONS: NonNullable<UserConfig["test"]> = {
 }
 
 const mergeTestOptions = (
-  current: UserConfig["test"] | undefined,
-  override: UserConfig["test"] | undefined
+  current: TestUserConfig | undefined,
+  override: TestUserConfig | undefined
 ) => ({
   ...DEFAULT_TEST_OPTIONS,
   ...(current ?? {}),
@@ -24,10 +28,10 @@ export const toolingVitestPlugin = (
   options?: ToolingVitestPluginOptions
 ): {
   name: string
-  config: (config: UserConfig) => Pick<UserConfig, "test">
+  config: (config: ToolingVitestConfig) => Pick<ToolingVitestConfig, "test">
 } => ({
   name: "sui-oracle-market:tooling-vitest",
-  config: (config: UserConfig) => ({
+  config: (config: ToolingVitestConfig) => ({
     test: mergeTestOptions(config.test, options?.test)
   })
 })

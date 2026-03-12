@@ -20,6 +20,12 @@ const AmmConfigCard = () => {
     ? () => setIsUpdateModalOpen(true)
     : undefined
 
+  useEffect(() => {
+    if (isUpdateModalOpen && (!canUpdateConfig || !viewModel.ammConfigId)) {
+      setIsUpdateModalOpen(false)
+    }
+  }, [canUpdateConfig, isUpdateModalOpen, viewModel.ammConfigId])
+
   return (
     <>
       <AmmConfigCardView

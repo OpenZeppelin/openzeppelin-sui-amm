@@ -60,11 +60,12 @@ const ToggleField = ({
     {description ? (
       <span className={modalFieldDescriptionClassName}>{description}</span>
     ) : undefined}
-    <div className="mt-2 flex flex-wrap gap-2">
+    <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={title}>
       <button
         type="button"
         className={toggleButtonClassName(value)}
         onClick={() => onChange(true)}
+        aria-pressed={value}
       >
         {activeLabel}
       </button>
@@ -72,6 +73,7 @@ const ToggleField = ({
         type="button"
         className={toggleButtonClassName(!value)}
         onClick={() => onChange(false)}
+        aria-pressed={!value}
       >
         {inactiveLabel}
       </button>
@@ -252,7 +254,7 @@ const UpdateAmmConfigModal = ({
     onConfigUpdated
   })
 
-  if (!open) return <></>
+  if (!open) return null
 
   if (isSuccessState && transactionSummary) {
     return (

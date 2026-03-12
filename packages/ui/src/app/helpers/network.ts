@@ -1,7 +1,7 @@
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import {
   CONTRACT_MODULE_NAME,
-  CONTRACT_PACKAGE_ID_NOT_DEFINED,
+  CONTRACT_PACKAGE_ID_UNDEFINED,
   DEVNET_CONTRACT_PACKAGE_ID,
   LOCALNET_CONTRACT_PACKAGE_ID,
   MAINNET_CONTRACT_PACKAGE_ID,
@@ -81,7 +81,7 @@ export const supportedNetworks = () => {
     .filter(([, config]) => {
       const packageId = resolveConfiguredId(
         config.packageId,
-        CONTRACT_PACKAGE_ID_NOT_DEFINED
+        CONTRACT_PACKAGE_ID_UNDEFINED
       )
 
       return Boolean(packageId)
