@@ -4,7 +4,7 @@ import { createNetworkConfig } from "@mysten/dapp-kit"
 import { getFullnodeUrl } from "@mysten/sui/client"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import {
-  AMM_CONFIG_ID_NOT_DEFINED,
+  AMM_CONFIG_ID_UNDEFINED,
   AMM_CONFIG_VARIABLE_NAME,
   CONTRACT_PACKAGE_VARIABLE_NAME,
   DEVNET_AMM_CONFIG_ID,
@@ -76,7 +76,8 @@ const useNetworkConfig = () => {
       url: network.rpcUrl,
       variables: {
         [CONTRACT_PACKAGE_VARIABLE_NAME]: network.contractPackageId,
-        [AMM_CONFIG_VARIABLE_NAME]: AMM_CONFIG_ID_NOT_DEFINED,
+        [AMM_CONFIG_VARIABLE_NAME]:
+          network.ammConfigId ?? AMM_CONFIG_ID_UNDEFINED,
         [EXPLORER_URL_VARIABLE_NAME]: network.explorerUrl
       }
     }

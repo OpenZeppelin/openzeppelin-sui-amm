@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import {
-  AMM_CONFIG_ID_NOT_DEFINED,
+  AMM_CONFIG_ID_UNDEFINED,
   AMM_CONFIG_VARIABLE_NAME
 } from "../config/network"
 import { resolveConfiguredId } from "../helpers/network"
@@ -13,7 +13,7 @@ const useResolvedAmmConfigId = () => {
   const rawAmmConfigId = useNetworkVariable(AMM_CONFIG_VARIABLE_NAME)
 
   return useMemo(
-    () => resolveConfiguredId(rawAmmConfigId, AMM_CONFIG_ID_NOT_DEFINED),
+    () => resolveConfiguredId(rawAmmConfigId, AMM_CONFIG_ID_UNDEFINED),
     [rawAmmConfigId]
   )
 }

@@ -1,6 +1,10 @@
 import type { Transaction } from "@mysten/sui/transactions"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
-import { DEFAULT_TX_GAS_BUDGET, MINIMUM_GAS_COIN_BALANCE } from "./constants.ts"
+import {
+  DEFAULT_TX_GAS_BUDGET,
+  MINIMUM_GAS_COIN_BALANCE,
+  SUI_COIN_TYPE
+} from "./constants.ts"
 import type { ToolingCoreContext } from "./context.ts"
 import {
   buildSuiObjectRef,
@@ -88,28 +92,35 @@ export const resolveCoinOwnership = async (
   }
 }
 
-type SuiCoinBalance = {
+export type SuiCoinBalance = {
   coinObjectId: string
   balance: bigint
 }
 
-const selectRichestCoin = (coins: SuiCoinBalance[]) =>
+export const selectRichestCoin = (coins: SuiCoinBalance[]) =>
   coins.reduce<SuiCoinBalance | undefined>((richest, coin) => {
     if (!richest) return coin
     return coin.balance > richest.balance ? coin : richest
   }, undefined)
 
-const fetchSuiCoinBalances = async (
-  { owner }: { owner: string },
+export const fetchCoinBalances = async (
+  {
+    owner,
+    coinType = SUI_COIN_TYPE
+  }: {
+    owner: string
+    coinType?: string
+  },
   { suiClient }: ToolingCoreContext
 ): Promise<SuiCoinBalance[]> => {
+  const normalizedCoinType = normalizeCoinType(coinType)
   const coins: SuiCoinBalance[] = []
   let cursor: string | undefined = undefined
 
   do {
     const page = await suiClient.getCoins({
       owner,
-      coinType: "0x2::sui::SUI",
+      coinType: normalizedCoinType,
       limit: 50,
       cursor
     })
@@ -219,7 +230,7 @@ export const planSuiPaymentSplitTransaction = async (
   if (gasBudget <= 0n)
     throw new Error("Gas budget must be a positive non-zero value.")
 
-  const coins = await fetchSuiCoinBalances({ owner }, { suiClient })
+  const coins = await fetchCoinBalances({ owner }, { suiClient })
   const totalBalance = coins.reduce((total, coin) => total + coin.balance, 0n)
   const gasCoinMinimumBalance = resolveGasCoinMinimumBalance(gasBudget)
   const normalizedPaymentCoinObjectId = paymentCoinObjectId

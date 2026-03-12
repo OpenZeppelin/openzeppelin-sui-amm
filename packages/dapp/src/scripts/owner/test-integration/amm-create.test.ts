@@ -7,7 +7,6 @@ import {
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
-import { extractInitialSharedVersion } from "@sui-amm/tooling-core/shared-object"
 import { createSuiLocalnetTestEnv } from "@sui-amm/tooling-node/testing/env"
 import {
   resolveDappMoveRoot,
@@ -18,6 +17,11 @@ import {
   parseJsonFromScriptOutput
 } from "@sui-amm/tooling-node/testing/scripts"
 import { DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID } from "../../../utils/amm.ts"
+import {
+  resolveKeepTemp,
+  resolveOnChainSharedVersion,
+  resolveWithFaucet
+} from "./test-helpers.ts"
 
 type AmmCreateOutput = {
   adminCapId?: string
@@ -33,10 +37,6 @@ type ObjectArtifact = {
   objectType?: string
   initialSharedVersion?: string
 }
-
-const resolveKeepTemp = () => process.env.SUI_IT_KEEP_TEMP === "1"
-
-const resolveWithFaucet = () => process.env.SUI_IT_WITH_FAUCET !== "0"
 
 const resolveOwnerScriptPath = (scriptName: string) =>
   path.join(
@@ -131,17 +131,10 @@ describe("owner amm-create integration", () => {
         normalizeHex(pythPriceFeedId)
       )
 
-      const objectResponse = await context.suiClient.getObject({
-        id: output.ammConfig.configId,
-        options: { showOwner: true }
-      })
-      if (!objectResponse.data) {
-        throw new Error("AMM config object could not be loaded from localnet.")
-      }
-      const onChainSharedVersion = extractInitialSharedVersion(
-        objectResponse.data
+      const onChainSharedVersion = await resolveOnChainSharedVersion(
+        context,
+        output.ammConfig.configId
       )
-
       expect(onChainSharedVersion).toBe(output.initialSharedVersion)
 
       const objectArtifacts = await readObjectArtifacts(context.artifactsDir)
