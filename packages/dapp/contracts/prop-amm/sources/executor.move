@@ -83,6 +83,32 @@ public(package) fun new_trader_account_created_event(
 
 // === Public Functions ===
 
+/// Creates a trader account, transfers the owner caps, transfers the trader account,
+/// and shares the linked balance manager.
+public fun create_trader_account_with_shared_manager_and_owner_caps(
+    deepbook_registry: &Registry,
+    owner: address,
+    ctx: &mut TxContext,
+) {
+    let (
+        balance_manager,
+        deposit_cap,
+        withdraw_cap,
+        trade_cap,
+        trader_account,
+    ) = create_trader_account_components(
+        deepbook_registry,
+        owner,
+        ctx,
+    );
+
+    transfer::public_transfer(deposit_cap, owner);
+    transfer::public_transfer(withdraw_cap, owner);
+    transfer::public_transfer(trade_cap, owner);
+    transfer_trader_account_to_owner(trader_account);
+    transfer::public_share_object(balance_manager);
+}
+
 /// Registers the balance manager in the DeepBook registry.
 public fun register_balance_manager(
     trader_account: &TraderAccount,
@@ -103,6 +129,15 @@ public fun register_balance_manager(
 public(package) fun transfer_trader_account_to_owner(trader_account: TraderAccount) {
     let owner = trader_account.owner;
     transfer::transfer(trader_account, owner);
+}
+
+#[test_only]
+/// Transfers a trader account to an arbitrary recipient for tests.
+public(package) fun transfer_trader_account_for_testing(
+    trader_account: TraderAccount,
+    recipient: address,
+) {
+    transfer::transfer(trader_account, recipient);
 }
 
 // === Private Functions ===
