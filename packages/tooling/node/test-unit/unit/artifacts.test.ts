@@ -73,6 +73,8 @@ describe("writeArtifact", () => {
           label: string
           coinType: string
           currencyObjectId: string
+          treasuryCapId?: string
+          mintedCoinObjectId?: string
         }[]
         priceFeeds?: {
           label: string
@@ -86,7 +88,8 @@ describe("writeArtifact", () => {
           {
             label: "USDC",
             coinType: "0x1::usdc::USDC",
-            currencyObjectId: "0x1"
+            currencyObjectId: "0x1",
+            treasuryCapId: "0xtreasury"
           }
         ],
         priceFeeds: [
@@ -103,7 +106,8 @@ describe("writeArtifact", () => {
           {
             label: "USDC",
             coinType: "0x1::usdc::USDC",
-            currencyObjectId: "0x2"
+            currencyObjectId: "0x2",
+            mintedCoinObjectId: "0xminted"
           },
           {
             label: "SUI",
@@ -130,7 +134,9 @@ describe("writeArtifact", () => {
           {
             label: "USDC",
             coinType: "0x1::usdc::USDC",
-            currencyObjectId: "0x2"
+            currencyObjectId: "0x2",
+            treasuryCapId: "0xtreasury",
+            mintedCoinObjectId: "0xminted"
           },
           {
             label: "SUI",

@@ -43,6 +43,41 @@ export const dedupeEntriesByKey = <TEntry>(
   return [...dedupedReversed].reverse()
 }
 
+const mergeEntriesByKey = (
+  entries: unknown[],
+  resolveKey: (entry: unknown) => string | undefined
+) => {
+  const mergedEntries: unknown[] = []
+  const keyIndexes = new Map<string, number>()
+
+  entries.forEach((entry) => {
+    const key = resolveKey(entry)
+
+    if (!key) {
+      mergedEntries.push(entry)
+      return
+    }
+
+    const existingIndex = keyIndexes.get(key)
+    if (existingIndex === undefined) {
+      keyIndexes.set(key, mergedEntries.length)
+      mergedEntries.push(entry)
+      return
+    }
+
+    const existingEntry = mergedEntries[existingIndex]
+    mergedEntries[existingIndex] =
+      isRecord(existingEntry) && isRecord(entry)
+        ? {
+            ...existingEntry,
+            ...entry
+          }
+        : entry
+  })
+
+  return mergedEntries
+}
+
 const mergeCollectionField = (
   fieldName: string,
   resolveKey: (entry: unknown) => string | undefined,
@@ -62,7 +97,7 @@ const mergeCollectionField = (
 
   return [
     fieldName,
-    dedupeEntriesByKey(
+    mergeEntriesByKey(
       [...(currentEntries ?? []), ...(nextEntries ?? [])],
       resolveKey
     )
