@@ -21,6 +21,7 @@ import {
   DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID,
   resolveAmmAdminCapIdFromPublishDigest
 } from "../../../utils/amm.ts"
+import { resolveKeepTemp, resolveWithFaucet } from "./test-helpers.ts"
 
 type AmmUpdateOutput = {
   ammConfig?: AmmConfigOverview
@@ -29,10 +30,6 @@ type AmmUpdateOutput = {
   pythPriceFeedIdHex?: string
   transactionSummary?: { label?: string }
 }
-
-const resolveKeepTemp = () => process.env.SUI_IT_KEEP_TEMP === "1"
-
-const resolveWithFaucet = () => process.env.SUI_IT_WITH_FAUCET !== "0"
 
 const UPDATED_PYTH_PRICE_FEED_ID_HEX =
   "0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
