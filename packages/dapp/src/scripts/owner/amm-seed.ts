@@ -8,7 +8,8 @@ import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
   DEFAULT_BASE_SPREAD_BPS,
-  DEFAULT_VOLATILITY_MULTIPLIER_BPS
+  DEFAULT_VOLATILITY_MULTIPLIER_BPS,
+  resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
 import {
   type AmmConfigSnapshot,
@@ -16,6 +17,7 @@ import {
   createAmmConfigSnapshotFromArgs,
   resolveExistingAmmConfigIdFromArtifacts
 } from "@sui-amm/domain-node/amm"
+import { normalizeHex } from "@sui-amm/tooling-core/hex"
 import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
 import { getLatestDeploymentFromArtifact } from "@sui-amm/tooling-node/artifacts"
 import { withMutedConsole } from "@sui-amm/tooling-node/console"
@@ -97,8 +99,21 @@ const resolveExplicitPackageId = async ({
     )
   }
 
+  const packageMetadata = await tooling.getObjectSafe({
+    objectId: normalizedPackageId,
+    options: { showContent: true }
+  })
+
+  if (packageMetadata?.data?.content?.dataType !== "package") {
+    throw new Error(`AMM package id ${normalizedPackageId} is not a package.`)
+  }
+
   return normalizedPackageId
 }
+
+type ResolvedPackageId =
+  | { status: "ok"; packageId: string }
+  | { status: "stale"; packageId: string }
 
 const resolveExistingPackageId = async ({
   tooling,
@@ -106,7 +121,7 @@ const resolveExistingPackageId = async ({
 }: {
   tooling: Pick<Tooling, "getObjectSafe">
   networkName: string
-}): Promise<string | undefined> => {
+}): Promise<ResolvedPackageId | undefined> => {
   const latestAmmPublishArtifact =
     await getLatestDeploymentFromArtifact(AMM_PACKAGE_NAME)(networkName)
   const packageId = latestAmmPublishArtifact?.packageId
@@ -122,7 +137,14 @@ const resolveExistingPackageId = async ({
   })
 
   if (packageExists) {
-    return normalizedPackageId
+    const packageMetadata = await tooling.getObjectSafe({
+      objectId: normalizedPackageId,
+      options: { showContent: true }
+    })
+
+    if (packageMetadata?.data?.content?.dataType === "package") {
+      return { status: "ok", packageId: normalizedPackageId }
+    }
   }
 
   logWarning(
@@ -131,7 +153,7 @@ const resolveExistingPackageId = async ({
   logKeyValueBlue("artifactPackageId")(normalizedPackageId)
   logKeyValueBlue("network")(networkName)
 
-  return undefined
+  return { status: "stale", packageId: normalizedPackageId }
 }
 
 const shouldUseCliPublish = ({
@@ -144,10 +166,12 @@ const shouldUseCliPublish = ({
 
 const publishAmmPackage = async ({
   tooling,
-  cliArguments
+  cliArguments,
+  clearPublishedEntry
 }: {
   tooling: Tooling
   cliArguments: AmmSeedArguments
+  clearPublishedEntry: boolean
 }) => {
   const targetingLocalnet = tooling.network.networkName === "localnet"
 
@@ -157,7 +181,7 @@ const publishAmmPackage = async ({
     packagePath: resolveAmmPackagePath(tooling),
     withUnpublishedDependencies: targetingLocalnet,
     allowAutoUnpublishedDependencies: targetingLocalnet,
-    clearPublishedEntry: Boolean(cliArguments.rePublish),
+    clearPublishedEntry: Boolean(cliArguments.rePublish) || clearPublishedEntry,
     useCliPublish: shouldUseCliPublish({
       networkName: tooling.network.networkName,
       useCliPublish: cliArguments.useCliPublish
@@ -176,6 +200,7 @@ const resolveOrPublishAmmPackage = async ({
   publishDigest?: string
   didPublish: boolean
 }> => {
+  let shouldClearPublishedEntry = false
   const explicitPackageId = await resolveExplicitPackageId({
     cliArguments,
     tooling
@@ -194,11 +219,15 @@ const resolveOrPublishAmmPackage = async ({
       networkName: tooling.network.networkName
     })
 
-    if (existingPackageId) {
+    if (existingPackageId?.status === "ok") {
       return {
-        ammPackageId: existingPackageId,
+        ammPackageId: existingPackageId.packageId,
         didPublish: false
       }
+    }
+
+    if (existingPackageId?.status === "stale") {
+      shouldClearPublishedEntry = true
     }
   } else {
     logKeyValueYellow("Package")("Re-publish requested; forcing publish.")
@@ -206,7 +235,8 @@ const resolveOrPublishAmmPackage = async ({
 
   const publishArtifact = await publishAmmPackage({
     tooling,
-    cliArguments
+    cliArguments,
+    clearPublishedEntry: shouldClearPublishedEntry
   })
 
   return {
@@ -281,11 +311,91 @@ const resolveOrCreateAmmConfig = async ({
   if (existingAmmConfigId) {
     logKeyValueYellow("Config")("Using existing AMM config.")
 
+    const [ammConfigSnapshot, resolvedAdminCapId, resolvedPythPriceFeedIdHex] =
+      await Promise.all([
+        collectAmmConfigSnapshot({
+          tooling,
+          ammConfigId: existingAmmConfigId
+        }),
+        resolveAdminCapId({
+          tooling,
+          cliArguments,
+          ammPackageId
+        }),
+        resolvePythPriceFeedIdHex({
+          networkName: tooling.network.networkName,
+          pythPriceFeedId: cliArguments.pythPriceFeedId,
+          pythPriceFeedLabel: cliArguments.pythPriceFeedLabel
+        })
+      ])
+
+    const expectedInputs = resolveAmmConfigInputs({
+      pythPriceFeedIdHex: resolvedPythPriceFeedIdHex,
+      volatilityMultiplierBps: cliArguments.volatilityMultiplierBps,
+      baseSpreadBps: cliArguments.baseSpreadBps,
+      useLaser: cliArguments.useLaser
+    })
+
+    const artifactAdminCapId = await resolveAmmAdminCapIdFromArtifacts({
+      tooling,
+      ammPackageId
+    })
+
+    const mismatches: string[] = []
+    const existingOverview = ammConfigSnapshot.ammConfigOverview
+    const expectedBaseSpreadBps = expectedInputs.baseSpreadBps.toString()
+    const expectedVolatilityMultiplierBps =
+      expectedInputs.volatilityMultiplierBps.toString()
+
+    if (
+      normalizeHex(existingOverview.pythPriceFeedIdHex) !==
+      normalizeHex(expectedInputs.pythPriceFeedIdHex)
+    ) {
+      mismatches.push(
+        `pythPriceFeedIdHex expected ${expectedInputs.pythPriceFeedIdHex} but got ${existingOverview.pythPriceFeedIdHex}`
+      )
+    }
+
+    if (existingOverview.baseSpreadBps !== expectedBaseSpreadBps) {
+      mismatches.push(
+        `baseSpreadBps expected ${expectedBaseSpreadBps} but got ${existingOverview.baseSpreadBps}`
+      )
+    }
+
+    if (
+      existingOverview.volatilityMultiplierBps !==
+      expectedVolatilityMultiplierBps
+    ) {
+      mismatches.push(
+        `volatilityMultiplierBps expected ${expectedVolatilityMultiplierBps} but got ${existingOverview.volatilityMultiplierBps}`
+      )
+    }
+
+    if (existingOverview.useLaser !== expectedInputs.useLaser) {
+      mismatches.push(
+        `useLaser expected ${expectedInputs.useLaser} but got ${existingOverview.useLaser}`
+      )
+    }
+
+    if (
+      normalizeSuiObjectId(artifactAdminCapId) !==
+      normalizeSuiObjectId(resolvedAdminCapId)
+    ) {
+      mismatches.push(
+        `adminCapId expected ${resolvedAdminCapId} but got ${artifactAdminCapId}`
+      )
+    }
+
+    if (mismatches.length > 0) {
+      throw new Error(
+        `Existing AMM config does not match requested seed inputs:\n- ${mismatches.join(
+          "\n- "
+        )}`
+      )
+    }
+
     return {
-      ammConfigSnapshot: await collectAmmConfigSnapshot({
-        tooling,
-        ammConfigId: existingAmmConfigId
-      }),
+      ammConfigSnapshot,
       didCreate: false
     }
   }
@@ -446,6 +556,13 @@ runSuiScript(
       description:
         "Package ID for the AMM Move package; inferred from the latest publish entry when omitted.",
       demandOption: false
+    })
+    .option("allowConfigMismatch", {
+      alias: ["allow-config-mismatch"],
+      type: "boolean",
+      description:
+        "Allow reuse of an existing AMM config even when its settings do not match the provided seed inputs.",
+      default: false
     })
     .option("rePublish", {
       alias: ["re-publish"],
