@@ -1,6 +1,6 @@
 // We automatically create/update .env.local with the deployed package ID after deployment.
-export const CONTRACT_PACKAGE_ID_NOT_DEFINED = "0xNOTDEFINED"
-export const AMM_CONFIG_ID_NOT_DEFINED = "0xNOTDEFINED"
+export const CONTRACT_PACKAGE_ID_NOT_DEFINED = "0xUNDEFINED"
+export const AMM_CONFIG_ID_NOT_DEFINED = "0xUNDEFINED"
 export const LOCALNET_CONTRACT_PACKAGE_ID =
   process.env.NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID ||
   CONTRACT_PACKAGE_ID_NOT_DEFINED

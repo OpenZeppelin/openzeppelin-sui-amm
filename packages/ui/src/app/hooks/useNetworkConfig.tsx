@@ -76,7 +76,8 @@ const useNetworkConfig = () => {
       url: network.rpcUrl,
       variables: {
         [CONTRACT_PACKAGE_VARIABLE_NAME]: network.contractPackageId,
-        [AMM_CONFIG_VARIABLE_NAME]: AMM_CONFIG_ID_NOT_DEFINED,
+        [AMM_CONFIG_VARIABLE_NAME]:
+          network.ammConfigId ?? AMM_CONFIG_ID_NOT_DEFINED,
         [EXPLORER_URL_VARIABLE_NAME]: network.explorerUrl
       }
     }
