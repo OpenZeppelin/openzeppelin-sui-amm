@@ -85,6 +85,7 @@ public(package) fun new_trader_account_created_event(
 
 /// Creates a trader account, transfers the owner caps, transfers the trader account,
 /// and shares the linked balance manager.
+#[allow(lint(share_owned))]
 public fun create_trader_account_with_shared_manager_and_owner_caps(
     deepbook_registry: &Registry,
     owner: address,
@@ -129,15 +130,6 @@ public fun register_balance_manager(
 public(package) fun transfer_trader_account_to_owner(trader_account: TraderAccount) {
     let owner = trader_account.owner;
     transfer::transfer(trader_account, owner);
-}
-
-#[test_only]
-/// Transfers a trader account to an arbitrary recipient for tests.
-public(package) fun transfer_trader_account_for_testing(
-    trader_account: TraderAccount,
-    recipient: address,
-) {
-    transfer::transfer(trader_account, recipient);
 }
 
 // === Private Functions ===
@@ -259,4 +251,15 @@ public fun deposit_cap_id(trader_account: &TraderAccount): Option<ID> {
 /// Returns the withdraw cap ID.
 public fun withdraw_cap_id(trader_account: &TraderAccount): Option<ID> {
     trader_account.cap_ids.withdraw_cap_id
+}
+
+// === Test only helpers ===
+
+#[test_only]
+/// Transfers a trader account to an arbitrary recipient for tests.
+public(package) fun transfer_trader_account_for_testing(
+    trader_account: TraderAccount,
+    recipient: address,
+) {
+    transfer::transfer(trader_account, recipient);
 }
