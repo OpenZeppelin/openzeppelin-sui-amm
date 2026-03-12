@@ -17,22 +17,46 @@ This repo is a pnpm workspace containing:
 
 
 ```bash
-# 1) Clone and install
+# Clone and install
 git clone git@github.com:OpenZeppelin/openzeppelin-sui-amm.git && cd openzeppelin-sui-amm
 # (pnpm workspace install from the repo root)
 pnpm install
 
-# 2) Create or reuse an address (this will be your publisher address) (note the recovery phrase to import it later in your browser wallet)
+# Initialize submodules (DeepBook)
+git submodule update --init --recursive
+
+# Create or reuse an address (this will be your publisher address) (note the recovery phrase to import it later in your browser wallet)
 sui client new-address ed25519
 
-# 3) Configure this address in Sui config file or export
+# Configure this address in Sui config file or export
 export SUI_ACCOUNT_ADDRESS=<0x...>
 export SUI_ACCOUNT_PRIVATE_KEY=<base64 or hex>
 
-# 4) Start localnet (new terminal) (--with-faucet is recommended as some script auto fund address if fund is missing)
+# Start localnet (new terminal) (--with-faucet is recommended as some script auto fund address if fund is missing)
 pnpm script chain:localnet:start --with-faucet
 
-# 5) Run the UI
+# Run the UI
 pnpm ui dev
 
+```
+
+## DeepBook submodule
+
+Localnet scripts publish DeepBook from a pinned submodule so development is reproducible.
+
+Setup (once per clone):
+```bash
+git submodule update --init --recursive
+```
+
+If you keep DeepBook elsewhere, you can also pass `--deepbook-contract-path`
+
+Update to a newer DeepBook commit:
+```bash
+cd vendor/deepbookv3
+git fetch
+git checkout <commit-or-tag>
+cd ../..
+git add vendor/deepbookv3 .gitmodules
+git commit -m "chore: update deepbook submodule"
 ```

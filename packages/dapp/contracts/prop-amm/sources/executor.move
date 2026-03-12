@@ -30,7 +30,7 @@ public struct CapIds has copy, drop, store {
 /// Per-trader account state.
 ///
 /// Uses a table to map each pool ID to the trader's active order IDs.
-public struct TraderAccount has key, store {
+public struct TraderAccount has key {
     /// Unique ID for the account object.
     id: UID,
     /// Account owner.
@@ -56,6 +56,12 @@ public fun register_balance_manager(
     assert_balance_manager_matches_account(trader_account, balance_manager);
 
     balance_manager::register_balance_manager(balance_manager, registry, ctx);
+}
+
+/// Transfers a trader account to its embedded owner.
+public(package) fun transfer_trader_account_to_owner(trader_account: TraderAccount) {
+    let owner = trader_account.owner;
+    transfer::transfer(trader_account, owner);
 }
 
 // === Private Functions ===
