@@ -1,6 +1,6 @@
 /**
  * Publishes a Move package and records deployment artifacts (package ID, UpgradeCap, Publisher).
- * Uses test-publish dep-replacements for localnet when configured and can skip if already deployed.
+ * Supports network-aware publish options and can skip when the package is already deployed.
  */
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -211,6 +211,8 @@ const derivePublishOptions = (
   }
 ): ResolvedPublishOptions => {
   const targetingLocalnet = networkName === "localnet"
+  const explicitlyDisabledUnpublishedDependencies =
+    cliArguments.withUnpublishedDependencies === false
 
   if (!targetingLocalnet && cliArguments.withUnpublishedDependencies)
     throw new Error(
@@ -220,7 +222,8 @@ const derivePublishOptions = (
   return {
     withUnpublishedDependencies:
       cliArguments.withUnpublishedDependencies ?? targetingLocalnet,
-    allowAutoUnpublishedDependencies: targetingLocalnet,
+    allowAutoUnpublishedDependencies:
+      targetingLocalnet && !explicitlyDisabledUnpublishedDependencies,
     useCliPublish: cliArguments.useCliPublish ?? true
   }
 }
@@ -231,10 +234,14 @@ runSuiScript(
       clearStaleLocks: cliArguments.clearStaleMoveLocks
     })
 
-    // Resolve the absolute Move package path (relative to repo root or contracts/).
+    // Resolve the absolute Move package path under the configured Move root.
     const fullPackagePath = resolveFullPackagePath(
       path.resolve(tooling.suiConfig.paths.move),
       cliArguments.packagePath
+    )
+    const publishOptions = derivePublishOptions(
+      tooling.suiConfig.network.networkName,
+      cliArguments
     )
 
     if (cliArguments.rePublish) {
@@ -267,11 +274,7 @@ runSuiScript(
     }
 
     // Publish with network-aware options (unpublished deps localnet-only, published deps on shared nets).
-    await publishPackageToNetwork(
-      tooling,
-      fullPackagePath,
-      derivePublishOptions(tooling.suiConfig.network.networkName, cliArguments)
-    )
+    await publishPackageToNetwork(tooling, fullPackagePath, publishOptions)
   },
   yargs()
     .option("packagePath", {

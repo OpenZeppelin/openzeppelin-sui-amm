@@ -19,8 +19,8 @@ import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { logKeyValueGreen, logWarning } from "@sui-amm/tooling-node/log"
 import {
   resolveFullPackagePath,
-  syncMoveTomlDependencyReplacementEntry,
-  syncMoveTomlDependencyPublishedIds
+  syncMoveTomlDependencyPublishedIds,
+  syncMoveTomlDependencyReplacementEntry
 } from "@sui-amm/tooling-node/move"
 import type { MockArtifact } from "./mocks.ts"
 import { mockArtifactPath } from "./mocks.ts"

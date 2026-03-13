@@ -6,7 +6,6 @@ const artifactMocks = vi.hoisted(() => ({
   loadDeploymentArtifacts: vi.fn(),
   loadObjectArtifacts: vi.fn()
 }))
-
 const logMocks = vi.hoisted(() => ({
   logWarning: vi.fn(),
   logKeyValueGreen: vi.fn(() => vi.fn())

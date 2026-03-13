@@ -136,7 +136,8 @@ export const publishPackageWithLog = async (
     gasBudget = DEFAULT_PUBLISH_GAS_BUDGET,
     withUnpublishedDependencies = false,
     useCliPublish = true,
-    allowAutoUnpublishedDependencies = true
+    allowAutoUnpublishedDependencies = true,
+    skipDependencyVerification
   }: {
     packagePath: string
     keypair: Ed25519Keypair
@@ -144,6 +145,7 @@ export const publishPackageWithLog = async (
     withUnpublishedDependencies?: boolean
     useCliPublish?: boolean
     allowAutoUnpublishedDependencies?: boolean
+    skipDependencyVerification?: boolean
   },
   suiContext: ToolingContext
 ): Promise<PublishArtifact[]> => {
@@ -161,7 +163,8 @@ export const publishPackageWithLog = async (
       gasBudget,
       withUnpublishedDependencies,
       useCliPublish,
-      allowAutoUnpublishedDependencies
+      allowAutoUnpublishedDependencies,
+      skipDependencyVerification
     },
     suiContext
   )
@@ -329,7 +332,8 @@ const buildPublishPlan = async (
     gasBudget,
     withUnpublishedDependencies = false,
     useCliPublish = true,
-    allowAutoUnpublishedDependencies = true
+    allowAutoUnpublishedDependencies = true,
+    skipDependencyVerification
   }: {
     network: SuiNetworkConfig
     packagePath: string
@@ -339,6 +343,7 @@ const buildPublishPlan = async (
     withUnpublishedDependencies?: boolean
     useCliPublish?: boolean
     allowAutoUnpublishedDependencies?: boolean
+    skipDependencyVerification?: boolean
   },
   toolingContext: ToolingContext
 ): Promise<PublishPlan> => {
@@ -420,8 +425,9 @@ const buildPublishPlan = async (
     keystorePath: network.account?.keystorePath,
     suiCliVersion: await getSuiCliVersion(),
     skipDependencyVerification:
-      network.networkName === "localnet" &&
-      Boolean(shouldUseUnpublishedDependencies),
+      skipDependencyVerification ??
+      (network.networkName === "localnet" &&
+        Boolean(shouldUseUnpublishedDependencies)),
     packageNames: await resolvePackageNames(
       packagePath,
       unpublishedDependencies
@@ -1056,7 +1062,8 @@ export const publishMovePackageWithFunding = async (
     withUnpublishedDependencies,
     allowAutoUnpublishedDependencies,
     useCliPublish = true,
-    clearPublishedEntry = false
+    clearPublishedEntry = false,
+    skipDependencyVerification
   }: {
     packagePath: string
     gasBudget?: number
@@ -1064,6 +1071,7 @@ export const publishMovePackageWithFunding = async (
     allowAutoUnpublishedDependencies?: boolean
     useCliPublish?: boolean
     clearPublishedEntry?: boolean
+    skipDependencyVerification?: boolean
   },
   toolingContext: ToolingContext
 ): Promise<PublishArtifact> => {
@@ -1097,7 +1105,8 @@ export const publishMovePackageWithFunding = async (
           gasBudget,
           withUnpublishedDependencies,
           useCliPublish,
-          allowAutoUnpublishedDependencies
+          allowAutoUnpublishedDependencies,
+          skipDependencyVerification
         },
         toolingContext
       ),
