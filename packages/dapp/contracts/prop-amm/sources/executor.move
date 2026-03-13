@@ -8,9 +8,9 @@ use sui::table::{Self, Table};
 
 // === Errors ===
 
-#[error]
+#[error(code = 0)]
 const ENotTraderAccountOwner: vector<u8> = b"sender must own the trader account";
-#[error]
+#[error(code = 1)]
 const EBalanceManagerMismatch: vector<u8> = b"balance manager must match the trader account";
 
 // === Structs ===
