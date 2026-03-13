@@ -123,8 +123,8 @@ jobs:
       - name: Set Move package matrix
         id: set-matrix
         run: |
-          packages=$(node --input-type=module -e "import { readdirSync, existsSync } from 'node:fs'; import { join } from 'node:path'; const base = 'packages/dapp/contracts'; const movePackages = readdirSync(base, { withFileTypes: true }).filter((entry) => entry.isDirectory() && existsSync(join(base, entry.name, 'Move.toml'))).map((entry) => `${base}/${entry.name}`); process.stdout.write(JSON.stringify(movePackages));")
-          echo "packages=$packages" >> "$GITHUB_OUTPUT"
+          PACKAGES='["contracts/prop-amm"]'
+          echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
 
   move-tests:
     needs: move-test-matrix

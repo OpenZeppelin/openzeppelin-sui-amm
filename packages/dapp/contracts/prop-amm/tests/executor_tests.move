@@ -270,6 +270,6 @@ fun register_balance_manager_rejects_mismatched_balance_manager() {
     );
 
     transfer::public_share_object(matching_balance_manager);
-    
+
     abort
 }
