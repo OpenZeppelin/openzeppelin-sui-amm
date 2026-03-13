@@ -8,9 +8,9 @@ use sui::table::{Self, Table};
 
 // === Errors ===
 
-#[error]
+#[error(code = 0)]
 const ENotTraderAccountOwner: vector<u8> = b"sender must own the trader account";
-#[error]
+#[error(code = 1)]
 const EBalanceManagerMismatch: vector<u8> = b"balance manager must match the trader account";
 
 // === Structs ===
@@ -31,7 +31,7 @@ public struct CapIds has copy, drop, store {
 /// Per-trader account state.
 ///
 /// Uses a table to map each pool ID to the trader's active order IDs.
-public struct TraderAccount has key {
+public struct TraderAccount has key, store {
     /// Unique ID for the account object.
     id: UID,
     /// Account owner.
@@ -206,13 +206,4 @@ public fun deposit_cap_id(trader_account: &TraderAccount): Option<ID> {
 /// Returns the withdraw cap ID.
 public fun withdraw_cap_id(trader_account: &TraderAccount): Option<ID> {
     trader_account.cap_ids.withdraw_cap_id
-}
-
-#[test_only]
-/// Transfers a trader account to an arbitrary recipient for tests.
-public(package) fun transfer_trader_account_for_testing(
-    trader_account: TraderAccount,
-    recipient: address,
-) {
-    transfer::transfer(trader_account, recipient);
 }

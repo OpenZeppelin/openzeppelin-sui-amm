@@ -9,6 +9,7 @@ use openzeppelin_market_maker::manager::{
     AMMAdminCap,
     AMMConfig
 };
+use openzeppelin_market_maker::test_helpers::assert_emitted;
 use std::unit_test::assert_eq;
 use sui::test_scenario;
 
@@ -22,23 +23,6 @@ fun build_pyth_price_feed_id(byte_value: u8): vector<u8> {
 /// Builds a dummy Pyth feed ID with invalid length.
 fun build_invalid_pyth_price_feed_id(): vector<u8> {
     vector::tabulate!(manager::pyth_price_identifier_length() - 1, |_| 0)
-}
-
-/// Asserts that `expected_event` of type `T` was emitted within current transaction
-/// (before `test_scenario::next_tx`).
-macro fun assert_emitted<$T>($expected_event: $T) {
-    let events = sui::event::events_by_type<$T>();
-    if (events.length() == 0) {
-        std::debug::print(&b"Assertion failed. No events emitted.".to_string());
-        abort
-    };
-    let emitted = events.any!(|event| event == $expected_event);
-    if (!emitted) {
-        std::debug::print(&b"Assertion failed. Different events emitted:".to_string());
-        std::debug::print(&events);
-        std::debug::print(&b"No matching events".to_string());
-        abort
-    };
 }
 
 // === Tests ===
