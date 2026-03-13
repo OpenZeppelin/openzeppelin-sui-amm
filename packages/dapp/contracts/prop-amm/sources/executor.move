@@ -21,11 +21,11 @@ public struct PropAmmApp has drop {}
 /// Balance manager cap IDs owned by the trader account owner.
 public struct CapIds has copy, drop, store {
     /// Trade capability ID.
-    trade_cap_id: Option<ID>,
+    trade_cap_id: ID,
     /// Deposit capability ID.
-    deposit_cap_id: Option<ID>,
+    deposit_cap_id: ID,
     /// Withdraw capability ID.
-    withdraw_cap_id: Option<ID>,
+    withdraw_cap_id: ID,
 }
 
 /// Per-trader account state.
@@ -160,9 +160,9 @@ fun create_cap_ids(
     withdraw_cap: &WithdrawCap,
 ): CapIds {
     CapIds {
-        trade_cap_id: option::some(object::id(trade_cap)),
-        deposit_cap_id: option::some(object::id(deposit_cap)),
-        withdraw_cap_id: option::some(object::id(withdraw_cap)),
+        trade_cap_id: object::id(trade_cap),
+        deposit_cap_id: object::id(deposit_cap),
+        withdraw_cap_id: object::id(withdraw_cap),
     }
 }
 
@@ -194,17 +194,17 @@ public fun active_orders(trader_account: &TraderAccount): &Table<ID, vector<ID>>
 }
 
 /// Returns the trade cap ID.
-public fun trade_cap_id(trader_account: &TraderAccount): Option<ID> {
+public fun trade_cap_id(trader_account: &TraderAccount): ID {
     trader_account.cap_ids.trade_cap_id
 }
 
 /// Returns the deposit cap ID.
-public fun deposit_cap_id(trader_account: &TraderAccount): Option<ID> {
+public fun deposit_cap_id(trader_account: &TraderAccount): ID {
     trader_account.cap_ids.deposit_cap_id
 }
 
 /// Returns the withdraw cap ID.
-public fun withdraw_cap_id(trader_account: &TraderAccount): Option<ID> {
+public fun withdraw_cap_id(trader_account: &TraderAccount): ID {
     trader_account.cap_ids.withdraw_cap_id
 }
 

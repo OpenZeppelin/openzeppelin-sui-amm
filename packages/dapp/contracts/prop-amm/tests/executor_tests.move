@@ -59,9 +59,9 @@ fun assert_owner_cap_ids_match(
     deposit_cap: &DepositCap,
     withdraw_cap: &WithdrawCap,
 ) {
-    assert_eq!(executor::trade_cap_id(trader_account), option::some(object::id(trade_cap)));
-    assert_eq!(executor::deposit_cap_id(trader_account), option::some(object::id(deposit_cap)));
-    assert_eq!(executor::withdraw_cap_id(trader_account), option::some(object::id(withdraw_cap)));
+    assert_eq!(executor::trade_cap_id(trader_account), object::id(trade_cap));
+    assert_eq!(executor::deposit_cap_id(trader_account), object::id(deposit_cap));
+    assert_eq!(executor::withdraw_cap_id(trader_account), object::id(withdraw_cap));
 }
 
 fun assert_registry_contains_expected_managers(
