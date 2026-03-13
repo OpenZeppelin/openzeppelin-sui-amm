@@ -35,9 +35,9 @@ fun init_transfers_admin_cap() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap: AMMAdminCap = test_scenario::take_from_sender(&scenario);
+    let admin_cap: AMMAdminCap = scenario.take_from_sender();
     test_scenario::return_to_sender(&scenario, admin_cap);
-    test_scenario::end(scenario);
+    scenario.end();
 }
 
 #[test]
@@ -52,7 +52,7 @@ fun create_amm_config_shares_config_and_emits_event() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     let config_id = manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
@@ -64,7 +64,7 @@ fun create_amm_config_shares_config_and_emits_event() {
     assert_emitted!(new_amm_config_created_event(config_id));
     scenario.next_tx(sender);
 
-    let config: AMMConfig = test_scenario::take_shared(&scenario);
+    let config: AMMConfig = scenario.take_shared();
 
     assert_eq!(config.base_spread_bps(), base_spread_bps);
     assert_eq!(config.volatility_multiplier_bps(), volatility_multiplier_bps);
@@ -74,7 +74,7 @@ fun create_amm_config_shares_config_and_emits_event() {
 
     test_scenario::return_shared(config);
     test_scenario::return_to_sender(&scenario, admin_cap);
-    test_scenario::end(scenario);
+    scenario.end();
 }
 
 #[test]
@@ -89,7 +89,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
@@ -100,7 +100,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     );
     scenario.next_tx(sender);
 
-    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = scenario.take_shared();
     let updated_base_spread_bps = 35;
     let updated_volatility_multiplier_bps = 300;
     let updated_use_laser = false;
@@ -126,7 +126,7 @@ fun update_amm_config_updates_config_and_emits_event() {
 
     test_scenario::return_shared(config);
     test_scenario::return_to_sender(&scenario, admin_cap);
-    test_scenario::end(scenario);
+    scenario.end();
 }
 
 #[test]
@@ -141,7 +141,7 @@ fun update_amm_config_supports_multiple_updates() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
@@ -152,7 +152,7 @@ fun update_amm_config_supports_multiple_updates() {
     );
     scenario.next_tx(sender);
 
-    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = scenario.take_shared();
     let first_update_pyth_price_feed_id = build_pyth_price_feed_id(1);
 
     config.update_amm_config_and_emit(
@@ -186,7 +186,7 @@ fun update_amm_config_supports_multiple_updates() {
 
     test_scenario::return_shared(config);
     test_scenario::return_to_sender(&scenario, admin_cap);
-    test_scenario::end(scenario);
+    scenario.end();
 }
 
 #[test, expected_failure(abort_code = manager::EInvalidBaseSpreadBps)]
@@ -200,7 +200,7 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     let _config = manager::create_amm_config(
         &admin_cap,
         base_spread_bps,
@@ -226,7 +226,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
@@ -237,7 +237,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     );
     scenario.next_tx(sender);
 
-    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = scenario.take_shared();
 
     config.update_amm_config(
         &admin_cap,
@@ -262,7 +262,7 @@ fun create_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     let _config = manager::create_amm_config(
         &admin_cap,
         base_spread_bps,
@@ -288,7 +288,7 @@ fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
@@ -299,7 +299,7 @@ fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     );
     scenario.next_tx(sender);
 
-    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = scenario.take_shared();
 
     config.update_amm_config(
         &admin_cap,
@@ -324,7 +324,7 @@ fun create_amm_config_rejects_empty_feed_id() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     let _config = manager::create_amm_config(
         &admin_cap,
         base_spread_bps,
@@ -350,7 +350,7 @@ fun update_amm_config_rejects_empty_feed_id() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
@@ -361,7 +361,7 @@ fun update_amm_config_rejects_empty_feed_id() {
     );
     scenario.next_tx(sender);
 
-    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = scenario.take_shared();
 
     config.update_amm_config(
         &admin_cap,
@@ -386,7 +386,7 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     let _config = manager::create_amm_config(
         &admin_cap,
         base_spread_bps,
@@ -412,7 +412,7 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     manager::test_init(scenario.ctx());
     scenario.next_tx(sender);
 
-    let admin_cap = test_scenario::take_from_sender(&scenario);
+    let admin_cap = scenario.take_from_sender();
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
@@ -423,7 +423,7 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     );
     scenario.next_tx(sender);
 
-    let mut config: AMMConfig = test_scenario::take_shared(&scenario);
+    let mut config: AMMConfig = scenario.take_shared();
 
     config.update_amm_config(
         &admin_cap,

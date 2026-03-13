@@ -18,9 +18,9 @@ export type TraderAccountOverview = {
   traderAccountId: string
   ownerAddress: string
   balanceManagerId: string
-  tradeCapId?: string
-  depositCapId?: string
-  withdrawCapId?: string
+  tradeCapId: string
+  depositCapId: string
+  withdrawCapId: string
   activeOrdersTableId?: string
 }
 
@@ -48,23 +48,23 @@ const requireIdField = (value: unknown, label: string): string => {
   return normalized
 }
 
-const resolveCapId = (value: unknown) => normalizeOptionalIdFromValue(value)
+const resolveCapId = (value: unknown, label: string) => {
+  const normalized = normalizeOptionalIdFromValue(value)
+  if (!normalized) throw new Error(`${label} is required.`)
+  return normalized
+}
 
 const resolveCapIds = (capIdsValue: unknown) => {
   const capIdsFields = unwrapMoveFields(capIdsValue)
   if (!capIdsFields) {
-    return {
-      tradeCapId: undefined,
-      depositCapId: undefined,
-      withdrawCapId: undefined
-    }
+    throw new Error("Trader account cap IDs are required.")
   }
 
   const capIds = capIdsFields as TraderAccountCapFields
   return {
-    tradeCapId: resolveCapId(capIds.trade_cap_id),
-    depositCapId: resolveCapId(capIds.deposit_cap_id),
-    withdrawCapId: resolveCapId(capIds.withdraw_cap_id)
+    tradeCapId: resolveCapId(capIds.trade_cap_id, "Trade cap id"),
+    depositCapId: resolveCapId(capIds.deposit_cap_id, "Deposit cap id"),
+    withdrawCapId: resolveCapId(capIds.withdraw_cap_id, "Withdraw cap id")
   }
 }
 
@@ -88,7 +88,7 @@ const buildTraderAccountOverviewFromObject = ({
     tradeCapId: capIds.tradeCapId,
     depositCapId: capIds.depositCapId,
     withdrawCapId: capIds.withdrawCapId,
-    activeOrdersTableId: resolveCapId(fields.active_orders)
+    activeOrdersTableId: normalizeOptionalIdFromValue(fields.active_orders)
   }
 }
 
