@@ -1,4 +1,5 @@
 import type { SuiClient } from "@mysten/sui/client"
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
 
 import { getAllDynamicFields } from "@sui-amm/tooling-core/dynamic-fields"
 import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
@@ -96,27 +97,18 @@ export const resolveDeepbookAdminCapId = (
 export const resolvePropAmmAppType = (ammPackageId: string) =>
   `${ammPackageId}${PROP_AMM_EXECUTOR_SUFFIX}`
 
-export const resolvePropAmmAppKeyType = ({
-  deepbookPackageId,
-  ammPackageId
-}: {
-  deepbookPackageId: string
-  ammPackageId: string
-}) =>
-  `${deepbookPackageId}::registry::AppKey<${resolvePropAmmAppType(ammPackageId)}>`
-
-export const resolveBalanceManagerKeyType = (deepbookPackageId: string) =>
-  `${deepbookPackageId}::registry::BalanceManagerKey`
-
-const hasDynamicFieldType = async ({
+const hasAnyDynamicFieldType = async ({
   suiClient,
   parentObjectId,
-  fieldType
+  fieldTypes
 }: {
   suiClient: SuiClient
   parentObjectId: string
-  fieldType: string
+  fieldTypes: string[]
 }): Promise<boolean> => {
+  const uniqueFieldTypes = [...new Set(fieldTypes)]
+  if (uniqueFieldTypes.length === 0) return false
+
   const dynamicFields = await getAllDynamicFields(
     { parentObjectId },
     { suiClient }
@@ -124,23 +116,62 @@ const hasDynamicFieldType = async ({
 
   return dynamicFields.some(
     (field) =>
-      typeof field.name?.type === "string" && field.name.type === fieldType
+      typeof field.name?.type === "string" &&
+      uniqueFieldTypes.includes(field.name.type)
   )
 }
 
-export const isPropAmmAppAuthorized = async ({
-  suiClient,
-  deepbookRegistryId,
-  appKeyType
+const resolveKnownDeepbookPackageIdCandidates = (
+  deepbookPackageId: string
+): string[] => {
+  const normalizedPackageId = normalizeSuiObjectId(deepbookPackageId)
+
+  const knownPairs = Object.values(DEEPBOOK_PUBLISHED_PACKAGE_IDS_BY_NETWORK)
+  const matchingPair = knownPairs.find(
+    (pair) =>
+      normalizeSuiObjectId(pair.publishedAt) === normalizedPackageId ||
+      normalizeSuiObjectId(pair.originalId) === normalizedPackageId
+  )
+
+  if (!matchingPair) return [normalizedPackageId]
+
+  return [
+    normalizeSuiObjectId(matchingPair.publishedAt),
+    normalizeSuiObjectId(matchingPair.originalId)
+  ]
+}
+
+const buildKeyTypesForKnownDeepbookPackage = ({
+  deepbookPackageId,
+  buildFieldType
 }: {
-  suiClient: SuiClient
-  deepbookRegistryId: string
-  appKeyType: string
-}): Promise<boolean> =>
-  hasDynamicFieldType({
-    suiClient,
-    parentObjectId: deepbookRegistryId,
-    fieldType: appKeyType
+  deepbookPackageId: string
+  buildFieldType: (candidatePackageId: string) => string
+}): string[] =>
+  resolveKnownDeepbookPackageIdCandidates(deepbookPackageId).map(
+    (candidatePackageId) => buildFieldType(candidatePackageId)
+  )
+
+const resolvePropAmmAppKeyTypes = ({
+  deepbookPackageId,
+  ammPackageId
+}: {
+  deepbookPackageId: string
+  ammPackageId: string
+}): string[] =>
+  buildKeyTypesForKnownDeepbookPackage({
+    deepbookPackageId,
+    buildFieldType: (candidatePackageId) =>
+      `${candidatePackageId}::registry::AppKey<${resolvePropAmmAppType(
+        ammPackageId
+      )}>`
+  })
+
+const resolveBalanceManagerKeyTypes = (deepbookPackageId: string): string[] =>
+  buildKeyTypesForKnownDeepbookPackage({
+    deepbookPackageId,
+    buildFieldType: (candidatePackageId) =>
+      `${candidatePackageId}::registry::BalanceManagerKey`
   })
 
 export const isPropAmmAppAuthorizedInRegistry = async ({
@@ -154,10 +185,10 @@ export const isPropAmmAppAuthorizedInRegistry = async ({
   deepbookPackageId: string
   ammPackageId: string
 }): Promise<boolean> =>
-  isPropAmmAppAuthorized({
+  hasAnyDynamicFieldType({
     suiClient,
-    deepbookRegistryId,
-    appKeyType: resolvePropAmmAppKeyType({
+    parentObjectId: deepbookRegistryId,
+    fieldTypes: resolvePropAmmAppKeyTypes({
       deepbookPackageId,
       ammPackageId
     })
@@ -172,8 +203,8 @@ export const isBalanceManagerMapInitialized = async ({
   deepbookRegistryId: string
   deepbookPackageId: string
 }): Promise<boolean> =>
-  hasDynamicFieldType({
+  hasAnyDynamicFieldType({
     suiClient,
     parentObjectId: deepbookRegistryId,
-    fieldType: resolveBalanceManagerKeyType(deepbookPackageId)
+    fieldTypes: resolveBalanceManagerKeyTypes(deepbookPackageId)
   })

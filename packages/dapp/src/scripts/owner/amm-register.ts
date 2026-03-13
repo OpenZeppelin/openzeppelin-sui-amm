@@ -1,5 +1,5 @@
 /**
- * Registers a trader account + balance manager for shared networks (testnet/devnet/mainnet).
+ * Creates a trader account and registers its balance manager for shared networks.
  */
 import yargs from "yargs"
 
@@ -16,17 +16,24 @@ import {
   resolveSignerAddress
 } from "@sui-amm/tooling-node/account"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
-import { logKeyValueGreen } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
-import { resolveAmmAdminCapIdOrClaim } from "../../utils/amm.ts"
+import {
+  assertOwnerMatchesSigner,
+  logRegistrationResult,
+  toRegistrationResultView
+} from "../../utils/deepbook-registration-script.ts"
 import { createTraderAccountAndRegisterBalanceManager } from "../../utils/deepbook-registration.ts"
+import {
+  withAmmPackageIdOption,
+  withCommonRegistrationOptions
+} from "../../utils/register-script-options.ts"
 
 type RegisterAmmCliArgs = {
   ammPackageId?: string
-  adminCapId?: string
   deepbookPackageId?: string
   deepbookRegistryId?: string
   ownerAddress?: string
+  traderAccountId?: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
@@ -68,21 +75,11 @@ runSuiScript(
       tooling.suiConfig.network
     )
     const signerAddress = resolveSignerAddress(tooling.loadedEd25519KeyPair)
-    if (ownerAddress !== signerAddress)
-      throw new Error(
-        "Owner address must match the active signer when registering the balance manager."
-      )
+    assertOwnerMatchesSigner({ ownerAddress, signerAddress })
 
     const ammPackageId = await resolveAmmPackageId({
       networkName: tooling.network.networkName,
       ammPackageId: cliArguments.ammPackageId
-    })
-    const ammAdminCapId = await resolveAmmAdminCapIdOrClaim({
-      tooling,
-      ammPackageId,
-      adminCapId: cliArguments.adminCapId,
-      devInspect: cliArguments.devInspect,
-      dryRun: cliArguments.dryRun
     })
 
     const { deepbookPackageId, deepbookRegistryId } = resolveDeepbookIds({
@@ -118,63 +115,39 @@ runSuiScript(
         tooling,
         ammPackageId,
         deepbookRegistryId,
-        ammAdminCapId,
         ownerAddress,
+        traderAccountId: cliArguments.traderAccountId,
         devInspect: cliArguments.devInspect,
         dryRun: cliArguments.dryRun
       })
 
-    if (!registrationResult) return
+    const registrationResultView = toRegistrationResultView(registrationResult)
 
     if (
       emitJsonOutput(
         {
           ownerAddress,
           ammPackageId,
-          ammAdminCapId,
           deepbookPackageId,
           deepbookRegistryId,
-          traderAccountId: registrationResult.traderAccountId,
-          balanceManagerId: registrationResult.balanceManagerId,
-          transactionSummaries: {
-            createTraderAccount:
-              registrationResult.transactionSummaries.createTraderAccount,
-            registerBalanceManager:
-              registrationResult.transactionSummaries.registerBalanceManager
-          }
+          ...registrationResultView
         },
         cliArguments.json
       )
     )
       return
 
-    logKeyValueGreen("Owner")(ownerAddress)
-    logKeyValueGreen("AMM package")(ammPackageId)
-    logKeyValueGreen("AMM admin cap")(ammAdminCapId)
-    logKeyValueGreen("DeepBook package")(deepbookPackageId)
-    logKeyValueGreen("DeepBook registry")(deepbookRegistryId)
-    logKeyValueGreen("Trader account")(registrationResult.traderAccountId)
-    logKeyValueGreen("Balance manager")(registrationResult.balanceManagerId)
-    logKeyValueGreen("Register summary")(
-      registrationResult.transactionSummaries.registerBalanceManager?.label ??
-        "register-balance-manager"
-    )
+    logRegistrationResult({
+      ownerAddress,
+      ammPackageId,
+      deepbookPackageId,
+      deepbookRegistryId,
+      registrationResult
+    })
   },
-  yargs()
-    .option("ammPackageId", {
-      alias: ["amm-package-id"],
-      type: "string",
-      description:
-        "Package ID for the PropAmm Move package; inferred from the latest publish entry when omitted.",
-      demandOption: false
-    })
-    .option("adminCapId", {
-      alias: ["admin-cap-id"],
-      type: "string",
-      description:
-        "AMM admin cap id; inferred from owned objects or claimed from the admin cap store when omitted.",
-      demandOption: false
-    })
+  withCommonRegistrationOptions(withAmmPackageIdOption(yargs()), {
+    includeDebugAlias: true
+  })
     .option("deepbookPackageId", {
       alias: ["deepbook-package-id"],
       type: "string",
@@ -188,30 +161,6 @@ runSuiScript(
       description:
         "DeepBook registry id (defaults to known mainnet/testnet registry ids when omitted).",
       demandOption: false
-    })
-    .option("ownerAddress", {
-      alias: ["owner-address"],
-      type: "string",
-      description:
-        "Owner address for the trader account; defaults to the active signer.",
-      demandOption: false
-    })
-    .option("devInspect", {
-      alias: ["dev-inspect", "debug"],
-      type: "boolean",
-      default: false,
-      description: "Run a dev-inspect and log VM error details."
-    })
-    .option("dryRun", {
-      alias: ["dry-run"],
-      type: "boolean",
-      default: false,
-      description: "Run dev-inspect and exit without executing transactions."
-    })
-    .option("json", {
-      type: "boolean",
-      default: false,
-      description: "Output results as JSON."
     })
     .strict()
 )

@@ -1,6 +1,6 @@
 /**
- * Localnet registration: authorizes PropAmm in DeepBook, creates a trader account,
- * and registers the balance manager.
+ * Localnet registration: authorizes PropAmm in DeepBook, initializes the balance manager map,
+ * creates a trader account, and registers its balance manager.
  */
 import yargs from "yargs"
 
@@ -23,20 +23,31 @@ import {
   resolveSignerAddress
 } from "@sui-amm/tooling-node/account"
 import { readArtifact } from "@sui-amm/tooling-node/artifacts"
+import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
-import { logKeyValueGreen, logWarning } from "@sui-amm/tooling-node/log"
+import { logWarning } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
-import { resolveAmmAdminCapIdOrClaim } from "../../utils/amm.ts"
+import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
+import {
+  assertOwnerMatchesSigner,
+  logRegistrationResult,
+  toRegistrationResultView,
+  toTransactionSummaryView
+} from "../../utils/deepbook-registration-script.ts"
 import { createTraderAccountAndRegisterBalanceManager } from "../../utils/deepbook-registration.ts"
 import { mockArtifactPath, type MockArtifact } from "../../utils/mocks.ts"
+import {
+  withAmmPackageIdOption,
+  withCommonRegistrationOptions
+} from "../../utils/register-script-options.ts"
 
 type RegisterLocalnetCliArgs = {
   ammPackageId?: string
-  adminCapId?: string
   deepbookPackageId?: string
   deepbookRegistryId?: string
   deepbookAdminCapId?: string
   ownerAddress?: string
+  traderAccountId?: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
@@ -46,6 +57,118 @@ type DeepbookArtifacts = {
   deepbookPackageId: string
   deepbookRegistryId: string
   deepbookAdminCapId: string
+}
+
+const executeSummaryTransaction = async ({
+  tooling,
+  transaction,
+  summaryLabel,
+  devInspect,
+  dryRun
+}: {
+  tooling: Pick<
+    Tooling,
+    "executeTransactionWithSummary" | "loadedEd25519KeyPair"
+  >
+  transaction: Parameters<
+    Tooling["executeTransactionWithSummary"]
+  >[0]["transaction"]
+  summaryLabel: string
+  devInspect?: boolean
+  dryRun?: boolean
+}): Promise<TransactionSummary | undefined> => {
+  const result = await tooling.executeTransactionWithSummary({
+    transaction,
+    signer: tooling.loadedEd25519KeyPair,
+    summaryLabel,
+    devInspect,
+    dryRun
+  })
+
+  return result.summary
+}
+
+const ensureLocalnetDeepbookReady = async ({
+  tooling,
+  deepbookArtifacts,
+  ammPackageId,
+  devInspect,
+  dryRun
+}: {
+  tooling: Pick<
+    Tooling,
+    | "executeTransactionWithSummary"
+    | "getMutableSharedObject"
+    | "loadedEd25519KeyPair"
+    | "suiClient"
+  >
+  deepbookArtifacts: DeepbookArtifacts
+  ammPackageId: string
+  devInspect?: boolean
+  dryRun?: boolean
+}): Promise<{
+  authorizeSummary?: TransactionSummary
+  initSummary?: TransactionSummary
+}> => {
+  const appType = resolvePropAmmAppType(ammPackageId)
+  const alreadyAuthorized = await isPropAmmAppAuthorizedInRegistry({
+    suiClient: tooling.suiClient,
+    deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
+    deepbookPackageId: deepbookArtifacts.deepbookPackageId,
+    ammPackageId
+  })
+
+  let authorizeSummary: TransactionSummary | undefined
+  if (!alreadyAuthorized) {
+    const deepbookRegistry = await tooling.getMutableSharedObject({
+      objectId: deepbookArtifacts.deepbookRegistryId
+    })
+    const authorizeTransaction = buildAuthorizePropAmmAppTransaction({
+      deepbookPackageId: deepbookArtifacts.deepbookPackageId,
+      deepbookRegistry,
+      deepbookAdminCapId: deepbookArtifacts.deepbookAdminCapId,
+      appType
+    })
+    authorizeSummary = await executeSummaryTransaction({
+      tooling,
+      transaction: authorizeTransaction,
+      summaryLabel: "authorize-prop-amm",
+      devInspect,
+      dryRun
+    })
+  } else {
+    logWarning("PropAmmApp already authorized in DeepBook registry; skipping.")
+  }
+
+  const balanceManagerMapInitialized = await isBalanceManagerMapInitialized({
+    suiClient: tooling.suiClient,
+    deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
+    deepbookPackageId: deepbookArtifacts.deepbookPackageId
+  })
+
+  let initSummary: TransactionSummary | undefined
+  if (!balanceManagerMapInitialized) {
+    const deepbookRegistry = await tooling.getMutableSharedObject({
+      objectId: deepbookArtifacts.deepbookRegistryId
+    })
+    const initTransaction = buildInitBalanceManagerMapTransaction({
+      deepbookPackageId: deepbookArtifacts.deepbookPackageId,
+      deepbookRegistry,
+      deepbookAdminCapId: deepbookArtifacts.deepbookAdminCapId
+    })
+    initSummary = await executeSummaryTransaction({
+      tooling,
+      transaction: initTransaction,
+      summaryLabel: "init-balance-manager-map",
+      devInspect,
+      dryRun
+    })
+  }
+
+  return {
+    authorizeSummary,
+    initSummary
+  }
 }
 
 const resolveDeepbookArtifacts = async (
@@ -91,106 +214,50 @@ runSuiScript(
       cliArguments.ownerAddress,
       tooling.suiConfig.network
     )
+    assertOwnerMatchesSigner({ ownerAddress, signerAddress })
 
     const ammPackageId = await resolveAmmPackageId({
       networkName: tooling.network.networkName,
       ammPackageId: cliArguments.ammPackageId
     })
-    const ammAdminCapId = await resolveAmmAdminCapIdOrClaim({
-      tooling,
-      ammPackageId,
-      adminCapId: cliArguments.adminCapId
-    })
     const deepbookArtifacts = await resolveDeepbookArtifacts(cliArguments)
 
-    const appType = resolvePropAmmAppType(ammPackageId)
-    const alreadyAuthorized = await isPropAmmAppAuthorizedInRegistry({
-      suiClient: tooling.suiClient,
-      deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
-      deepbookPackageId: deepbookArtifacts.deepbookPackageId,
-      ammPackageId
-    })
-
-    let authorizeSummary: { label?: string } | undefined
-    if (!alreadyAuthorized) {
-      const deepbookRegistry = await tooling.getMutableSharedObject({
-        objectId: deepbookArtifacts.deepbookRegistryId
-      })
-      const authorizeTransaction = buildAuthorizePropAmmAppTransaction({
-        deepbookPackageId: deepbookArtifacts.deepbookPackageId,
-        deepbookRegistry,
-        deepbookAdminCapId: deepbookArtifacts.deepbookAdminCapId,
-        appType
-      })
-      const authorizeResult = await tooling.executeTransactionWithSummary({
-        transaction: authorizeTransaction,
-        signer: tooling.loadedEd25519KeyPair,
-        summaryLabel: "authorize-prop-amm",
+    const { authorizeSummary, initSummary } = await ensureLocalnetDeepbookReady(
+      {
+        tooling,
+        deepbookArtifacts,
+        ammPackageId,
         devInspect: cliArguments.devInspect,
         dryRun: cliArguments.dryRun
-      })
-      authorizeSummary = authorizeResult?.summary
-    } else {
-      logWarning(
-        "PropAmmApp already authorized in DeepBook registry; skipping."
-      )
-    }
-
-    const balanceManagerMapInitialized = await isBalanceManagerMapInitialized({
-      suiClient: tooling.suiClient,
-      deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
-      deepbookPackageId: deepbookArtifacts.deepbookPackageId
-    })
-
-    if (!balanceManagerMapInitialized) {
-      const deepbookRegistry = await tooling.getMutableSharedObject({
-        objectId: deepbookArtifacts.deepbookRegistryId
-      })
-      const initTransaction = buildInitBalanceManagerMapTransaction({
-        deepbookPackageId: deepbookArtifacts.deepbookPackageId,
-        deepbookRegistry,
-        deepbookAdminCapId: deepbookArtifacts.deepbookAdminCapId
-      })
-      await tooling.executeTransactionWithSummary({
-        transaction: initTransaction,
-        signer: tooling.loadedEd25519KeyPair,
-        summaryLabel: "init-balance-manager-map",
-        devInspect: cliArguments.devInspect,
-        dryRun: cliArguments.dryRun
-      })
-    }
+      }
+    )
 
     const registrationResult =
       await createTraderAccountAndRegisterBalanceManager({
         tooling,
         ammPackageId,
         deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
-        ammAdminCapId,
         ownerAddress,
+        traderAccountId: cliArguments.traderAccountId,
         devInspect: cliArguments.devInspect,
         dryRun: cliArguments.dryRun
       })
 
-    if (!registrationResult)
-      throw new Error("Failed to create the trader account.")
+    const registrationResultView = toRegistrationResultView(registrationResult)
 
     if (
       emitJsonOutput(
         {
           ownerAddress,
           ammPackageId,
-          ammAdminCapId,
           deepbookPackageId: deepbookArtifacts.deepbookPackageId,
           deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
           deepbookAdminCapId: deepbookArtifacts.deepbookAdminCapId,
-          traderAccountId: registrationResult.traderAccountId,
-          balanceManagerId: registrationResult.balanceManagerId,
+          ...registrationResultView,
           transactionSummaries: {
-            authorize: authorizeSummary,
-            createTraderAccount:
-              registrationResult.transactionSummaries.createTraderAccount,
-            registerBalanceManager:
-              registrationResult.transactionSummaries.registerBalanceManager
+            authorize: toTransactionSummaryView(authorizeSummary),
+            initBalanceManagerMap: toTransactionSummaryView(initSummary),
+            ...registrationResultView.transactionSummaries
           }
         },
         cliArguments.json
@@ -198,27 +265,15 @@ runSuiScript(
     )
       return
 
-    logKeyValueGreen("Owner")(ownerAddress)
-    logKeyValueGreen("AMM package")(ammPackageId)
-    logKeyValueGreen("AMM admin cap")(ammAdminCapId)
-    logKeyValueGreen("DeepBook package")(deepbookArtifacts.deepbookPackageId)
-    logKeyValueGreen("DeepBook registry")(deepbookArtifacts.deepbookRegistryId)
-    logKeyValueGreen("Trader account")(registrationResult.traderAccountId)
-    logKeyValueGreen("Balance manager")(registrationResult.balanceManagerId)
+    logRegistrationResult({
+      ownerAddress,
+      ammPackageId,
+      deepbookPackageId: deepbookArtifacts.deepbookPackageId,
+      deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
+      registrationResult
+    })
   },
-  yargs()
-    .option("ammPackageId", {
-      alias: ["amm-package-id"],
-      type: "string",
-      description:
-        "Package ID for the PropAmm Move package; inferred from the latest publish entry when omitted."
-    })
-    .option("adminCapId", {
-      alias: ["admin-cap-id"],
-      type: "string",
-      description:
-        "AMM admin cap id; inferred from owned objects or claimed from the admin cap store when omitted."
-    })
+  withCommonRegistrationOptions(withAmmPackageIdOption(yargs()))
     .option("deepbookPackageId", {
       alias: ["deepbook-package-id"],
       type: "string",
@@ -236,29 +291,6 @@ runSuiScript(
       type: "string",
       description:
         "DeepBook admin cap id; inferred from mock artifacts when omitted."
-    })
-    .option("ownerAddress", {
-      alias: ["owner-address"],
-      type: "string",
-      description:
-        "Owner address for the trader account; defaults to the active signer."
-    })
-    .option("devInspect", {
-      alias: ["dev-inspect"],
-      type: "boolean",
-      default: false,
-      description: "Run a dev-inspect and log VM error details."
-    })
-    .option("dryRun", {
-      alias: ["dry-run"],
-      type: "boolean",
-      default: false,
-      description: "Run dev-inspect and exit without executing transactions."
-    })
-    .option("json", {
-      type: "boolean",
-      default: false,
-      description: "Output results as JSON."
     })
     .strict()
 )

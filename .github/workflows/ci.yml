@@ -92,6 +92,8 @@ jobs:
       SUI_IT_KEEP_TEMP: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/setup-sui
       - name: Run ${{ matrix.name }} integration tests

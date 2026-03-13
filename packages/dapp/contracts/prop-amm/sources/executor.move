@@ -50,35 +50,6 @@ public struct TraderAccount has key {
 public struct TraderAccountCreatedEvent has copy, drop {
     /// ID of the trader account object.
     trader_account_id: ID,
-    /// Owner of the trader account.
-    owner: address,
-    /// Linked DeepBook balance manager ID.
-    balance_manager_id: ID,
-    /// Trade capability ID retained by the owner.
-    trade_cap_id: Option<ID>,
-    /// Deposit capability ID retained by the owner.
-    deposit_cap_id: Option<ID>,
-    /// Withdraw capability ID retained by the owner.
-    withdraw_cap_id: Option<ID>,
-}
-
-/// Builds a `TraderAccountCreatedEvent` payload.
-public(package) fun new_trader_account_created_event(
-    trader_account_id: ID,
-    owner: address,
-    balance_manager_id: ID,
-    trade_cap_id: Option<ID>,
-    deposit_cap_id: Option<ID>,
-    withdraw_cap_id: Option<ID>,
-): TraderAccountCreatedEvent {
-    TraderAccountCreatedEvent {
-        trader_account_id,
-        owner,
-        balance_manager_id,
-        trade_cap_id,
-        deposit_cap_id,
-        withdraw_cap_id,
-    }
 }
 
 // === Public Functions ===
@@ -106,7 +77,7 @@ public fun create_trader_account_with_shared_manager_and_owner_caps(
     transfer::public_transfer(deposit_cap, owner);
     transfer::public_transfer(withdraw_cap, owner);
     transfer::public_transfer(trade_cap, owner);
-    transfer_trader_account_to_owner(trader_account);
+    transfer::transfer(trader_account, owner);
     transfer::public_share_object(balance_manager);
 }
 
@@ -124,12 +95,6 @@ public fun register_balance_manager(
     );
 
     balance_manager::register_balance_manager(balance_manager, registry, ctx);
-}
-
-/// Transfers a trader account to its embedded owner.
-public(package) fun transfer_trader_account_to_owner(trader_account: TraderAccount) {
-    let owner = trader_account.owner;
-    transfer::transfer(trader_account, owner);
 }
 
 // === Private Functions ===
@@ -173,9 +138,6 @@ public(package) fun create_trader_account(
     cap_ids: CapIds,
     ctx: &mut TxContext,
 ): TraderAccount {
-    let trade_cap_id = cap_ids.trade_cap_id;
-    let deposit_cap_id = cap_ids.deposit_cap_id;
-    let withdraw_cap_id = cap_ids.withdraw_cap_id;
     let trader_account = TraderAccount {
         id: object::new(ctx),
         owner,
@@ -184,16 +146,9 @@ public(package) fun create_trader_account(
         active_orders: table::new(ctx),
     };
 
-    event::emit(
-        new_trader_account_created_event(
-            trader_account_id(&trader_account),
-            owner,
-            balance_manager_id,
-            trade_cap_id,
-            deposit_cap_id,
-            withdraw_cap_id,
-        ),
-    );
+    event::emit(TraderAccountCreatedEvent {
+        trader_account_id: trader_account_id(&trader_account),
+    });
 
     trader_account
 }
@@ -252,8 +207,6 @@ public fun deposit_cap_id(trader_account: &TraderAccount): Option<ID> {
 public fun withdraw_cap_id(trader_account: &TraderAccount): Option<ID> {
     trader_account.cap_ids.withdraw_cap_id
 }
-
-// === Test only helpers ===
 
 #[test_only]
 /// Transfers a trader account to an arbitrary recipient for tests.

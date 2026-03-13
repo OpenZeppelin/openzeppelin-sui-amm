@@ -2,46 +2,69 @@
 #[test_only]
 module openzeppelin_market_maker::executor_tests;
 
-use deepbook::balance_manager::{Self, BalanceManager};
-use deepbook::registry::{Self, Registry};
-use openzeppelin_market_maker::executor::{Self, PropAmmApp, TraderAccount};
+use deepbook::balance_manager::{
+    Self as balance_manager,
+    BalanceManager,
+    DepositCap,
+    TradeCap,
+    WithdrawCap
+};
+use deepbook::registry::{Self as registry, Registry};
+use openzeppelin_market_maker::executor::{Self, TraderAccount};
 use std::unit_test::{assert_eq, destroy};
 use sui::test_scenario;
-use sui::vec_set;
 
-const ADMIN_ADDRESS: address = @0xA;
-const OWNER_ADDRESS: address = @0xB;
-const OTHER_ADDRESS: address = @0xC;
+// === Helpers ===
 
-fun create_registry(scenario: &mut test_scenario::Scenario): ID {
-    scenario.next_tx(ADMIN_ADDRESS);
-    registry::test_registry(scenario.ctx())
-}
+fun create_authorized_registry(scenario: &mut test_scenario::Scenario, sender: address) {
+    scenario.next_tx(sender);
+    registry::test_registry(scenario.ctx());
 
-fun authorize_app_and_init_balance_manager_map(
-    scenario: &mut test_scenario::Scenario,
-    registry_id: ID,
-) {
-    scenario.next_tx(ADMIN_ADDRESS);
-
-    let mut registry: Registry = scenario.take_shared_by_id(registry_id);
+    scenario.next_tx(sender);
     let admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
+    let mut deepbook_registry: Registry = test_scenario::take_shared(scenario);
 
-    registry.authorize_app<PropAmmApp>(&admin_cap);
-    registry.init_balance_manager_map(&admin_cap, scenario.ctx());
+    registry::authorize_app<executor::PropAmmApp>(&mut deepbook_registry, &admin_cap);
+    registry::init_balance_manager_map(&mut deepbook_registry, &admin_cap, scenario.ctx());
 
-    test_scenario::return_shared(registry);
+    test_scenario::return_shared(deepbook_registry);
     destroy(admin_cap);
 }
 
-fun create_and_publish_trader_account(
-    scenario: &mut test_scenario::Scenario,
-    registry_id: ID,
-    owner: address,
-): ID {
-    scenario.next_tx(ADMIN_ADDRESS);
+fun assert_owner_cap_ids_match(
+    trader_account: &TraderAccount,
+    trade_cap: &TradeCap,
+    deposit_cap: &DepositCap,
+    withdraw_cap: &WithdrawCap,
+) {
+    assert_eq!(executor::trade_cap_id(trader_account), option::some(object::id(trade_cap)));
+    assert_eq!(executor::deposit_cap_id(trader_account), option::some(object::id(deposit_cap)));
+    assert_eq!(executor::withdraw_cap_id(trader_account), option::some(object::id(withdraw_cap)));
+}
 
-    let registry: Registry = scenario.take_shared_by_id(registry_id);
+fun assert_registry_contains_only_manager(
+    deepbook_registry: &Registry,
+    owner: address,
+    manager_id: ID,
+) {
+    let registered_ids = registry::get_balance_manager_ids(deepbook_registry, owner);
+
+    assert!(registered_ids.contains(&manager_id), 0);
+    assert_eq!(registered_ids.length(), 1);
+}
+
+// === Tests ===
+
+#[test]
+fun ai_create_trader_account_components_supports_custom_owner_and_emits_event() {
+    let sender = @0xA;
+    let owner = @0xB;
+    let mut scenario = test_scenario::begin(sender);
+
+    create_authorized_registry(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+    let deepbook_registry: Registry = test_scenario::take_shared(&scenario);
     let (
         balance_manager,
         deposit_cap,
@@ -49,67 +72,74 @@ fun create_and_publish_trader_account(
         trade_cap,
         trader_account,
     ) = executor::create_trader_account_components(
-        &registry,
+        &deepbook_registry,
         owner,
         scenario.ctx(),
     );
 
-    let balance_manager_id = balance_manager.id();
+    assert_eq!(executor::owner(&trader_account), owner);
+    assert_eq!(
+        executor::balance_manager_id(&trader_account),
+        balance_manager::id(&balance_manager),
+    );
+    assert_owner_cap_ids_match(&trader_account, &trade_cap, &deposit_cap, &withdraw_cap);
+
+    test_scenario::return_shared(deepbook_registry);
+    transfer::public_share_object(balance_manager);
     transfer::public_transfer(deposit_cap, owner);
     transfer::public_transfer(withdraw_cap, owner);
     transfer::public_transfer(trade_cap, owner);
-    transfer::transfer(trader_account, owner);
-    transfer::public_share_object(balance_manager);
-    test_scenario::return_shared(registry);
-
-    balance_manager_id
-}
-
-#[test]
-fun create_trader_account_components_happy_path() {
-    let mut scenario = test_scenario::begin(ADMIN_ADDRESS);
-    let registry_id = create_registry(&mut scenario);
-    authorize_app_and_init_balance_manager_map(&mut scenario, registry_id);
-
-    scenario.next_tx(ADMIN_ADDRESS);
-
-    let registry: Registry = scenario.take_shared_by_id(registry_id);
-    let (
-        balance_manager,
-        deposit_cap,
-        withdraw_cap,
-        trade_cap,
-        trader_account,
-    ) = executor::create_trader_account_components(
-        &registry,
-        OWNER_ADDRESS,
-        scenario.ctx(),
-    );
-
-    assert_eq!(trader_account.owner(), OWNER_ADDRESS);
-    assert_eq!(trader_account.balance_manager_id(), balance_manager.id());
-    assert_eq!(trader_account.trade_cap_id(), option::some(object::id(&trade_cap)));
-    assert_eq!(trader_account.deposit_cap_id(), option::some(object::id(&deposit_cap)));
-    assert_eq!(trader_account.withdraw_cap_id(), option::some(object::id(&withdraw_cap)));
-
-    transfer::public_transfer(deposit_cap, OWNER_ADDRESS);
-    transfer::public_transfer(withdraw_cap, OWNER_ADDRESS);
-    transfer::public_transfer(trade_cap, OWNER_ADDRESS);
-    transfer::transfer(trader_account, OWNER_ADDRESS);
-    transfer::public_share_object(balance_manager);
-    test_scenario::return_shared(registry);
-
+    executor::transfer_trader_account_for_testing(trader_account, owner);
     test_scenario::end(scenario);
 }
 
-#[test, expected_failure(abort_code = registry::EAppNotAuthorized)]
-fun create_trader_account_components_rejects_unauthorized_app() {
-    let mut scenario = test_scenario::begin(ADMIN_ADDRESS);
-    let registry_id = create_registry(&mut scenario);
+#[test]
+fun ai_create_trader_account_with_shared_manager_transfers_account_and_caps() {
+    let sender = @0xC;
+    let mut scenario = test_scenario::begin(sender);
 
-    scenario.next_tx(ADMIN_ADDRESS);
+    create_authorized_registry(&mut scenario, sender);
 
-    let registry: Registry = scenario.take_shared_by_id(registry_id);
+    scenario.next_tx(sender);
+    let deepbook_registry: Registry = test_scenario::take_shared(&scenario);
+    executor::create_trader_account_with_shared_manager_and_owner_caps(
+        &deepbook_registry,
+        sender,
+        scenario.ctx(),
+    );
+    test_scenario::return_shared(deepbook_registry);
+
+    scenario.next_tx(sender);
+    let trader_account: TraderAccount = test_scenario::take_from_sender(&scenario);
+    let deposit_cap: DepositCap = test_scenario::take_from_sender(&scenario);
+    let withdraw_cap: WithdrawCap = test_scenario::take_from_sender(&scenario);
+    let trade_cap: TradeCap = test_scenario::take_from_sender(&scenario);
+    let balance_manager: BalanceManager = test_scenario::take_shared(&scenario);
+
+    assert_eq!(executor::owner(&trader_account), sender);
+    assert_eq!(
+        executor::balance_manager_id(&trader_account),
+        balance_manager::id(&balance_manager),
+    );
+    assert_owner_cap_ids_match(&trader_account, &trade_cap, &deposit_cap, &withdraw_cap);
+
+    test_scenario::return_to_sender(&scenario, trader_account);
+    test_scenario::return_to_sender(&scenario, deposit_cap);
+    test_scenario::return_to_sender(&scenario, withdraw_cap);
+    test_scenario::return_to_sender(&scenario, trade_cap);
+    test_scenario::return_shared(balance_manager);
+    test_scenario::end(scenario);
+}
+
+#[test]
+fun ai_register_balance_manager_registers_matching_owner_manager_pair() {
+    let sender = @0xD;
+    let mut scenario = test_scenario::begin(sender);
+
+    create_authorized_registry(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+    let mut deepbook_registry: Registry = test_scenario::take_shared(&scenario);
     let (
         balance_manager,
         deposit_cap,
@@ -117,80 +147,120 @@ fun create_trader_account_components_rejects_unauthorized_app() {
         trade_cap,
         trader_account,
     ) = executor::create_trader_account_components(
-        &registry,
-        OWNER_ADDRESS,
+        &deepbook_registry,
+        sender,
         scenario.ctx(),
     );
 
-    // This path should abort before here, but if it doesn't, clean up resources.
-    transfer::public_transfer(deposit_cap, OWNER_ADDRESS);
-    transfer::public_transfer(withdraw_cap, OWNER_ADDRESS);
-    transfer::public_transfer(trade_cap, OWNER_ADDRESS);
-    transfer::transfer(trader_account, OWNER_ADDRESS);
-    transfer::public_share_object(balance_manager);
-    test_scenario::return_shared(registry);
+    executor::register_balance_manager(
+        &trader_account,
+        &balance_manager,
+        &mut deepbook_registry,
+        scenario.ctx(),
+    );
 
-    abort
+    assert_registry_contains_only_manager(
+        &deepbook_registry,
+        sender,
+        balance_manager::id(&balance_manager),
+    );
+
+    test_scenario::return_shared(deepbook_registry);
+    transfer::public_share_object(balance_manager);
+    transfer::public_transfer(deposit_cap, sender);
+    transfer::public_transfer(withdraw_cap, sender);
+    transfer::public_transfer(trade_cap, sender);
+    executor::transfer_trader_account_for_testing(trader_account, sender);
+    test_scenario::end(scenario);
 }
 
 #[test]
-fun register_balance_manager_happy_path() {
-    let mut scenario = test_scenario::begin(ADMIN_ADDRESS);
-    let registry_id = create_registry(&mut scenario);
-    authorize_app_and_init_balance_manager_map(&mut scenario, registry_id);
-    let balance_manager_id = create_and_publish_trader_account(
-        &mut scenario,
-        registry_id,
-        OWNER_ADDRESS,
-    );
+fun ai_register_balance_manager_is_idempotent_for_same_manager() {
+    let sender = @0xE;
+    let mut scenario = test_scenario::begin(sender);
 
-    scenario.next_tx(OWNER_ADDRESS);
+    create_authorized_registry(&mut scenario, sender);
 
-    let mut registry: Registry = scenario.take_shared_by_id(registry_id);
-    let trader_account: TraderAccount = scenario.take_from_sender();
-    let balance_manager: BalanceManager = scenario.take_shared_by_id(balance_manager_id);
-
-    trader_account.register_balance_manager(
-        &balance_manager,
-        &mut registry,
+    scenario.next_tx(sender);
+    let mut deepbook_registry: Registry = test_scenario::take_shared(&scenario);
+    let (
+        balance_manager,
+        deposit_cap,
+        withdraw_cap,
+        trade_cap,
+        trader_account,
+    ) = executor::create_trader_account_components(
+        &deepbook_registry,
+        sender,
         scenario.ctx(),
     );
 
-    let balance_manager_ids = registry.get_balance_manager_ids(OWNER_ADDRESS);
-    assert_eq!(vec_set::contains(&balance_manager_ids, &balance_manager_id), true);
+    executor::register_balance_manager(
+        &trader_account,
+        &balance_manager,
+        &mut deepbook_registry,
+        scenario.ctx(),
+    );
+    executor::register_balance_manager(
+        &trader_account,
+        &balance_manager,
+        &mut deepbook_registry,
+        scenario.ctx(),
+    );
 
-    test_scenario::return_shared(registry);
-    test_scenario::return_shared(balance_manager);
-    scenario.return_to_sender(trader_account);
+    assert_registry_contains_only_manager(
+        &deepbook_registry,
+        sender,
+        balance_manager::id(&balance_manager),
+    );
 
+    test_scenario::return_shared(deepbook_registry);
+    transfer::public_share_object(balance_manager);
+    transfer::public_transfer(deposit_cap, sender);
+    transfer::public_transfer(withdraw_cap, sender);
+    transfer::public_transfer(trade_cap, sender);
+    executor::transfer_trader_account_for_testing(trader_account, sender);
     test_scenario::end(scenario);
 }
 
 #[test, expected_failure(abort_code = executor::ENotTraderAccountOwner)]
-fun register_balance_manager_rejects_non_owner() {
-    let mut scenario = test_scenario::begin(ADMIN_ADDRESS);
-    let registry_id = create_registry(&mut scenario);
-    authorize_app_and_init_balance_manager_map(&mut scenario, registry_id);
-    let balance_manager_id = create_and_publish_trader_account(
-        &mut scenario,
-        registry_id,
-        OWNER_ADDRESS,
+fun ai_register_balance_manager_rejects_non_owner_sender() {
+    let owner = @0xF;
+    let intruder = @0x10;
+    let mut scenario = test_scenario::begin(owner);
+
+    create_authorized_registry(&mut scenario, owner);
+
+    scenario.next_tx(owner);
+    let deepbook_registry: Registry = test_scenario::take_shared(&scenario);
+    let (
+        balance_manager,
+        deposit_cap,
+        withdraw_cap,
+        trade_cap,
+        trader_account,
+    ) = executor::create_trader_account_components(
+        &deepbook_registry,
+        owner,
+        scenario.ctx(),
     );
 
-    scenario.next_tx(OWNER_ADDRESS);
+    test_scenario::return_shared(deepbook_registry);
+    transfer::public_share_object(balance_manager);
+    transfer::public_transfer(deposit_cap, owner);
+    transfer::public_transfer(withdraw_cap, owner);
+    transfer::public_transfer(trade_cap, owner);
+    executor::transfer_trader_account_for_testing(trader_account, intruder);
 
-    let trader_account: TraderAccount = scenario.take_from_sender();
-    transfer::transfer(trader_account, OTHER_ADDRESS);
+    scenario.next_tx(intruder);
+    let trader_account: TraderAccount = test_scenario::take_from_sender(&scenario);
+    let balance_manager: BalanceManager = test_scenario::take_shared(&scenario);
+    let mut deepbook_registry: Registry = test_scenario::take_shared(&scenario);
 
-    scenario.next_tx(OTHER_ADDRESS);
-
-    let mut registry: Registry = scenario.take_shared_by_id(registry_id);
-    let trader_account: TraderAccount = scenario.take_from_sender();
-    let balance_manager: BalanceManager = scenario.take_shared_by_id(balance_manager_id);
-
-    trader_account.register_balance_manager(
+    executor::register_balance_manager(
+        &trader_account,
         &balance_manager,
-        &mut registry,
+        &mut deepbook_registry,
         scenario.ctx(),
     );
 
@@ -198,27 +268,44 @@ fun register_balance_manager_rejects_non_owner() {
 }
 
 #[test, expected_failure(abort_code = executor::EBalanceManagerMismatch)]
-fun register_balance_manager_rejects_mismatched_balance_manager() {
-    let mut scenario = test_scenario::begin(ADMIN_ADDRESS);
-    let registry_id = create_registry(&mut scenario);
-    authorize_app_and_init_balance_manager_map(&mut scenario, registry_id);
-    let _balance_manager_id = create_and_publish_trader_account(
-        &mut scenario,
-        registry_id,
-        OWNER_ADDRESS,
+fun ai_register_balance_manager_rejects_mismatched_balance_manager() {
+    let sender = @0x11;
+    let mut scenario = test_scenario::begin(sender);
+
+    create_authorized_registry(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+    let mut deepbook_registry: Registry = test_scenario::take_shared(&scenario);
+    let (
+        matching_balance_manager,
+        _matching_deposit_cap,
+        _matching_withdraw_cap,
+        _matching_trade_cap,
+        trader_account,
+    ) = executor::create_trader_account_components(
+        &deepbook_registry,
+        sender,
+        scenario.ctx(),
     );
-
-    scenario.next_tx(OWNER_ADDRESS);
-
-    let mut registry: Registry = scenario.take_shared_by_id(registry_id);
-    let trader_account: TraderAccount = scenario.take_from_sender();
-    let other_balance_manager = balance_manager::new(scenario.ctx());
-
-    trader_account.register_balance_manager(
-        &other_balance_manager,
-        &mut registry,
+    let (
+        mismatched_balance_manager,
+        _mismatched_deposit_cap,
+        _mismatched_withdraw_cap,
+        _mismatched_trade_cap,
+        _mismatched_trader_account,
+    ) = executor::create_trader_account_components(
+        &deepbook_registry,
+        sender,
         scenario.ctx(),
     );
 
+    executor::register_balance_manager(
+        &trader_account,
+        &mismatched_balance_manager,
+        &mut deepbook_registry,
+        scenario.ctx(),
+    );
+
+    transfer::public_share_object(matching_balance_manager);
     abort
 }

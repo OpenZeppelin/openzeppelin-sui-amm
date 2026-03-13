@@ -110,7 +110,7 @@ export const getTraderAccountOverview = async (
   })
 }
 
-export const findOwnedTraderAccountId = async ({
+export const findOwnedTraderAccountIds = async ({
   ownerAddress,
   packageId,
   suiClient
@@ -118,7 +118,7 @@ export const findOwnedTraderAccountId = async ({
   ownerAddress: string
   packageId: string
   suiClient: SuiClient
-}): Promise<string | undefined> => {
+}): Promise<string[]> => {
   const objects = await getAllOwnedObjectsByFilter(
     {
       ownerAddress,
@@ -128,8 +128,9 @@ export const findOwnedTraderAccountId = async ({
     { suiClient }
   )
 
-  const traderAccount = objects.find((object) => object.objectId)
-  return traderAccount?.objectId
-    ? normalizeSuiObjectId(traderAccount.objectId)
-    : undefined
+  return objects
+    .flatMap((object) =>
+      object.objectId ? [normalizeSuiObjectId(object.objectId)] : []
+    )
+    .sort((leftId, rightId) => leftId.localeCompare(rightId))
 }
