@@ -91,7 +91,7 @@ fun create_trader_account_components_supports_custom_owner_and_emits_event() {
     transfer::public_transfer(deposit_cap, owner);
     transfer::public_transfer(withdraw_cap, owner);
     transfer::public_transfer(trade_cap, owner);
-    executor::transfer_trader_account_for_testing(trader_account, owner);
+    transfer::public_transfer(trader_account, owner);
     scenario.end();
 }
 
@@ -172,7 +172,7 @@ fun register_balance_manager_registers_matching_owner_manager_pair() {
     transfer::public_transfer(deposit_cap, sender);
     transfer::public_transfer(withdraw_cap, sender);
     transfer::public_transfer(trade_cap, sender);
-    executor::transfer_trader_account_for_testing(trader_account, sender);
+    transfer::public_transfer(trader_account, sender);
     scenario.end();
 }
 
@@ -220,7 +220,7 @@ fun register_balance_manager_is_idempotent_for_same_manager() {
     transfer::public_transfer(deposit_cap, sender);
     transfer::public_transfer(withdraw_cap, sender);
     transfer::public_transfer(trade_cap, sender);
-    executor::transfer_trader_account_for_testing(trader_account, sender);
+    transfer::public_transfer(trader_account, sender);
     
     scenario.end();
 }
@@ -253,7 +253,7 @@ fun register_balance_manager_rejects_non_owner_sender() {
     transfer::public_transfer(deposit_cap, owner);
     transfer::public_transfer(withdraw_cap, owner);
     transfer::public_transfer(trade_cap, owner);
-    executor::transfer_trader_account_for_testing(trader_account, intruder);
+    transfer::public_transfer(trader_account, intruder);
 
     scenario.next_tx(intruder);
 
