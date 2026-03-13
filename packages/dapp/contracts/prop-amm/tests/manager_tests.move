@@ -37,7 +37,7 @@ fun init_transfers_admin_cap() {
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     test_scenario::return_to_sender(&scenario, admin_cap);
-    test_scenario::end(scenario);
+    scenario.end();
 }
 
 #[test]
@@ -74,7 +74,7 @@ fun create_amm_config_shares_config_and_emits_event() {
 
     test_scenario::return_shared(config);
     test_scenario::return_to_sender(&scenario, admin_cap);
-    test_scenario::end(scenario);
+    scenario.end();
 }
 
 #[test]
@@ -126,7 +126,7 @@ fun update_amm_config_updates_config_and_emits_event() {
 
     test_scenario::return_shared(config);
     test_scenario::return_to_sender(&scenario, admin_cap);
-    test_scenario::end(scenario);
+    scenario.end();
 }
 
 #[test]
@@ -186,7 +186,7 @@ fun update_amm_config_supports_multiple_updates() {
 
     test_scenario::return_shared(config);
     test_scenario::return_to_sender(&scenario, admin_cap);
-    test_scenario::end(scenario);
+    scenario.end();
 }
 
 #[test, expected_failure(abort_code = manager::EInvalidBaseSpreadBps)]
