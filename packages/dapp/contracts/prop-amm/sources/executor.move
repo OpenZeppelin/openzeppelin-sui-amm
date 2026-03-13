@@ -147,7 +147,7 @@ public(package) fun create_trader_account(
     };
 
     event::emit(TraderAccountCreatedEvent {
-        trader_account_id: trader_account_id(&trader_account),
+        trader_account_id: trader_account.id.to_inner(),
     });
 
     trader_account
