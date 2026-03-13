@@ -113,27 +113,14 @@ jobs:
             /tmp/sui-it-*/logs/**
           if-no-files-found: ignore
 
-  move-test-matrix:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      packages: ${{ steps.set-matrix.outputs.packages }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set Move package matrix
-        id: set-matrix
-        run: |
-          PACKAGES='["contracts/prop-amm"]'
-          echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
-
   move-tests:
-    needs: move-test-matrix
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJson(needs.move-test-matrix.outputs.packages) }}
+        package:
+          - prop-amm
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
