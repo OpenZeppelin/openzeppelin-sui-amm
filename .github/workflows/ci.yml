@@ -112,21 +112,36 @@ jobs:
             reports/**
             /tmp/sui-it-*/logs/**
           if-no-files-found: ignore
+
+  move-test-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      packages: ${{ steps.set-matrix.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set Move package matrix
+        id: set-matrix
+        run: |
+          packages=$(node --input-type=module -e "import { readdirSync, existsSync } from 'node:fs'; import { join } from 'node:path'; const base = 'packages/dapp/contracts'; const movePackages = readdirSync(base, { withFileTypes: true }).filter((entry) => entry.isDirectory() && existsSync(join(base, entry.name, 'Move.toml'))).map((entry) => `${base}/${entry.name}`); process.stdout.write(JSON.stringify(movePackages));")
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
+
   move-tests:
+    needs: move-test-matrix
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.move-test-matrix.outputs.packages) }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/setup-sui
-      - name: Run Move tests
+      - name: Run Move tests for ${{ matrix.package }}
         run: |
-          for package_path in ./packages/dapp/contracts/*; do
-            if [ -f "$package_path/Move.toml" ]; then
-              sui move test --path "$package_path" --environment test-publish --coverage --trace --test
-              sui move coverage summary --path "$package_path" --environment test-publish --test
-            fi
-          done
+          sui move test --path "${{ matrix.package }}" --environment test-publish --coverage --trace --test
+          sui move coverage summary --path "${{ matrix.package }}" --environment test-publish --test
 
   security-audit:
     runs-on: ubuntu-latest
