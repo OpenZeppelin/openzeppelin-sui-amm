@@ -57,7 +57,7 @@ fun assert_registry_contains_only_manager(
 // === Tests ===
 
 #[test]
-fun ai_create_trader_account_components_supports_custom_owner_and_emits_event() {
+fun create_trader_account_components_supports_custom_owner_and_emits_event() {
     let sender = @0xA;
     let owner = @0xB;
     let mut scenario = test_scenario::begin(sender);
@@ -96,7 +96,7 @@ fun ai_create_trader_account_components_supports_custom_owner_and_emits_event() 
 }
 
 #[test]
-fun ai_create_trader_account_with_shared_manager_transfers_account_and_caps() {
+fun create_trader_account_with_shared_manager_transfers_account_and_caps() {
     let sender = @0xC;
     let mut scenario = test_scenario::begin(sender);
 
@@ -125,16 +125,16 @@ fun ai_create_trader_account_with_shared_manager_transfers_account_and_caps() {
     );
     assert_owner_cap_ids_match(&trader_account, &trade_cap, &deposit_cap, &withdraw_cap);
 
-    test_scenario::return_to_sender(&scenario, trader_account);
-    test_scenario::return_to_sender(&scenario, deposit_cap);
-    test_scenario::return_to_sender(&scenario, withdraw_cap);
-    test_scenario::return_to_sender(&scenario, trade_cap);
+    scenario.return_to_sender( trader_account);
+    scenario.return_to_sender( deposit_cap);
+    scenario.return_to_sender( withdraw_cap);
+    scenario.return_to_sender( trade_cap);
     test_scenario::return_shared(balance_manager);
     scenario.end();
 }
 
 #[test]
-fun ai_register_balance_manager_registers_matching_owner_manager_pair() {
+fun register_balance_manager_registers_matching_owner_manager_pair() {
     let sender = @0xD;
     let mut scenario = test_scenario::begin(sender);
 
@@ -177,7 +177,7 @@ fun ai_register_balance_manager_registers_matching_owner_manager_pair() {
 }
 
 #[test]
-fun ai_register_balance_manager_is_idempotent_for_same_manager() {
+fun register_balance_manager_is_idempotent_for_same_manager() {
     let sender = @0xE;
     let mut scenario = test_scenario::begin(sender);
 
@@ -226,7 +226,7 @@ fun ai_register_balance_manager_is_idempotent_for_same_manager() {
 }
 
 #[test, expected_failure(abort_code = executor::ENotTraderAccountOwner)]
-fun ai_register_balance_manager_rejects_non_owner_sender() {
+fun register_balance_manager_rejects_non_owner_sender() {
     let owner = @0xF;
     let intruder = @0x10;
     let mut scenario = test_scenario::begin(owner);
@@ -271,7 +271,7 @@ fun ai_register_balance_manager_rejects_non_owner_sender() {
 }
 
 #[test, expected_failure(abort_code = executor::EBalanceManagerMismatch)]
-fun ai_register_balance_manager_rejects_mismatched_balance_manager() {
+fun register_balance_manager_rejects_mismatched_balance_manager() {
     let sender = @0x11;
     let mut scenario = test_scenario::begin(sender);
 
