@@ -25,17 +25,6 @@ fun create_authorized_registry(scenario: &mut test_scenario::Scenario, sender: a
     destroy(admin_cap);
 }
 
-fun assert_owner_cap_ids_match(
-    trader_account: &TraderAccount,
-    trade_cap: &TradeCap,
-    deposit_cap: &DepositCap,
-    withdraw_cap: &WithdrawCap,
-) {
-    assert_eq!(executor::trade_cap_id(trader_account), object::id(trade_cap));
-    assert_eq!(executor::deposit_cap_id(trader_account), object::id(deposit_cap));
-    assert_eq!(executor::withdraw_cap_id(trader_account), object::id(withdraw_cap));
-}
-
 #[test]
 fun create_trader_account_supports_custom_owner() {
     let sender = @0xA;
@@ -61,7 +50,9 @@ fun create_trader_account_supports_custom_owner() {
 
     assert_eq!(trader_account.owner(), owner);
     assert_eq!(trader_account.balance_manager_id(), balance_manager::id(&balance_manager));
-    assert_owner_cap_ids_match(&trader_account, &trade_cap, &deposit_cap, &withdraw_cap);
+    assert_eq!(trader_account.trade_cap_id(), object::id(&trade_cap));
+    assert_eq!(trader_account.deposit_cap_id(), object::id(&deposit_cap));
+    assert_eq!(trader_account.withdraw_cap_id(), object::id(&withdraw_cap));
 
     test_scenario::return_shared(deepbook_registry);
     transfer::public_share_object(balance_manager);
@@ -97,7 +88,9 @@ fun create_trader_account_with_shared_manager_transfers_account_and_caps() {
 
     assert_eq!(trader_account.owner(), sender);
     assert_eq!(trader_account.balance_manager_id(), balance_manager::id(&balance_manager));
-    assert_owner_cap_ids_match(&trader_account, &trade_cap, &deposit_cap, &withdraw_cap);
+    assert_eq!(trader_account.trade_cap_id(), object::id(&trade_cap));
+    assert_eq!(trader_account.deposit_cap_id(), object::id(&deposit_cap));
+    assert_eq!(trader_account.withdraw_cap_id(), object::id(&withdraw_cap));
 
     scenario.return_to_sender(trader_account);
     scenario.return_to_sender(deposit_cap);
@@ -277,5 +270,6 @@ fun register_balance_manager_rejects_mismatched_balance_manager() {
     );
 
     transfer::public_share_object(matching_balance_manager);
+    
     abort
 }

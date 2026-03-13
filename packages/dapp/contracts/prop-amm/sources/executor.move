@@ -77,7 +77,7 @@ public fun create_trader_account_with_shared_manager_and_owner_caps(
     transfer::public_transfer(deposit_cap, owner);
     transfer::public_transfer(withdraw_cap, owner);
     transfer::public_transfer(trade_cap, owner);
-    transfer::transfer(trader_account, owner);
+    transfer::public_transfer(trader_account, owner);
     transfer::public_share_object(balance_manager);
 }
 
