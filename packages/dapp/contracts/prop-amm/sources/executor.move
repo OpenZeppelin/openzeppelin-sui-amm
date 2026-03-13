@@ -68,7 +68,7 @@ public fun create_trader_account_with_shared_manager_and_owner_caps(
         withdraw_cap,
         trade_cap,
         trader_account,
-    ) = create_trader_account_components(
+    ) = create_trader_account(
         deepbook_registry,
         owner,
         ctx,
@@ -104,7 +104,7 @@ public fun register_balance_manager(
 /// This is the low-level constructor flow for custom PTB composition.
 /// It returns the created objects without transferring the caps, trader account, or sharing the balance manager.
 /// Requires `PropAmmApp` to be authorized in the DeepBook registry.
-public(package) fun create_trader_account_components(
+public(package) fun create_trader_account(
     deepbook_registry: &Registry,
     owner: address,
     ctx: &mut TxContext,
@@ -121,27 +121,10 @@ public(package) fun create_trader_account_components(
     );
 
     let cap_ids = create_cap_ids(&trade_cap, &deposit_cap, &withdraw_cap);
-    let trader_account = create_trader_account(
-        owner,
-        balance_manager::id(&balance_manager),
-        cap_ids,
-        ctx,
-    );
-
-    (balance_manager, deposit_cap, withdraw_cap, trade_cap, trader_account)
-}
-
-/// Creates a trader account with empty active orders.
-public(package) fun create_trader_account(
-    owner: address,
-    balance_manager_id: ID,
-    cap_ids: CapIds,
-    ctx: &mut TxContext,
-): TraderAccount {
     let trader_account = TraderAccount {
         id: object::new(ctx),
         owner,
-        balance_manager_id,
+        balance_manager_id: balance_manager::id(&balance_manager),
         cap_ids,
         active_orders: table::new(ctx),
     };
@@ -150,7 +133,7 @@ public(package) fun create_trader_account(
         trader_account_id: trader_account_id(&trader_account),
     });
 
-    trader_account
+    (balance_manager, deposit_cap, withdraw_cap, trade_cap, trader_account)
 }
 
 /// Captures the cap IDs for storage in the trader account.

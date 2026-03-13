@@ -115,19 +115,18 @@ jobs:
   move-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      matrix:
-        package:
-          - oracle-market
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/setup-sui
-      - name: Run Move tests (${{ matrix.package }})
+      - name: Run Move tests
         run: |
-          sui move test --path ./packages/dapp/contracts/prop-amm --environment test-publish --coverage --trace --test
-          sui move coverage summary --path ./packages/dapp/contracts/prop-amm --environment test-publish --test
+          for package_path in ./packages/dapp/contracts/*; do
+            if [ -f "$package_path/Move.toml" ]; then
+              sui move test --path "$package_path" --environment test-publish --coverage --trace --test
+              sui move coverage summary --path "$package_path" --environment test-publish --test
+            fi
+          done
 
   security-audit:
     runs-on: ubuntu-latest

@@ -112,7 +112,7 @@ fun create_components_for_owner(
         withdraw_cap,
         trade_cap,
         trader_account,
-    ) = executor::create_trader_account_components(
+    ) = executor::create_trader_account(
         deepbook_registry,
         owner,
         scenario.ctx(),
@@ -161,7 +161,7 @@ fun return_retrieved_trader_account_bundle(
 // === Tests ===
 
 #[test]
-fun ai_create_trader_account_components_supports_custom_owner() {
+fun ai_create_trader_account_supports_custom_owner() {
     let sender = @0xA;
     let owner = @0xB;
     let mut scenario = begin_authorized_scenario(sender);
