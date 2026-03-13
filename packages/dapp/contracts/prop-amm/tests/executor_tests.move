@@ -2,13 +2,7 @@
 #[test_only]
 module openzeppelin_market_maker::executor_tests;
 
-use deepbook::balance_manager::{
-    Self,
-    BalanceManager,
-    DepositCap,
-    TradeCap,
-    WithdrawCap
-};
+use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, WithdrawCap};
 use deepbook::registry::{Self as registry, Registry};
 use openzeppelin_market_maker::executor::{Self, TraderAccount};
 use std::unit_test::{assert_eq, destroy};
@@ -24,34 +18,11 @@ fun create_authorized_registry(scenario: &mut test_scenario::Scenario, sender: a
 
     let admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
     let mut deepbook_registry: Registry = test_scenario::take_shared(scenario);
-
-    registry::authorize_app<executor::PropAmmApp>(&mut deepbook_registry, &admin_cap);
-    registry::init_balance_manager_map(&mut deepbook_registry, &admin_cap, scenario.ctx());
+    deepbook_registry.authorize_app<executor::PropAmmApp>(&admin_cap);
+    deepbook_registry.init_balance_manager_map(&admin_cap, scenario.ctx());
 
     test_scenario::return_shared(deepbook_registry);
     destroy(admin_cap);
-}
-
-fun assert_owner_cap_ids_match(
-    trader_account: &TraderAccount,
-    trade_cap: &TradeCap,
-    deposit_cap: &DepositCap,
-    withdraw_cap: &WithdrawCap,
-) {
-    assert_eq!(executor::trade_cap_id(trader_account), option::some(object::id(trade_cap)));
-    assert_eq!(executor::deposit_cap_id(trader_account), option::some(object::id(deposit_cap)));
-    assert_eq!(executor::withdraw_cap_id(trader_account), option::some(object::id(withdraw_cap)));
-}
-
-fun assert_registry_contains_only_manager(
-    deepbook_registry: &Registry,
-    owner: address,
-    manager_id: ID,
-) {
-    let registered_ids = registry::get_balance_manager_ids(deepbook_registry, owner);
-
-    assert!(registered_ids.contains(&manager_id), 0);
-    assert_eq!(registered_ids.length(), 1);
 }
 
 // === Tests ===
@@ -80,11 +51,10 @@ fun create_trader_account_components_supports_custom_owner_and_emits_event() {
     );
 
     assert_eq!(executor::owner(&trader_account), owner);
-    assert_eq!(
-        trader_account.balance_manager_id(),
-        balance_manager::id(&balance_manager),
-    );
-    assert_owner_cap_ids_match(&trader_account, &trade_cap, &deposit_cap, &withdraw_cap);
+    assert_eq!(trader_account.balance_manager_id(), balance_manager::id(&balance_manager));
+    assert_eq!(trader_account.trade_cap_id(), option::some(object::id(&trade_cap)));
+    assert_eq!(trader_account.deposit_cap_id(), option::some(object::id(&deposit_cap)));
+    assert_eq!(trader_account.withdraw_cap_id(), option::some(object::id(&withdraw_cap)));
 
     test_scenario::return_shared(deepbook_registry);
     transfer::public_share_object(balance_manager);
@@ -119,16 +89,15 @@ fun create_trader_account_with_shared_manager_transfers_account_and_caps() {
     let balance_manager: BalanceManager = test_scenario::take_shared(&scenario);
 
     assert_eq!(executor::owner(&trader_account), sender);
-    assert_eq!(
-        trader_account.balance_manager_id(),
-        balance_manager::id(&balance_manager),
-    );
-    assert_owner_cap_ids_match(&trader_account, &trade_cap, &deposit_cap, &withdraw_cap);
+    assert_eq!(trader_account.balance_manager_id(), balance_manager::id(&balance_manager));
+    assert_eq!(trader_account.trade_cap_id(), option::some(object::id(&trade_cap)));
+    assert_eq!(trader_account.deposit_cap_id(), option::some(object::id(&deposit_cap)));
+    assert_eq!(trader_account.withdraw_cap_id(), option::some(object::id(&withdraw_cap)));
 
-    scenario.return_to_sender( trader_account);
-    scenario.return_to_sender( deposit_cap);
-    scenario.return_to_sender( withdraw_cap);
-    scenario.return_to_sender( trade_cap);
+    scenario.return_to_sender(trader_account);
+    scenario.return_to_sender(deposit_cap);
+    scenario.return_to_sender(withdraw_cap);
+    scenario.return_to_sender(trade_cap);
     test_scenario::return_shared(balance_manager);
     scenario.end();
 }
@@ -141,7 +110,7 @@ fun register_balance_manager_registers_matching_owner_manager_pair() {
     create_authorized_registry(&mut scenario, sender);
 
     scenario.next_tx(sender);
-    
+
     let mut deepbook_registry: Registry = test_scenario::take_shared(&scenario);
     let (
         balance_manager,
@@ -161,11 +130,8 @@ fun register_balance_manager_registers_matching_owner_manager_pair() {
         scenario.ctx(),
     );
 
-    assert_registry_contains_only_manager(
-        &deepbook_registry,
-        sender,
-        balance_manager::id(&balance_manager),
-    );
+    let manager_ids = deepbook_registry.get_balance_manager_ids(sender);
+    assert!(manager_ids.contains(&balance_manager.id()));
 
     test_scenario::return_shared(deepbook_registry);
     transfer::public_share_object(balance_manager);
@@ -209,11 +175,8 @@ fun register_balance_manager_is_idempotent_for_same_manager() {
         scenario.ctx(),
     );
 
-    assert_registry_contains_only_manager(
-        &deepbook_registry,
-        sender,
-        balance_manager::id(&balance_manager),
-    );
+    let manager_ids = deepbook_registry.get_balance_manager_ids(sender);
+    assert!(manager_ids.contains(&balance_manager.id()));
 
     test_scenario::return_shared(deepbook_registry);
     transfer::public_share_object(balance_manager);
@@ -221,7 +184,7 @@ fun register_balance_manager_is_idempotent_for_same_manager() {
     transfer::public_transfer(withdraw_cap, sender);
     transfer::public_transfer(trade_cap, sender);
     transfer::public_transfer(trader_account, sender);
-    
+
     scenario.end();
 }
 
