@@ -3,7 +3,7 @@
 module openzeppelin_market_maker::executor_tests;
 
 use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, WithdrawCap};
-use deepbook::registry::{Self as registry, Registry};
+use deepbook::registry::{Self, Registry};
 use openzeppelin_market_maker::executor::{Self, TraderAccount};
 use std::unit_test::{assert_eq, destroy};
 use sui::test_scenario;
@@ -50,7 +50,7 @@ fun create_trader_account_components_supports_custom_owner_and_emits_event() {
         scenario.ctx(),
     );
 
-    assert_eq!(executor::owner(&trader_account), owner);
+    assert_eq!(trader_account.owner(), owner);
     assert_eq!(trader_account.balance_manager_id(), balance_manager::id(&balance_manager));
     assert_eq!(trader_account.trade_cap_id(), option::some(object::id(&trade_cap)));
     assert_eq!(trader_account.deposit_cap_id(), option::some(object::id(&deposit_cap)));
@@ -88,7 +88,7 @@ fun create_trader_account_with_shared_manager_transfers_account_and_caps() {
     let trade_cap: TradeCap = test_scenario::take_from_sender(&scenario);
     let balance_manager: BalanceManager = test_scenario::take_shared(&scenario);
 
-    assert_eq!(executor::owner(&trader_account), sender);
+    assert_eq!(trader_account.owner(), sender);
     assert_eq!(trader_account.balance_manager_id(), balance_manager::id(&balance_manager));
     assert_eq!(trader_account.trade_cap_id(), option::some(object::id(&trade_cap)));
     assert_eq!(trader_account.deposit_cap_id(), option::some(object::id(&deposit_cap)));
@@ -124,8 +124,7 @@ fun register_balance_manager_registers_matching_owner_manager_pair() {
         scenario.ctx(),
     );
 
-    trader_account.register_balance_manager(
-        &balance_manager,
+    balance_manager.register_balance_manager(
         &mut deepbook_registry,
         scenario.ctx(),
     );
