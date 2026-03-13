@@ -24,7 +24,6 @@ export const DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID =
   "0x1111111111111111111111111111111111111111111111111111111111111111"
 
 const AMM_PACKAGE_FOLDER_NAME = "prop-amm"
-
 export const resolveAmmPackagePath = (tooling: Tooling) =>
   resolveFullPackagePath(tooling.suiConfig.paths.move, AMM_PACKAGE_FOLDER_NAME)
 

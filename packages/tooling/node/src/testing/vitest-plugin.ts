@@ -1,14 +1,14 @@
-import type { TestUserConfig } from "vitest/config"
+type VitestTestConfig = Record<string, unknown>
 
 type ToolingVitestConfig = {
-  test?: TestUserConfig
+  test?: VitestTestConfig
 }
 
 export type ToolingVitestPluginOptions = {
-  test?: TestUserConfig
+  test?: VitestTestConfig
 }
 
-const DEFAULT_TEST_OPTIONS: NonNullable<TestUserConfig> = {
+const DEFAULT_TEST_OPTIONS: VitestTestConfig = {
   environment: "node",
   restoreMocks: true,
   clearMocks: true,
@@ -16,8 +16,8 @@ const DEFAULT_TEST_OPTIONS: NonNullable<TestUserConfig> = {
 }
 
 const mergeTestOptions = (
-  current: TestUserConfig | undefined,
-  override: TestUserConfig | undefined
+  current: VitestTestConfig | undefined,
+  override: VitestTestConfig | undefined
 ) => ({
   ...DEFAULT_TEST_OPTIONS,
   ...(current ?? {}),

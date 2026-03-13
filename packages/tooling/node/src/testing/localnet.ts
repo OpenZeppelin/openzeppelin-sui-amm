@@ -68,6 +68,7 @@ import { getErrnoCode } from "../utils/fs.ts"
 import { parseBooleanEnv } from "./booleans.ts"
 import { parseNonNegativeInteger, parsePositiveInteger } from "./numbers.ts"
 import { pollWithTimeout } from "./poll.ts"
+import { resolveWorkspaceRoot } from "./paths.ts"
 
 export type LocalnetStartOptions = {
   testId: string
@@ -1154,7 +1155,7 @@ const buildAccountKeystorePath = (artifactsDir: string, account: TestAccount) =>
     `${sanitizeLabel(account.label)}.keystore`
   )
 
-const ensureAccountKeystore = async (
+export const ensureAccountKeystore = async (
   artifactsDir: string,
   account: TestAccount
 ) => {
@@ -1166,7 +1167,7 @@ const ensureAccountKeystore = async (
   return { keystorePath, entry }
 }
 
-const ensureAccountRegisteredInLocalnetKeystore = async (
+export const ensureAccountRegisteredInLocalnetKeystore = async (
   configDir: string,
   entry: string
 ) => {
@@ -1225,6 +1226,7 @@ const copyMoveSources = async (
   const resolvedSourceRoot = await resolveMoveSourceRootPath(sourceRoot)
   await cp(resolvedSourceRoot, destinationRoot, { recursive: true })
   await removeMoveBuildArtifacts(destinationRoot)
+  return resolvedSourceRoot
 }
 
 const listMoveTomlFiles = async (rootDir: string): Promise<string[]> => {
@@ -1243,6 +1245,534 @@ const listMoveTomlFiles = async (rootDir: string): Promise<string[]> => {
   )
 
   return files
+}
+
+const normalizeTomlPath = (value: string) => value.replace(/\\/g, "/")
+
+const resolveTomlLineEnding = (contents: string) =>
+  contents.includes("\r\n") ? "\r\n" : "\n"
+
+const normalizeRelativeTomlPath = (value: string) => {
+  const normalized = normalizeTomlPath(value)
+  if (path.isAbsolute(normalized) || normalized.startsWith(".")) {
+    return normalized
+  }
+  return `./${normalized}`
+}
+
+type LocalDependencyEntry = {
+  dependencyName: string
+  localPath: string
+}
+
+const localDependencyEntryPattern =
+  /^\s*([A-Za-z0-9_-]+)\s*=\s*\{[^}]*\blocal\s*=\s*"([^"]+)"[^}]*\}.*$/
+
+const collectLocalDependencyEntries = (
+  contents: string
+): LocalDependencyEntry[] => {
+  const lines = contents.split(/\r?\n/)
+  const entries: LocalDependencyEntry[] = []
+
+  lines.forEach((line) => {
+    const entryMatch = line.match(localDependencyEntryPattern)
+    if (!entryMatch?.[1] || !entryMatch[2]) return
+
+    entries.push({
+      dependencyName: entryMatch[1],
+      localPath: entryMatch[2]
+    })
+  })
+
+  return entries
+}
+
+const collectLocalDependencyEntriesInDependencySections = (
+  contents: string
+): LocalDependencyEntry[] => {
+  const lines = contents.split(/\r?\n/)
+  const entries: LocalDependencyEntry[] = []
+  let currentSection: "dependencies" | "dev-dependencies" | null = null
+  const sectionHeader = /^\s*\[([^\]]+)\]\s*(#.*)?$/
+
+  lines.forEach((line) => {
+    const headerMatch = line.match(sectionHeader)
+    if (headerMatch) {
+      const headerName = headerMatch[1]?.trim() ?? ""
+      currentSection =
+        headerName === "dependencies" || headerName === "dev-dependencies"
+          ? headerName
+          : null
+      return
+    }
+
+    if (!currentSection) return
+
+    const entryMatch = line.match(localDependencyEntryPattern)
+    if (!entryMatch?.[1] || !entryMatch[2]) return
+
+    entries.push({
+      dependencyName: entryMatch[1],
+      localPath: entryMatch[2]
+    })
+  })
+
+  return entries
+}
+
+const collectLocalDependencyNames = (contents: string) =>
+  new Set(
+    collectLocalDependencyEntriesInDependencySections(contents).map(
+      ({ dependencyName }) => dependencyName
+    )
+  )
+
+const isTomlCommentOrEmptyLine = (line: string) => {
+  const trimmedLine = line.trim()
+  return trimmedLine.length === 0 || trimmedLine.startsWith("#")
+}
+
+const pruneSectionSurroundingBlankLines = (
+  leadingLines: string[],
+  trailingLines: string[]
+) => {
+  if (leadingLines.length === 0 || trailingLines.length === 0) {
+    return [...leadingLines, ...trailingLines]
+  }
+
+  const lastLeadingLine = leadingLines[leadingLines.length - 1]
+  const firstTrailingLine = trailingLines[0]
+  const hasDoubleSeparator =
+    isTomlCommentOrEmptyLine(lastLeadingLine ?? "") &&
+    isTomlCommentOrEmptyLine(firstTrailingLine ?? "")
+
+  if (!hasDoubleSeparator) return [...leadingLines, ...trailingLines]
+
+  return [...leadingLines.slice(0, -1), ...trailingLines]
+}
+
+const stripLocalnetDepReplacementsForLocalDeps = async (
+  moveTomlPath: string
+) => {
+  if (!(await pathExists(moveTomlPath))) return
+
+  const contents = await readFile(moveTomlPath, "utf8")
+  const localDependencyNames = collectLocalDependencyNames(contents)
+  if (localDependencyNames.size === 0) return
+
+  const lineEnding = resolveTomlLineEnding(contents)
+  let lines = contents.split(/\r?\n/)
+  const anyHeaderRegex = /^\s*\[[^\]]+\]\s*(#.*)?$/
+  const environmentNames = Array.from(
+    new Set([
+      "localnet",
+      resolveMoveCliEnvironmentName("localnet") ?? "test-publish"
+    ])
+  )
+
+  const buildEntryRegex = (dependencyName: string) =>
+    new RegExp(
+      `^\\s*${dependencyName.replace(/[-/\\\\^$*+?.()|[\\]{}]/g, "\\$&")}\\s*=\\s*\\{[^}]*\\}.*$`
+    )
+
+  let didUpdate = false
+
+  for (const environmentName of environmentNames) {
+    const sectionHeaderRegex = new RegExp(
+      `^\\s*\\[dep-replacements\\.${environmentName}\\]\\s*(#.*)?$`
+    )
+    const headerIndex = lines.findIndex((line) => sectionHeaderRegex.test(line))
+    if (headerIndex < 0) continue
+
+    const nextHeaderIndex = lines.findIndex(
+      (line, index) => index > headerIndex && anyHeaderRegex.test(line)
+    )
+    const sectionEnd = nextHeaderIndex >= 0 ? nextHeaderIndex : lines.length
+
+    let didUpdateSection = false
+    const filteredSectionLines = lines
+      .slice(headerIndex + 1, sectionEnd)
+      .filter((line) => {
+        for (const dependencyName of localDependencyNames) {
+          if (buildEntryRegex(dependencyName).test(line)) {
+            didUpdateSection = true
+            return false
+          }
+        }
+
+        return true
+      })
+
+    if (!didUpdateSection) continue
+    didUpdate = true
+
+    const hasSectionEntries = filteredSectionLines.some(
+      (line) => !isTomlCommentOrEmptyLine(line)
+    )
+    if (!hasSectionEntries) {
+      lines = pruneSectionSurroundingBlankLines(
+        lines.slice(0, headerIndex),
+        lines.slice(sectionEnd)
+      )
+      continue
+    }
+
+    lines = [
+      ...lines.slice(0, headerIndex + 1),
+      ...filteredSectionLines,
+      ...lines.slice(sectionEnd)
+    ]
+  }
+
+  if (!didUpdate) return
+
+  await writeFile(moveTomlPath, lines.join(lineEnding), "utf8")
+}
+
+const isPathWithinRoot = (candidatePath: string, rootPath: string) => {
+  const relativePath = path.relative(rootPath, candidatePath)
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+  )
+}
+
+const EXTERNAL_DEPENDENCIES_DIR_NAME = "__external__"
+
+type ExternalDependencyCopyResult = {
+  externalDependenciesRoot: string
+  sourceToDestinationMap: Map<string, string>
+  destinationToSourceMap: Map<string, string>
+}
+
+const resolveExternalDependencyCopyPath = ({
+  externalDependenciesRoot,
+  workspaceRoot,
+  sourceDependencyPath
+}: {
+  externalDependenciesRoot: string
+  workspaceRoot: string
+  sourceDependencyPath: string
+}) => {
+  const relativeToWorkspace = path.relative(workspaceRoot, sourceDependencyPath)
+  if (
+    relativeToWorkspace &&
+    !relativeToWorkspace.startsWith("..") &&
+    !path.isAbsolute(relativeToWorkspace)
+  ) {
+    return path.join(externalDependenciesRoot, relativeToWorkspace)
+  }
+
+  const fallbackLabel = createHash("sha256")
+    .update(sourceDependencyPath)
+    .digest("hex")
+    .slice(0, 12)
+
+  return path.join(externalDependenciesRoot, `outside-${fallbackLabel}`)
+}
+
+export const copyExternalMoveDependenciesIntoTempRoot = async ({
+  destinationMoveRoot,
+  sourceMoveRoot,
+  workspaceRoot
+}: {
+  destinationMoveRoot: string
+  sourceMoveRoot: string
+  workspaceRoot: string
+}): Promise<ExternalDependencyCopyResult> => {
+  const externalDependenciesRoot = path.join(
+    destinationMoveRoot,
+    EXTERNAL_DEPENDENCIES_DIR_NAME
+  )
+  const sourceToDestinationMap = new Map<string, string>()
+  const destinationToSourceMap = new Map<string, string>()
+  const pendingSourcePackageRoots: string[] = []
+  const seenSourcePackageRoots = new Set<string>()
+
+  const sourceMoveTomlFiles = await listMoveTomlFiles(sourceMoveRoot)
+
+  const enqueueExternalDependency = async (sourceDependencyPath: string) => {
+    const resolvedDependencyPath = path.resolve(sourceDependencyPath)
+    if (sourceToDestinationMap.has(resolvedDependencyPath)) return
+    if (seenSourcePackageRoots.has(resolvedDependencyPath)) return
+
+    const destinationDependencyPath = resolveExternalDependencyCopyPath({
+      externalDependenciesRoot,
+      workspaceRoot,
+      sourceDependencyPath: resolvedDependencyPath
+    })
+
+    await ensureDirectory(path.dirname(destinationDependencyPath))
+    await cp(resolvedDependencyPath, destinationDependencyPath, {
+      recursive: true
+    })
+    await removeMoveBuildArtifacts(destinationDependencyPath)
+
+    sourceToDestinationMap.set(
+      resolvedDependencyPath,
+      destinationDependencyPath
+    )
+    destinationToSourceMap.set(
+      destinationDependencyPath,
+      resolvedDependencyPath
+    )
+    pendingSourcePackageRoots.push(resolvedDependencyPath)
+  }
+
+  await Promise.all(
+    sourceMoveTomlFiles.map(async (moveTomlPath) => {
+      const contents = await readFile(moveTomlPath, "utf8")
+      const sourceDir = path.dirname(moveTomlPath)
+      const localEntries = collectLocalDependencyEntries(contents)
+
+      await Promise.all(
+        localEntries.map(async ({ localPath }) => {
+          const resolvedDependencyPath = path.resolve(sourceDir, localPath)
+          if (isPathWithinRoot(resolvedDependencyPath, sourceMoveRoot)) return
+          if (!(await pathExists(resolvedDependencyPath))) return
+          await enqueueExternalDependency(resolvedDependencyPath)
+        })
+      )
+    })
+  )
+
+  while (pendingSourcePackageRoots.length > 0) {
+    const nextSourceRoot = pendingSourcePackageRoots.shift()
+    if (!nextSourceRoot) continue
+
+    const resolvedSourceRoot = path.resolve(nextSourceRoot)
+    if (seenSourcePackageRoots.has(resolvedSourceRoot)) continue
+    seenSourcePackageRoots.add(resolvedSourceRoot)
+
+    const moveTomlFiles = await listMoveTomlFiles(resolvedSourceRoot)
+    await Promise.all(
+      moveTomlFiles.map(async (moveTomlPath) => {
+        const contents = await readFile(moveTomlPath, "utf8")
+        const sourceDir = path.dirname(moveTomlPath)
+        const localEntries = collectLocalDependencyEntries(contents)
+
+        await Promise.all(
+          localEntries.map(async ({ localPath }) => {
+            const resolvedDependencyPath = path.resolve(sourceDir, localPath)
+            if (isPathWithinRoot(resolvedDependencyPath, sourceMoveRoot)) return
+            if (!(await pathExists(resolvedDependencyPath))) return
+            await enqueueExternalDependency(resolvedDependencyPath)
+          })
+        )
+      })
+    )
+  }
+
+  return {
+    externalDependenciesRoot,
+    sourceToDestinationMap,
+    destinationToSourceMap
+  }
+}
+
+const resolveSourceMoveTomlPath = ({
+  destinationMoveTomlPath,
+  destinationMoveRoot,
+  sourceMoveRoot,
+  externalDependencies
+}: {
+  destinationMoveTomlPath: string
+  destinationMoveRoot: string
+  sourceMoveRoot: string
+  externalDependencies: ExternalDependencyCopyResult
+}) => {
+  const externalRoot = externalDependencies.externalDependenciesRoot
+  if (isPathWithinRoot(destinationMoveTomlPath, externalRoot)) {
+    for (const [
+      destinationRoot,
+      sourceRoot
+    ] of externalDependencies.destinationToSourceMap) {
+      if (isPathWithinRoot(destinationMoveTomlPath, destinationRoot)) {
+        const relativePath = path.relative(
+          destinationRoot,
+          destinationMoveTomlPath
+        )
+        return path.join(sourceRoot, relativePath)
+      }
+    }
+  }
+
+  const relativePath = path.relative(
+    destinationMoveRoot,
+    destinationMoveTomlPath
+  )
+
+  return path.join(sourceMoveRoot, relativePath)
+}
+
+const buildLocalDependencyReplacementMap = async ({
+  sourceMoveTomlPath,
+  destinationMoveTomlPath,
+  destinationMoveRoot,
+  sourceMoveRoot,
+  externalDependencies
+}: {
+  sourceMoveTomlPath: string
+  destinationMoveTomlPath: string
+  destinationMoveRoot: string
+  sourceMoveRoot: string
+  externalDependencies: ExternalDependencyCopyResult
+}) => {
+  const sourceDir = path.dirname(sourceMoveTomlPath)
+  const destinationDir = path.dirname(destinationMoveTomlPath)
+  const replacements = new Map<string, string>()
+
+  const contents = await readFile(sourceMoveTomlPath, "utf8")
+  const entries = collectLocalDependencyEntries(contents)
+
+  entries.forEach(({ dependencyName, localPath }) => {
+    const resolvedSourcePath = path.resolve(sourceDir, localPath)
+    let destinationDependencyPath: string | undefined
+
+    if (isPathWithinRoot(resolvedSourcePath, sourceMoveRoot)) {
+      const relativeToSourceRoot = path.relative(
+        sourceMoveRoot,
+        resolvedSourcePath
+      )
+      destinationDependencyPath = path.join(
+        destinationMoveRoot,
+        relativeToSourceRoot
+      )
+    } else {
+      destinationDependencyPath =
+        externalDependencies.sourceToDestinationMap.get(resolvedSourcePath)
+    }
+
+    if (!destinationDependencyPath) return
+
+    const relativePath = path.relative(
+      destinationDir,
+      destinationDependencyPath
+    )
+    replacements.set(dependencyName, normalizeRelativeTomlPath(relativePath))
+  })
+
+  return replacements
+}
+
+const rewriteMoveTomlLocalDependencyEntries = ({
+  destinationContents,
+  dependencyReplacements
+}: {
+  destinationContents: string
+  dependencyReplacements: Map<string, string>
+}) => {
+  if (dependencyReplacements.size === 0) {
+    return { updatedContents: destinationContents, didUpdate: false }
+  }
+
+  const lineEnding = resolveTomlLineEnding(destinationContents)
+  const lines = destinationContents.split(/\r?\n/)
+  let didUpdate = false
+
+  const updatedLines = lines.map((line) => {
+    const entryMatch = line.match(localDependencyEntryPattern)
+    if (!entryMatch?.[1]) return line
+
+    const replacementPath = dependencyReplacements.get(entryMatch[1])
+    if (!replacementPath) return line
+
+    const nextLine = line.replace(
+      /local\s*=\s*"[^"]*"/,
+      `local = "${replacementPath}"`
+    )
+    if (nextLine !== line) didUpdate = true
+
+    return nextLine
+  })
+
+  return {
+    updatedContents: updatedLines.join(lineEnding),
+    didUpdate
+  }
+}
+
+const rewriteMoveTomlLocalDependencyPathsInTempRoot = async ({
+  destinationMoveRoot,
+  sourceMoveRoot,
+  externalDependencies
+}: {
+  destinationMoveRoot: string
+  sourceMoveRoot: string
+  externalDependencies: ExternalDependencyCopyResult
+}) => {
+  const moveTomlFiles = await listMoveTomlFiles(destinationMoveRoot)
+
+  await Promise.all(
+    moveTomlFiles.map(async (destinationMoveTomlPath) => {
+      const sourceMoveTomlPath = resolveSourceMoveTomlPath({
+        destinationMoveTomlPath,
+        destinationMoveRoot,
+        sourceMoveRoot,
+        externalDependencies
+      })
+      if (!(await pathExists(sourceMoveTomlPath))) return
+
+      const dependencyReplacements = await buildLocalDependencyReplacementMap({
+        sourceMoveTomlPath,
+        destinationMoveTomlPath,
+        destinationMoveRoot,
+        sourceMoveRoot,
+        externalDependencies
+      })
+
+      const destinationContents = await readFile(
+        destinationMoveTomlPath,
+        "utf8"
+      )
+      const { updatedContents, didUpdate } =
+        rewriteMoveTomlLocalDependencyEntries({
+          destinationContents,
+          dependencyReplacements
+        })
+      if (!didUpdate) return
+
+      await writeFile(destinationMoveTomlPath, updatedContents, "utf8")
+    })
+  )
+}
+
+const sanitizeLocalnetMoveMetadataInTempRoot = async (moveRootPath: string) => {
+  const moveTomlFiles = await listMoveTomlFiles(moveRootPath)
+
+  await Promise.all(
+    moveTomlFiles.map(async (moveTomlPath) => {
+      await stripLocalnetDepReplacementsForLocalDeps(moveTomlPath)
+      await clearPublishedEntryForNetwork({
+        packagePath: path.dirname(moveTomlPath),
+        networkName: "localnet"
+      })
+    })
+  )
+}
+
+export const prepareMoveSourcesForLocalnetTests = async ({
+  destinationMoveRoot,
+  sourceMoveRoot,
+  workspaceRoot
+}: {
+  destinationMoveRoot: string
+  sourceMoveRoot: string
+  workspaceRoot: string
+}) => {
+  const externalDependencies = await copyExternalMoveDependenciesIntoTempRoot({
+    destinationMoveRoot,
+    sourceMoveRoot,
+    workspaceRoot
+  })
+
+  await rewriteMoveTomlLocalDependencyPathsInTempRoot({
+    destinationMoveRoot,
+    sourceMoveRoot,
+    externalDependencies
+  })
+
+  await sanitizeLocalnetMoveMetadataInTempRoot(destinationMoveRoot)
 }
 
 const resolveLocalnetMoveEnvironmentName = () =>
@@ -1728,7 +2258,15 @@ export const createTestContext = async (
   const moveRootPath = path.join(tempDir, "contracts")
   const artifactsDir = path.join(tempDir, "artifacts")
   await ensureDirectory(artifactsDir)
-  await copyMoveSources(moveRootPath, options?.moveSourceRootPath)
+  const resolvedMoveSourceRoot = await copyMoveSources(
+    moveRootPath,
+    options?.moveSourceRootPath
+  )
+  await prepareMoveSourcesForLocalnetTests({
+    destinationMoveRoot: moveRootPath,
+    sourceMoveRoot: resolvedMoveSourceRoot,
+    workspaceRoot: resolveWorkspaceRoot()
+  })
 
   const suiConfig = buildSuiConfig({
     rpcUrl: localnet.rpcUrl,

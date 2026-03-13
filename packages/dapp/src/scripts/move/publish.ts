@@ -211,6 +211,8 @@ const derivePublishOptions = (
   }
 ): ResolvedPublishOptions => {
   const targetingLocalnet = networkName === "localnet"
+  const explicitlyDisabledUnpublishedDependencies =
+    cliArguments.withUnpublishedDependencies === false
 
   if (!targetingLocalnet && cliArguments.withUnpublishedDependencies)
     throw new Error(
@@ -220,7 +222,8 @@ const derivePublishOptions = (
   return {
     withUnpublishedDependencies:
       cliArguments.withUnpublishedDependencies ?? targetingLocalnet,
-    allowAutoUnpublishedDependencies: targetingLocalnet,
+    allowAutoUnpublishedDependencies:
+      targetingLocalnet && !explicitlyDisabledUnpublishedDependencies,
     useCliPublish: cliArguments.useCliPublish ?? true
   }
 }
@@ -236,7 +239,6 @@ runSuiScript(
       path.resolve(tooling.suiConfig.paths.move),
       cliArguments.packagePath
     )
-
     if (cliArguments.rePublish) {
       const { didUpdate } = await clearPublishedEntryForNetwork({
         packagePath: fullPackagePath,

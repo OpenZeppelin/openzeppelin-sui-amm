@@ -5,13 +5,35 @@ import path from "node:path"
 import { PassThrough } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { spawn } = vi.hoisted(() => ({
-  spawn: vi.fn()
+const { spawn, execFile } = vi.hoisted(() => ({
+  spawn: vi.fn(),
+  execFile: vi.fn()
 }))
 
+const { ensureAccountKeystore, ensureAccountRegisteredInLocalnetKeystore } =
+  vi.hoisted(() => ({
+    ensureAccountKeystore: vi.fn(async () => ({
+      keystorePath: "/tmp/sui-script-test.keystore",
+      entry: "test-entry"
+    })),
+    ensureAccountRegisteredInLocalnetKeystore: vi.fn(
+      async () => "/tmp/sui-localnet.keystore"
+    )
+  }))
+
 vi.mock("node:child_process", () => ({
-  spawn
+  spawn,
+  execFile
 }))
+
+vi.mock("../../src/testing/localnet.ts", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    ensureAccountKeystore,
+    ensureAccountRegisteredInLocalnetKeystore
+  }
+})
 
 import {
   buildScriptArguments,
@@ -35,6 +57,7 @@ const runWithRunnerContext = async <T>(
     tempDir,
     artifactsDir: tempDir,
     moveRootPath: tempDir,
+    fundAccount: vi.fn(async () => {}),
     localnet: {
       rpcUrl: "http://localhost:9000",
       configDir: tempDir
@@ -56,6 +79,15 @@ const runWithRunnerContext = async <T>(
 describe("testing script helpers", () => {
   beforeEach(() => {
     spawn.mockReset()
+    ensureAccountKeystore.mockReset()
+    ensureAccountKeystore.mockResolvedValue({
+      keystorePath: "/tmp/sui-script-test.keystore",
+      entry: "test-entry"
+    })
+    ensureAccountRegisteredInLocalnetKeystore.mockReset()
+    ensureAccountRegisteredInLocalnetKeystore.mockResolvedValue(
+      "/tmp/sui-localnet.keystore"
+    )
   })
 
   it("builds script arguments from maps", () => {
@@ -123,6 +155,9 @@ describe("testing script helpers", () => {
     expect((options as { env: Record<string, string> }).env.SUI_NETWORK).toBe(
       "localnet"
     )
+    expect(
+      (options as { env: Record<string, string> }).env.SUI_KEYSTORE_PATH
+    ).toBe("/tmp/sui-localnet.keystore")
     expect(
       (options as { env: Record<string, string> }).env.SUI_ACCOUNT_PRIVATE_KEY
     ).toBe("secret")
