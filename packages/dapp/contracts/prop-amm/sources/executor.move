@@ -90,11 +90,11 @@ public fun register_balance_manager(
 ) {
     assert!(ctx.sender() == trader_account.owner, ENotTraderAccountOwner);
     assert!(
-        trader_account.balance_manager_id == balance_manager::id(balance_manager),
+        trader_account.balance_manager_id == balance_manager.id(),
         EBalanceManagerMismatch,
     );
 
-    balance_manager::register_balance_manager(balance_manager, registry, ctx);
+    balance_manager.register_balance_manager(registry, ctx);
 }
 
 // === Private Functions ===
@@ -123,7 +123,7 @@ public(package) fun create_trader_account_components(
     let cap_ids = create_cap_ids(&trade_cap, &deposit_cap, &withdraw_cap);
     let trader_account = create_trader_account(
         owner,
-        balance_manager::id(&balance_manager),
+        balance_manager.id(),
         cap_ids,
         ctx,
     );
