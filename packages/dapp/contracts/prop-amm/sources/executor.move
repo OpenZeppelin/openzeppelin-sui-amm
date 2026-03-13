@@ -8,9 +8,9 @@ use sui::table::{Self, Table};
 
 // === Errors ===
 
-#[error]
+#[error(code = 0)]
 const ENotTraderAccountOwner: vector<u8> = b"sender must own the trader account";
-#[error]
+#[error(code = 1)]
 const EBalanceManagerMismatch: vector<u8> = b"balance manager must match the trader account";
 
 // === Structs ===
@@ -31,7 +31,7 @@ public struct CapIds has copy, drop, store {
 /// Per-trader account state.
 ///
 /// Uses a table to map each pool ID to the trader's active order IDs.
-public struct TraderAccount has key {
+public struct TraderAccount has key, store {
     /// Unique ID for the account object.
     id: UID,
     /// Account owner.
@@ -89,12 +89,9 @@ public fun register_balance_manager(
     ctx: &mut TxContext,
 ) {
     assert!(ctx.sender() == trader_account.owner, ENotTraderAccountOwner);
-    assert!(
-        trader_account.balance_manager_id == balance_manager::id(balance_manager),
-        EBalanceManagerMismatch,
-    );
+    assert!(trader_account.balance_manager_id == balance_manager.id(), EBalanceManagerMismatch);
 
-    balance_manager::register_balance_manager(balance_manager, registry, ctx);
+    balance_manager.register_balance_manager(registry, ctx);
 }
 
 // === Private Functions ===
@@ -124,13 +121,13 @@ public(package) fun create_trader_account(
     let trader_account = TraderAccount {
         id: object::new(ctx),
         owner,
-        balance_manager_id: balance_manager::id(&balance_manager),
+        balance_manager_id: balance_manager.id(),
         cap_ids,
         active_orders: table::new(ctx),
     };
 
     event::emit(TraderAccountCreatedEvent {
-        trader_account_id: trader_account_id(&trader_account),
+        trader_account_id: trader_account.id.to_inner(),
     });
 
     (balance_manager, deposit_cap, withdraw_cap, trade_cap, trader_account)
@@ -189,13 +186,4 @@ public fun deposit_cap_id(trader_account: &TraderAccount): ID {
 /// Returns the withdraw cap ID.
 public fun withdraw_cap_id(trader_account: &TraderAccount): ID {
     trader_account.cap_ids.withdraw_cap_id
-}
-
-#[test_only]
-/// Transfers a trader account to an arbitrary recipient for tests.
-public(package) fun transfer_trader_account_for_testing(
-    trader_account: TraderAccount,
-    recipient: address,
-) {
-    transfer::transfer(trader_account, recipient);
 }

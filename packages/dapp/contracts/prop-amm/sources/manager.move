@@ -11,11 +11,11 @@ const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
 // === Errors ===
 
-#[error]
+#[error(code = 0)]
 const EInvalidBaseSpreadBps: vector<u8> = b"base spread bps must be greater than zero";
-#[error]
+#[error(code = 1)]
 const EBaseSpreadBpsExceedsMaxBasisPoints: vector<u8> = b"base spread bps must be at most 10000";
-#[error]
+#[error(code = 2)]
 const EInvalidPythPriceFeedIdLength: vector<u8> = b"pyth price feed id must be 32 bytes";
 
 // === Structs ===
