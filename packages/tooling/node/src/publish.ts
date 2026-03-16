@@ -605,7 +605,8 @@ const publishViaCli = async (plan: PublishPlan): Promise<PublishResult> => {
       const retry = await runClientTestPublish(args, {
         env: cliEnv
       })
-      if (retry.stderr?.toString().trim()) logWarning(retry.stderr.toString().trim())
+      if (retry.stderr?.toString().trim())
+        logWarning(retry.stderr.toString().trim())
 
       if (retry.exitCode && retry.exitCode !== 0) {
         const retryTail = [retry.stdout, retry.stderr]
