@@ -5,31 +5,31 @@
 version = 4
 
 [pinned.test-publish.MoveStdlib]
-source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "b38bca86f0323b3fe8b6b7f4ca0cd7ae7faebe4b" }
+source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "22f9fc9781732d651e18384c9a8eb1dabddf73a6" }
 use_environment = "test-publish"
 manifest_digest = "C4FE4C91DE74CBF223B2E380AE40F592177D21870DC2D7EB6227D2D694E05363"
 deps = {}
 
 [pinned.test-publish.Sui]
-source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "b38bca86f0323b3fe8b6b7f4ca0cd7ae7faebe4b" }
+source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "22f9fc9781732d651e18384c9a8eb1dabddf73a6" }
 use_environment = "test-publish"
 manifest_digest = "7B6E5525FC0BFAECA61725298C425266BB21D456122669E3B2D3A4151A705F69"
 deps = { MoveStdlib = "MoveStdlib" }
 
 [pinned.test-publish.deepbook]
-source = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/deepbook", rev = "b0c3f8b42f5209205dc3f2802b9312e59518a692" }
+source = { local = "../../../../vendor/deepbookv3/packages/deepbook" }
 use_environment = "test-publish"
-manifest_digest = "4CE7EBF2D294B2073FAC96555A5584741C6DEAA89256AA4FD4FED535D3C79C54"
+manifest_digest = "A36A35AB8F195594524368CF7DBC3FD2B9C6883AC04B3F476D82112D1A6585E8"
 deps = { std = "MoveStdlib", sui = "Sui", token = "token" }
 
-[pinned.test-publish.prop_amm]
+[pinned.test-publish.openzeppelin_market_maker]
 source = { root = true }
 use_environment = "test-publish"
-manifest_digest = "721E25CF6B526E187D3F2B61C3A415C9FCCD9D23A3898A7A99E1C4B33251C3C9"
+manifest_digest = "B2DF233A86CD1F542BE6E191354136107CA0001FB8E4780C7AE84E95ABA8FC11"
 deps = { deepbook = "deepbook", std = "MoveStdlib", sui = "Sui" }
 
 [pinned.test-publish.token]
-source = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/token", rev = "b0c3f8b42f5209205dc3f2802b9312e59518a692" }
+source = { local = "../../../../vendor/deepbookv3/packages/token" }
 use_environment = "test-publish"
 manifest_digest = "2963D6B4689ED068546E86F8453FBCA51DCDF68A1C96D681328D2CDACE14B5CF"
 deps = { std = "MoveStdlib", sui = "Sui" }

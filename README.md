@@ -11,7 +11,27 @@ This repo is a pnpm workspace containing:
 
 - a Move packages,
 - a CLI/script layer for localnet + seeding + amm flows,
-- a Next.js UI,
+- a Next.js UI
+## DeepBook submodule
+
+Localnet scripts publish DeepBook from a pinned submodule so development is reproducible.
+
+Setup (once per clone):
+```bash
+git submodule update --init --recursive
+```
+
+If you keep DeepBook elsewhere, you can also pass `--deepbook-contract-path`
+
+Update to a newer DeepBook commit:
+```bash
+cd vendor/deepbookv3
+git fetch
+git checkout <commit-or-tag>
+cd ../..
+git add vendor/deepbookv3 .gitmodules
+git commit -m "chore: update deepbook submodule"
+```
 
 ## Quickstart (localnet)
 
@@ -39,23 +59,18 @@ pnpm ui dev
 
 ```
 
-## DeepBook submodule
+## Setup (localnet)
 
-Localnet scripts publish DeepBook from a pinned submodule so development is reproducible.
-
-Setup (once per clone):
 ```bash
-git submodule update --init --recursive
-```
+# Setup coins and pyth mocks, deploy local deepbook
+pnpm script mock:setup --network localnet
 
-If you keep DeepBook elsewhere, you can also pass `--deepbook-contract-path`
+# Publish prop amm
+pnpm script move:publish --package-path prop-amm --with-unpublished-dependencies false --network localnet
 
-Update to a newer DeepBook commit:
-```bash
-cd vendor/deepbookv3
-git fetch
-git checkout <commit-or-tag>
-cd ../..
-git add vendor/deepbookv3 .gitmodules
-git commit -m "chore: update deepbook submodule"
+# Register your amm package against local deepbook
+pnpm script mock:register --network localnet
+
+# Create an amm config
+pnpm dapp owner:amm:create --network localnet
 ```
