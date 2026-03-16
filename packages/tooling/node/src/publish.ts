@@ -566,12 +566,12 @@ const shouldRetryViaTestPublish = ({
   stderr
 }: {
   plan: PublishPlan
-  stdout?: Buffer
-  stderr?: Buffer
+  stdout?: string | Buffer
+  stderr?: string | Buffer
 }) => {
   if (!plan.shouldUseUnpublishedDependencies) return false
 
-  const combined = `${stdout?.toString() ?? ""}\n${stderr?.toString() ?? ""}`
+  const combined = `${stdout ?? ""}\n${stderr ?? ""}`
   return (
     combined.includes("Environment `") &&
     combined.includes("is not present in Move.toml")
