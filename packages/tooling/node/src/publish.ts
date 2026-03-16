@@ -136,7 +136,8 @@ export const publishPackageWithLog = async (
     gasBudget = DEFAULT_PUBLISH_GAS_BUDGET,
     withUnpublishedDependencies = false,
     useCliPublish = true,
-    allowAutoUnpublishedDependencies = true
+    allowAutoUnpublishedDependencies = true,
+    skipDependencyVerification
   }: {
     packagePath: string
     keypair: Ed25519Keypair
@@ -144,6 +145,7 @@ export const publishPackageWithLog = async (
     withUnpublishedDependencies?: boolean
     useCliPublish?: boolean
     allowAutoUnpublishedDependencies?: boolean
+    skipDependencyVerification?: boolean
   },
   suiContext: ToolingContext
 ): Promise<PublishArtifact[]> => {
@@ -161,7 +163,8 @@ export const publishPackageWithLog = async (
       gasBudget,
       withUnpublishedDependencies,
       useCliPublish,
-      allowAutoUnpublishedDependencies
+      allowAutoUnpublishedDependencies,
+      skipDependencyVerification
     },
     suiContext
   )
@@ -186,13 +189,32 @@ export const publishPackage = async (
   suiContext: ToolingContext
 ): Promise<PublishArtifact[]> => {
   const shouldStripTestModules = !publishPlan.shouldUseUnpublishedDependencies
-  const buildOutput = await buildMovePackage(
-    publishPlan.packagePath,
-    publishPlan.buildFlags,
-    {
-      stripTestModules: shouldStripTestModules
-    }
-  )
+  let buildOutput: BuildOutput = {
+    modules: [],
+    dependencies: [],
+    dependencyAddresses: {}
+  }
+
+  try {
+    buildOutput = await buildMovePackage(
+      publishPlan.packagePath,
+      publishPlan.buildFlags,
+      {
+        stripTestModules: shouldStripTestModules
+      }
+    )
+  } catch (error) {
+    const canSkipPreBuild =
+      publishPlan.useCliPublish &&
+      publishPlan.shouldUseUnpublishedDependencies &&
+      isMoveEnvironmentLookupError(error)
+
+    if (!canSkipPreBuild) throw error
+
+    logWarning(
+      "Skipping pre-publish `sui move build` due Move.toml environment lookup error from this Sui CLI. Proceeding with CLI publish and persisting empty build metadata."
+    )
+  }
 
   let publishResult: PublishResult
   try {
@@ -317,6 +339,11 @@ const createPublishTransaction = (
  * CLI runner for `sui client publish`.
  */
 export const runClientPublish = runSuiCli(["client", "publish"])
+
+/**
+ * CLI runner for `sui client test-publish`.
+ */
+export const runClientTestPublish = runSuiCli(["client", "test-publish"])
 /**
  * Builds the full plan for a publish, including flags, dependency strategy, and package naming.
  */
@@ -329,7 +356,8 @@ const buildPublishPlan = async (
     gasBudget,
     withUnpublishedDependencies = false,
     useCliPublish = true,
-    allowAutoUnpublishedDependencies = true
+    allowAutoUnpublishedDependencies = true,
+    skipDependencyVerification
   }: {
     network: SuiNetworkConfig
     packagePath: string
@@ -339,6 +367,7 @@ const buildPublishPlan = async (
     withUnpublishedDependencies?: boolean
     useCliPublish?: boolean
     allowAutoUnpublishedDependencies?: boolean
+    skipDependencyVerification?: boolean
   },
   toolingContext: ToolingContext
 ): Promise<PublishPlan> => {
@@ -420,8 +449,9 @@ const buildPublishPlan = async (
     keystorePath: network.account?.keystorePath,
     suiCliVersion: await getSuiCliVersion(),
     skipDependencyVerification:
-      network.networkName === "localnet" &&
-      Boolean(shouldUseUnpublishedDependencies),
+      skipDependencyVerification ??
+      (network.networkName === "localnet" &&
+        Boolean(shouldUseUnpublishedDependencies)),
     packageNames: await resolvePackageNames(
       packagePath,
       unpublishedDependencies
@@ -504,6 +534,14 @@ const derivePackageLabel = (artifact: PublishArtifact, idx: number) =>
   artifact.packageName ??
   (artifact.isDependency ? `dependency #${idx}` : "root package")
 
+const isMoveEnvironmentLookupError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    message.includes("Environment `") &&
+    message.includes("is not present in Move.toml")
+  )
+}
+
 /**
  * Builds CLI arguments for `sui client publish`.
  */
@@ -528,6 +566,24 @@ const buildCliPublishArguments = (plan: PublishPlan): string[] => {
   return args
 }
 
+const shouldRetryViaTestPublish = ({
+  plan,
+  stdout,
+  stderr
+}: {
+  plan: PublishPlan
+  stdout?: string | Buffer
+  stderr?: string | Buffer
+}) => {
+  if (!plan.shouldUseUnpublishedDependencies) return false
+
+  const combined = `${stdout ?? ""}\n${stderr ?? ""}`
+  return (
+    combined.includes("Environment `") &&
+    combined.includes("is not present in Move.toml")
+  )
+}
+
 /**
  * Publishes using `sui client publish` to mirror CLI behavior.
  */
@@ -547,6 +603,38 @@ const publishViaCli = async (plan: PublishPlan): Promise<PublishResult> => {
   if (stderr?.toString().trim()) logWarning(stderr.toString().trim())
 
   if (exitCode && exitCode !== 0) {
+    if (shouldRetryViaTestPublish({ plan, stdout, stderr })) {
+      logWarning(
+        "`sui client publish` failed with Move.toml environment lookup; retrying with `sui client test-publish` for local unpublished dependencies."
+      )
+
+      const retry = await runClientTestPublish(args, {
+        env: cliEnv
+      })
+      if (retry.stderr?.toString().trim())
+        logWarning(retry.stderr.toString().trim())
+
+      if (retry.exitCode && retry.exitCode !== 0) {
+        const retryTail = [retry.stdout, retry.stderr]
+          .filter(Boolean)
+          .map((chunk) => chunk.toString().trim())
+          .filter(Boolean)
+          .join("\n")
+        throw new Error(
+          `Sui CLI test-publish exited with code ${retry.exitCode}${
+            retryTail ? `:\n${retryTail}` : ""
+          }`
+        )
+      }
+
+      const retriedParsed = parseCliJson(retry.stdout.toString())
+      const retriedResult = extractPublishResult(
+        retriedParsed as SuiTransactionBlockResponse
+      )
+
+      return labelPublishResult(retriedResult, plan.packageNames)
+    }
+
     const outputTail = [stdout, stderr]
       .filter(Boolean)
       .map((chunk) => chunk.toString().trim())
@@ -1056,7 +1144,8 @@ export const publishMovePackageWithFunding = async (
     withUnpublishedDependencies,
     allowAutoUnpublishedDependencies,
     useCliPublish = true,
-    clearPublishedEntry = false
+    clearPublishedEntry = false,
+    skipDependencyVerification
   }: {
     packagePath: string
     gasBudget?: number
@@ -1064,6 +1153,7 @@ export const publishMovePackageWithFunding = async (
     allowAutoUnpublishedDependencies?: boolean
     useCliPublish?: boolean
     clearPublishedEntry?: boolean
+    skipDependencyVerification?: boolean
   },
   toolingContext: ToolingContext
 ): Promise<PublishArtifact> => {
@@ -1097,7 +1187,8 @@ export const publishMovePackageWithFunding = async (
           gasBudget,
           withUnpublishedDependencies,
           useCliPublish,
-          allowAutoUnpublishedDependencies
+          allowAutoUnpublishedDependencies,
+          skipDependencyVerification
         },
         toolingContext
       ),

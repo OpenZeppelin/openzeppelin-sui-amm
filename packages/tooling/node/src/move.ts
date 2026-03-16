@@ -5,9 +5,15 @@ import { runSuiCli } from "./suiCli.ts"
 export { buildMovePackage, runMoveBuild } from "./move-build.ts"
 export {
   clearPublishedEntryForNetwork,
+  ensureMoveTomlEnvironmentChainId,
+  removeMoveTomlAddressesSection,
+  readMoveTomlDependencyReplacement,
   resolveChainIdentifier,
   syncLocalnetMoveEnvironmentChainId,
   syncMoveEnvironmentChainId,
+  syncMoveTomlDependencyLocalPath,
+  syncMoveTomlDependencyReplacementEntry,
+  syncMoveTomlDependencyPublishedIds,
   type MoveEnvironmentChainIdSyncResult
 } from "./move-toml.ts"
 
@@ -78,9 +84,7 @@ export const buildMoveEnvironmentFlags = ({
 }: MoveEnvironmentOptions): string[] => {
   const resolvedEnvironmentName = resolveMoveCliEnvironmentName(environmentName)
 
-  return resolvedEnvironmentName
-    ? ["--environment", resolvedEnvironmentName]
-    : []
+  return resolvedEnvironmentName ? ["-e", resolvedEnvironmentName] : []
 }
 
 /**
