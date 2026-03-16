@@ -43,7 +43,7 @@ describe("move helpers", () => {
   it("builds environment flags for move commands", () => {
     expect(buildMoveEnvironmentFlags({})).toEqual([])
     expect(buildMoveEnvironmentFlags({ environmentName: "localnet" })).toEqual([
-      "--environment",
+      "-e",
       "test-publish"
     ])
   })
@@ -53,7 +53,7 @@ describe("move helpers", () => {
       packagePath: "/tmp/pkg",
       environmentName: "testnet"
     })
-    expect(args).toEqual(["--path", "/tmp/pkg", "--environment", "testnet"])
+    expect(args).toEqual(["--path", "/tmp/pkg", "-e", "testnet"])
   })
 
   it("builds test publish arguments with flags", () => {

@@ -84,9 +84,7 @@ export const buildMoveEnvironmentFlags = ({
 }: MoveEnvironmentOptions): string[] => {
   const resolvedEnvironmentName = resolveMoveCliEnvironmentName(environmentName)
 
-  return resolvedEnvironmentName
-    ? ["--environment", resolvedEnvironmentName]
-    : []
+  return resolvedEnvironmentName ? ["-e", resolvedEnvironmentName] : []
 }
 
 /**
