@@ -56,7 +56,10 @@ public struct TraderAccountCreatedEvent has copy, drop {
 
 /// Creates a trader account, transfers the owner caps, transfers the trader account,
 /// and shares the linked balance manager.
+<<<<<<< HEAD
 #[allow(lint(share_owned))]
+=======
+>>>>>>> d234bcacec811a3f35089f1577d0f7261b6ca23c
 public fun create_trader_account_with_shared_manager_and_owner_caps(
     deepbook_registry: &Registry,
     owner: address,
