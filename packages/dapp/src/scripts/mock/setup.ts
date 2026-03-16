@@ -338,6 +338,30 @@ runSuiScript(
       description: "Path to the local Pyth stub Move package to publish",
       default: DEFAULT_PYTH_CONTRACT_PATH
     })
+    .option("deepbookPackageId", {
+      alias: "deepbook-package-id",
+      type: "string",
+      description: "Package ID of DeepBook on the local network"
+    })
+    .option("deepbookTokenPackageId", {
+      alias: "deepbook-token-package-id",
+      type: "string",
+      description: "Package ID of the DeepBook token dependency on localnet"
+    })
+    .option("deepbookContractPath", {
+      alias: "deepbook-contract-path",
+      type: "string",
+      description:
+        "Path to the local DeepBook Move package to publish (defaults to vendor/deepbookv3/packages/deepbook when present)",
+      default: DEFAULT_DEEPBOOK_PATH
+    })
+    .option("deepbookTokenContractPath", {
+      alias: "deepbook-token-contract-path",
+      type: "string",
+      description:
+        "Path to the DeepBook token Move package to publish (defaults to vendor/deepbookv3/packages/token when present)",
+      default: DEFAULT_DEEPBOOK_TOKEN_PATH
+    })
     .option("rePublish", {
       alias: "re-publish",
       type: "boolean",

@@ -435,6 +435,11 @@ const buildPublishPlan = async (
 
   const cliPublish = useCliPublish
 
+  if (skipDependencyVerification && network.networkName !== "localnet")
+    throw new Error(
+      "--skip-dependency-verification is only supported for localnet publishing."
+    )
+
   return {
     network,
     packagePath,

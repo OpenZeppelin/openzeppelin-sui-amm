@@ -1,4 +1,3 @@
-
 > [!Warning]
 > This is experimental UN-AUDITED code currently under development
 
@@ -9,12 +8,12 @@ End-to-end example of a small AMM on **Sui**
 A Proprietary Automated Market Maker (Prop AMM) is a new DeFi primitive where a market-making algorithm is embedded on-chain, allowing an individual market maker (not a pool of passive LPs) to provide active liquidity with real-time quote updates. This model shifts away from traditional constant-product or even concentrated AMMs by letting the on-chain program continuously adjust its prices independently of trades. The result is tighter spreads and more competitive pricing that can rival centralized exchanges
 
 This repo is a pnpm workspace containing:
+
 - a Move packages,
 - a CLI/script layer for localnet + seeding + amm flows,
 - a Next.js UI,
 
 ## Quickstart (localnet)
-
 
 ```bash
 # Clone and install

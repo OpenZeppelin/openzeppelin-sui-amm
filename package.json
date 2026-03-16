@@ -9,6 +9,7 @@
     "script": "pnpm --filter dapp",
     "dapp": "pnpm --filter dapp",
     "tooling": "pnpm --filter tooling",
+    "test:integration": "pnpm --filter ./packages/dapp test:integration",
     "typecheck": "tsc -b",
     "lint": "eslint \"packages/**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}\"",
     "lint:fix": "eslint --fix \"packages/**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}\""
