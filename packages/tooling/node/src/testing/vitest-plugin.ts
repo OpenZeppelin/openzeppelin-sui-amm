@@ -1,14 +1,19 @@
-type VitestTestConfig = Record<string, unknown>
+type ToolingVitestTestConfig = {
+  environment?: string
+  restoreMocks?: boolean
+  clearMocks?: boolean
+  unstubEnvs?: boolean
+} & Record<string, unknown>
 
 type ToolingVitestConfig = {
-  test?: VitestTestConfig
+  test?: ToolingVitestTestConfig
 }
 
 export type ToolingVitestPluginOptions = {
-  test?: VitestTestConfig
+  test?: ToolingVitestTestConfig
 }
 
-const DEFAULT_TEST_OPTIONS: VitestTestConfig = {
+const DEFAULT_TEST_OPTIONS: ToolingVitestTestConfig = {
   environment: "node",
   restoreMocks: true,
   clearMocks: true,
@@ -16,8 +21,8 @@ const DEFAULT_TEST_OPTIONS: VitestTestConfig = {
 }
 
 const mergeTestOptions = (
-  current: VitestTestConfig | undefined,
-  override: VitestTestConfig | undefined
+  current: ToolingVitestTestConfig | undefined,
+  override: ToolingVitestTestConfig | undefined
 ) => ({
   ...DEFAULT_TEST_OPTIONS,
   ...(current ?? {}),

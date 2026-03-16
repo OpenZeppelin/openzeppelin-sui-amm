@@ -6,6 +6,7 @@
 import type { SuiClient, SuiTransactionBlockResponse } from "@mysten/sui/client"
 import type { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519"
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils"
+import path from "node:path"
 import yargs from "yargs"
 
 import {
@@ -38,6 +39,14 @@ import {
   logKeyValueGreen,
   logWarning
 } from "@sui-amm/tooling-node/log"
+import {
+  ensureMoveTomlEnvironmentChainId,
+  removeMoveTomlAddressesSection,
+  resolveChainIdentifier,
+  resolveMoveCliEnvironmentName,
+  syncMoveTomlDependencyLocalPath,
+  syncMoveTomlDependencyPublishedIds
+} from "@sui-amm/tooling-node/move"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
 import { waitForObjectState } from "@sui-amm/tooling-node/testing/objects"
 import {
@@ -45,7 +54,10 @@ import {
   findCreatedObjectIds,
   newTransaction
 } from "@sui-amm/tooling-node/transactions"
-import { DEFAULT_PYTH_PRICE_FEED_LABEL } from "../../utils/amm.ts"
+import {
+  DEFAULT_PYTH_PRICE_FEED_LABEL,
+  syncAmmDeepbookDependencyLocalReplacement
+} from "../../utils/amm.ts"
 import type {
   CoinArtifact,
   MockArtifact,
@@ -112,6 +124,8 @@ const DEFAULT_FEEDS: LabeledMockPriceFeedConfig[] = resolveDefaultFeedConfigs(
 )
 const PACKAGE_AVAILABILITY_TIMEOUT_MS = 20_000
 const PACKAGE_AVAILABILITY_INTERVAL_MS = 250
+const LOCALNET_MOVE_ENVIRONMENT_NAME =
+  resolveMoveCliEnvironmentName("localnet") ?? "test-publish"
 
 const normalizeSetupInputs = (
   cliArguments: SetupLocalCliArgs
@@ -288,6 +302,30 @@ runSuiScript(
       description: "Path to the local coin stub Move package to publish",
       default: DEFAULT_COIN_CONTRACT_PATH
     })
+    .option("deepbookPackageId", {
+      alias: "deepbook-package-id",
+      type: "string",
+      description: "Package ID of DeepBook on the local network"
+    })
+    .option("deepbookTokenPackageId", {
+      alias: "deepbook-token-package-id",
+      type: "string",
+      description: "Package ID of the DeepBook token dependency on localnet"
+    })
+    .option("deepbookContractPath", {
+      alias: "deepbook-contract-path",
+      type: "string",
+      description:
+        "Path to the local DeepBook Move package to publish (defaults to vendor/deepbookv3/packages/deepbook when present)",
+      default: DEFAULT_DEEPBOOK_PATH
+    })
+    .option("deepbookTokenContractPath", {
+      alias: "deepbook-token-contract-path",
+      type: "string",
+      description:
+        "Path to the DeepBook token Move package to publish (defaults to vendor/deepbookv3/packages/token when present)",
+      default: DEFAULT_DEEPBOOK_TOKEN_PATH
+    })
     .option("pythPackageId", {
       alias: "pyth-package-id",
       type: "string",
@@ -397,6 +435,24 @@ const publishLocalnetPackages = async (
       coinPackageId
     })
 
+  const localnetChainId = await resolveChainIdentifier(
+    { environmentName: "localnet" },
+    tooling
+  )
+  if (!localnetChainId)
+    throw new Error("Unable to resolve localnet chain id for DeepBook setup.")
+
+  const moveTomlUpdates = await ensureDeepbookMoveTomlReadyForLocalnet({
+    deepbookContractPath: cliArguments.deepbookContractPath,
+    tokenContractPath: cliArguments.deepbookTokenContractPath,
+    chainId: localnetChainId
+  })
+  moveTomlUpdates.forEach(({ moveTomlPath }) =>
+    logKeyValueBlue("Move.toml")(
+      `updated DeepBook dependencies (${moveTomlPath})`
+    )
+  )
+
   const { deepbookTokenPackageId } = await ensureDeepbookTokenArtifacts(
     {
       cliArguments,
@@ -404,6 +460,19 @@ const publishLocalnetPackages = async (
     },
     tooling
   )
+
+  if (deepbookTokenPackageId) {
+    const tokenDependencyUpdate = await syncDeepbookTokenDependencyPublishedIds(
+      {
+        deepbookContractPath: cliArguments.deepbookContractPath,
+        tokenPackageId: deepbookTokenPackageId
+      }
+    )
+    if (tokenDependencyUpdate.didUpdate)
+      logKeyValueBlue("Move.toml")(
+        `updated DeepBook token address (${tokenDependencyUpdate.moveTomlPath})`
+      )
+  }
 
   const { deepbookPackageId, deepbookRegistryId, deepbookAdminCapId } =
     await ensureDeepbookArtifacts(
@@ -413,6 +482,18 @@ const publishLocalnetPackages = async (
       },
       tooling
     )
+
+  if (deepbookPackageId) {
+    const moveTomlUpdate = await syncAmmDeepbookDependencyLocalReplacement({
+      tooling,
+      environmentName: LOCALNET_MOVE_ENVIRONMENT_NAME,
+      deepbookContractPath: cliArguments.deepbookContractPath
+    })
+    if (moveTomlUpdate.didUpdate)
+      logKeyValueBlue("Move.toml")(
+        `updated PropAmm deepbook dependency (${moveTomlUpdate.moveTomlPath})`
+      )
+  }
 
   return {
     pythPackageId,
@@ -462,6 +543,94 @@ const resolveDeepbookObjectsFromPublish = async (
     deepbookRegistryId,
     deepbookAdminCapId
   }
+}
+
+const syncDeepbookTokenDependencyPublishedIds = async ({
+  deepbookContractPath,
+  tokenPackageId
+}: {
+  deepbookContractPath: string
+  tokenPackageId: string
+}) => {
+  const moveTomlPath = path.join(deepbookContractPath, "Move.toml")
+
+  return await syncMoveTomlDependencyPublishedIds({
+    moveTomlPath,
+    environmentName: LOCALNET_MOVE_ENVIRONMENT_NAME,
+    dependencyName: "token",
+    publishedAt: tokenPackageId,
+    originalId: tokenPackageId
+  })
+}
+
+const syncDeepbookTokenDependencyLocalPath = async ({
+  deepbookContractPath,
+  tokenContractPath
+}: {
+  deepbookContractPath: string
+  tokenContractPath: string
+}) => {
+  const moveTomlPath = path.join(deepbookContractPath, "Move.toml")
+  const relativeTokenPath = path.relative(
+    deepbookContractPath,
+    tokenContractPath
+  )
+  const normalizedTokenPath = relativeTokenPath.startsWith(".")
+    ? relativeTokenPath
+    : `./${relativeTokenPath}`
+
+  return await syncMoveTomlDependencyLocalPath({
+    moveTomlPath,
+    dependencyName: "token",
+    localPath: normalizedTokenPath
+  })
+}
+
+const normalizeDeepbookMoveTomlForLocalnet = async ({
+  moveTomlPath,
+  chainId
+}: {
+  moveTomlPath: string
+  chainId: string
+}) => {
+  const addressesResult = await removeMoveTomlAddressesSection({ moveTomlPath })
+  const environmentResult = await ensureMoveTomlEnvironmentChainId({
+    moveTomlPath,
+    environmentName: LOCALNET_MOVE_ENVIRONMENT_NAME,
+    chainId
+  })
+
+  return {
+    didUpdate: environmentResult.didUpdate || addressesResult.didUpdate,
+    moveTomlPath
+  }
+}
+
+const ensureDeepbookMoveTomlReadyForLocalnet = async ({
+  deepbookContractPath,
+  tokenContractPath,
+  chainId
+}: {
+  deepbookContractPath: string
+  tokenContractPath: string
+  chainId: string
+}) => {
+  const deepbookResult = await normalizeDeepbookMoveTomlForLocalnet({
+    moveTomlPath: path.join(deepbookContractPath, "Move.toml"),
+    chainId
+  })
+  const tokenResult = await normalizeDeepbookMoveTomlForLocalnet({
+    moveTomlPath: path.join(tokenContractPath, "Move.toml"),
+    chainId
+  })
+  const tokenDependencyResult = await syncDeepbookTokenDependencyLocalPath({
+    deepbookContractPath,
+    tokenContractPath
+  })
+
+  return [deepbookResult, tokenResult, tokenDependencyResult].filter(
+    (result) => result.didUpdate
+  )
 }
 
 const ensureDeepbookTokenArtifacts = async (

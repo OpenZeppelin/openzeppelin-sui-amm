@@ -52,14 +52,14 @@ use_environment = "testnet"
 manifest_digest = "3101923B9428545A4F52FFAD1C4F959F9BFFF84CD09CE4BCC1CB831286999B5A"
 deps = { std = "MoveStdlib", sui = "Sui", token = "token" }
 
-[pinned.testnet.prop_amm]
+[pinned.testnet.openzeppelin_market_maker]
 source = { root = true }
 use_environment = "testnet"
-manifest_digest = "6D99FB57BF1C6AF4D874E867CD9B89240206A0D0101C71A367F5267FF11080C4"
+manifest_digest = "68455E5A484FD43A5642A6BE9EEB0147E35411DB666924BF372E4D46BAF6F0D3"
 deps = { deepbook = "deepbook", std = "MoveStdlib", sui = "Sui" }
 
 [pinned.testnet.token]
-source = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/token", rev = "b0c3f8b42f5209205dc3f2802b9312e59518a692" }
+source = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/token", rev = "b7b65c95bd61e51f3f2cafda83e2224fe8e75e2a" }
 use_environment = "testnet"
 manifest_digest = "5745706258F61D6CE210904B3E6AE87A73CE9D31A6F93BE4718C442529332A87"
 deps = { std = "MoveStdlib", sui = "Sui" }

@@ -33,8 +33,10 @@ import {
   logAmmConfigOverview,
   resolveAmmAdminCapIdFromArtifacts,
   resolveAmmPackagePath,
-  resolvePythPriceFeedIdHex
+  resolvePythPriceFeedIdHex,
+  syncAmmDeepbookDependencyPublishedIds
 } from "../../utils/amm.ts"
+import { resolveDeepbookPublishedIds } from "../../utils/deepbook.ts"
 
 const AMM_PACKAGE_NAME = "openzeppelin_market_maker"
 
@@ -48,6 +50,7 @@ type AmmSeedArguments = {
   pythPriceFeedLabel?: string
   allowConfigMismatch?: boolean
   rePublish?: boolean
+  withUnpublishedDependencies?: boolean
   useCliPublish?: boolean
   json?: boolean
 }
@@ -171,19 +174,46 @@ const publishAmmPackage = async ({
   clearPublishedEntry: boolean
 }) => {
   const targetingLocalnet = tooling.network.networkName === "localnet"
+  const shouldUseUnpublishedDependencies =
+    cliArguments.withUnpublishedDependencies ?? targetingLocalnet
 
   logKeyValueBlue("Package")("Publishing AMM package.")
 
   return tooling.publishMovePackageWithFunding({
     packagePath: resolveAmmPackagePath(tooling),
-    withUnpublishedDependencies: targetingLocalnet,
-    allowAutoUnpublishedDependencies: targetingLocalnet,
+    withUnpublishedDependencies: shouldUseUnpublishedDependencies,
+    allowAutoUnpublishedDependencies: shouldUseUnpublishedDependencies,
     clearPublishedEntry: Boolean(cliArguments.rePublish) || clearPublishedEntry,
     useCliPublish: shouldUseCliPublish({
       networkName: tooling.network.networkName,
       useCliPublish: cliArguments.useCliPublish
     })
   })
+}
+
+const syncDeepbookAddressForNetwork = async ({
+  tooling
+}: {
+  tooling: Pick<Tooling, "network" | "suiConfig">
+}) => {
+  const deepbookPublishedIds = resolveDeepbookPublishedIds(
+    tooling.network.networkName
+  )
+  if (!deepbookPublishedIds) return { didUpdate: false, moveTomlPath: "" }
+
+  const result = await syncAmmDeepbookDependencyPublishedIds({
+    tooling,
+    environmentName: tooling.network.networkName,
+    deepbookPublishedAt: deepbookPublishedIds.publishedAt,
+    deepbookOriginalId: deepbookPublishedIds.originalId
+  })
+
+  if (result.didUpdate)
+    logKeyValueBlue("Move.toml")(
+      `updated PropAmm deepbook address (${result.moveTomlPath})`
+    )
+
+  return result
 }
 
 const resolveOrPublishAmmPackage = async ({
@@ -229,6 +259,8 @@ const resolveOrPublishAmmPackage = async ({
   } else {
     logKeyValueYellow("Package")("Re-publish requested; forcing publish.")
   }
+
+  await syncDeepbookAddressForNetwork({ tooling })
 
   const publishArtifact = await publishAmmPackage({
     tooling,
@@ -652,6 +684,13 @@ runSuiScript(
       description:
         "Re-publish the AMM Move package even if an existing deployment artifact is present.",
       default: false
+    })
+    .option("withUnpublishedDependencies", {
+      alias: ["with-unpublished-deps", "with-unpublished-dependencies"],
+      type: "boolean",
+      description:
+        "Publish dependencies from source on localnet instead of using prepared dependency replacements.",
+      demandOption: false
     })
     .option("useCliPublish", {
       alias: ["use-cli-publish"],
