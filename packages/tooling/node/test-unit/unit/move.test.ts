@@ -13,9 +13,15 @@ import {
   buildMoveTestPublishArguments,
   canonicalizePackagePath,
   clearPublishedEntryForNetwork,
+  ensureMoveTomlEnvironmentChainId,
   hasDeploymentForPackage,
+  removeMoveTomlAddressesSection,
+  readMoveTomlDependencyReplacement,
   resolveFullPackagePath,
-  syncMoveEnvironmentChainId
+  syncMoveEnvironmentChainId,
+  syncMoveTomlDependencyLocalPath,
+  syncMoveTomlDependencyReplacementEntry,
+  syncMoveTomlDependencyPublishedIds
 } from "../../src/move.ts"
 
 describe("move helpers", () => {
@@ -24,7 +30,7 @@ describe("move helpers", () => {
   ): PublishArtifact => ({
     network: "localnet",
     rpcUrl: "http://localhost:9000",
-    packagePath: "/tmp/contracts/../contracts/oracle-market",
+    packagePath: "/tmp/contracts/../move/oracle-market",
     packageId: "0x1",
     sender: "0x2",
     digest: "digest",
@@ -81,12 +87,12 @@ describe("move helpers", () => {
   it("matches deployments by canonicalized path", () => {
     const artifacts = [
       buildPublishArtifact({
-        packagePath: "/tmp/contracts/../contracts/oracle-market"
+        packagePath: "/tmp/contracts/../move/oracle-market"
       })
     ]
-    expect(
-      hasDeploymentForPackage(artifacts, "/tmp/contracts/oracle-market")
-    ).toBe(true)
+    expect(hasDeploymentForPackage(artifacts, "/tmp/move/oracle-market")).toBe(
+      true
+    )
   })
 })
 
@@ -127,6 +133,249 @@ describe("syncMoveEnvironmentChainId", () => {
 
       const unchanged = await readTextFile(path.join(dir, "Move.toml"))
       expect(unchanged).toBe('[package]\nname = "noop"\nversion = "0.0.1"\n')
+    })
+  })
+})
+
+describe("ensureMoveTomlEnvironmentChainId", () => {
+  it("adds environments even when missing markers", async () => {
+    await withTempDir(async (dir) => {
+      await writeFileTree(dir, {
+        "Move.toml": '[package]\nname = "noop"\nversion = "0.0.1"\n'
+      })
+
+      const result = await ensureMoveTomlEnvironmentChainId({
+        moveTomlPath: path.join(dir, "Move.toml"),
+        environmentName: "localnet",
+        chainId: "0xabc"
+      })
+
+      expect(result.didUpdate).toBe(true)
+
+      const updated = await readTextFile(path.join(dir, "Move.toml"))
+      expect(updated).toContain("[environments]")
+      expect(updated).toContain('localnet = "0xabc"')
+    })
+  })
+})
+
+describe("removeMoveTomlAddressesSection", () => {
+  it("removes addresses section from Move.toml", async () => {
+    await withTempDir(async (dir) => {
+      await writeFileTree(dir, {
+        "Move.toml": [
+          "[package]",
+          'name = "noop"',
+          'version = "0.0.1"',
+          "",
+          "[addresses]",
+          'noop = "0x0"',
+          "",
+          "[dependencies]",
+          'Sui = { local = "../sui" }'
+        ].join("\n")
+      })
+
+      const result = await removeMoveTomlAddressesSection({
+        moveTomlPath: path.join(dir, "Move.toml")
+      })
+
+      expect(result.didUpdate).toBe(true)
+
+      const updated = await readTextFile(path.join(dir, "Move.toml"))
+      expect(updated).not.toContain("[addresses]")
+      expect(updated).toContain("[dependencies]")
+    })
+  })
+})
+
+describe("syncMoveTomlDependencyLocalPath", () => {
+  it("updates dependencies to use a local path", async () => {
+    await withTempDir(async (dir) => {
+      await writeFileTree(dir, {
+        "Move.toml": [
+          "[package]",
+          'name = "noop"',
+          'version = "0.0.1"',
+          "",
+          "[dependencies]",
+          'token = { git = "https://example.com/token.git", rev = "main" }'
+        ].join("\n")
+      })
+
+      const result = await syncMoveTomlDependencyLocalPath({
+        moveTomlPath: path.join(dir, "Move.toml"),
+        dependencyName: "token",
+        localPath: "../token"
+      })
+
+      expect(result.didUpdate).toBe(true)
+
+      const updated = await readTextFile(path.join(dir, "Move.toml"))
+      expect(updated).toContain('token = { local = "../token" }')
+    })
+  })
+})
+
+describe("syncMoveTomlDependencyPublishedIds", () => {
+  it("inserts a dep-replacements block when missing", async () => {
+    await withTempDir(async (dir) => {
+      const moveTomlPath = path.join(dir, "Move.toml")
+      await writeFileTree(dir, {
+        "Move.toml": '[package]\nname = "noop"\nversion = "0.0.1"\n'
+      })
+
+      const result = await syncMoveTomlDependencyPublishedIds({
+        moveTomlPath,
+        environmentName: "localnet",
+        dependencyName: "deepbook",
+        publishedAt: "0xabc",
+        originalId: "0xabc"
+      })
+
+      expect(result.didUpdate).toBe(true)
+      const updated = await readTextFile(moveTomlPath)
+      expect(updated).toContain("[dep-replacements.localnet]")
+      expect(updated).toContain(
+        'deepbook = { published-at = "0xabc", original-id = "0xabc" }'
+      )
+    })
+  })
+
+  it("updates an existing dependency replacement", async () => {
+    const moveToml = await readFixture("move", "Move.toml")
+
+    await withTempDir(async (dir) => {
+      const moveTomlPath = path.join(dir, "Move.toml")
+      await writeFileTree(dir, { "Move.toml": moveToml })
+
+      const result = await syncMoveTomlDependencyPublishedIds({
+        moveTomlPath,
+        environmentName: "localnet",
+        dependencyName: "Sui",
+        publishedAt: "0x42",
+        originalId: "0x2"
+      })
+
+      expect(result.didUpdate).toBe(true)
+      const updated = await readTextFile(moveTomlPath)
+      expect(updated).toContain(
+        'Sui = { published-at = "0x42", original-id = "0x2" }'
+      )
+    })
+  })
+
+  it("no-ops when the dependency replacement matches", async () => {
+    await withTempDir(async (dir) => {
+      const moveTomlPath = path.join(dir, "Move.toml")
+      await writeFileTree(dir, {
+        "Move.toml":
+          '[package]\nname = "noop"\nversion = "0.0.1"\n\n[dep-replacements.localnet]\nSui = { published-at = "0x1", original-id = "0x1" }\n'
+      })
+
+      const result = await syncMoveTomlDependencyPublishedIds({
+        moveTomlPath,
+        environmentName: "localnet",
+        dependencyName: "Sui",
+        publishedAt: "0x1",
+        originalId: "0x1"
+      })
+
+      expect(result.didUpdate).toBe(false)
+      const unchanged = await readTextFile(moveTomlPath)
+      expect(unchanged).toContain(
+        'Sui = { published-at = "0x1", original-id = "0x1" }'
+      )
+    })
+  })
+})
+
+describe("syncMoveTomlDependencyReplacementEntry", () => {
+  it("updates dep-replacements with a local path entry", async () => {
+    await withTempDir(async (dir) => {
+      const moveTomlPath = path.join(dir, "Move.toml")
+      await writeFileTree(dir, {
+        "Move.toml": '[package]\nname = "noop"\nversion = "0.0.1"\n'
+      })
+
+      const result = await syncMoveTomlDependencyReplacementEntry({
+        moveTomlPath,
+        environmentName: "localnet",
+        dependencyName: "deepbook",
+        replacementEntry:
+          'deepbook = { local = "../deepbook", override = true }'
+      })
+
+      expect(result.didUpdate).toBe(true)
+      const updated = await readTextFile(moveTomlPath)
+      expect(updated).toContain("[dep-replacements.localnet]")
+      expect(updated).toContain(
+        'deepbook = { local = "../deepbook", override = true }'
+      )
+    })
+  })
+})
+
+describe("readMoveTomlDependencyReplacement", () => {
+  it("reads published ids from dep-replacements", async () => {
+    await withTempDir(async (dir) => {
+      await writeFileTree(dir, {
+        "Move.toml": [
+          "[package]",
+          'name = "noop"',
+          'version = "0.0.1"',
+          "",
+          "[dep-replacements.localnet]",
+          'deepbook = { published-at = "0xabc", original-id = "0xdef" }'
+        ].join("\n")
+      })
+
+      const result = await readMoveTomlDependencyReplacement({
+        moveTomlPath: path.join(dir, "Move.toml"),
+        environmentName: "localnet",
+        dependencyName: "deepbook"
+      })
+
+      expect(result).toEqual({ publishedAt: "0xabc", originalId: "0xdef" })
+    })
+  })
+
+  it("reads local path from dep-replacements", async () => {
+    await withTempDir(async (dir) => {
+      await writeFileTree(dir, {
+        "Move.toml": [
+          "[package]",
+          'name = "noop"',
+          'version = "0.0.1"',
+          "",
+          "[dep-replacements.localnet]",
+          'deepbook = { local = "../deepbook", override = true }'
+        ].join("\n")
+      })
+
+      const result = await readMoveTomlDependencyReplacement({
+        moveTomlPath: path.join(dir, "Move.toml"),
+        environmentName: "localnet",
+        dependencyName: "deepbook"
+      })
+
+      expect(result).toEqual({ local: "../deepbook" })
+    })
+  })
+
+  it("returns undefined when the entry is missing", async () => {
+    const moveToml = await readFixture("move", "Move.toml")
+
+    await withTempDir(async (dir) => {
+      await writeFileTree(dir, { "Move.toml": moveToml })
+
+      const result = await readMoveTomlDependencyReplacement({
+        moveTomlPath: path.join(dir, "Move.toml"),
+        environmentName: "localnet",
+        dependencyName: "deepbook"
+      })
+
+      expect(result).toBeUndefined()
     })
   })
 })
