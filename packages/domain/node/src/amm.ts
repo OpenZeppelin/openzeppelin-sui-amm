@@ -1,3 +1,4 @@
+import type { SuiClient } from "@mysten/sui/client"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
@@ -7,7 +8,10 @@ import {
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
 import { buildCreateAmmConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
-import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
+import {
+  getAllOwnedObjectsByFilter,
+  normalizeIdOrThrow
+} from "@sui-amm/tooling-core/object"
 import {
   getLatestDeploymentFromArtifact,
   getLatestObjectFromArtifact,
@@ -266,4 +270,26 @@ export const createAmmConfigSnapshotFromArgs = async ({
     ...createdAmmConfig,
     pythPriceFeedIdHex: ammConfigInputs.pythPriceFeedIdHex
   }
+}
+
+export const resolveOwnedAmmAdminCapId = async ({
+  ammPackageId,
+  ownerAddress,
+  suiClient
+}: {
+  ammPackageId: string
+  ownerAddress: string
+  suiClient: SuiClient
+}): Promise<string | undefined> => {
+  const adminCaps = await getAllOwnedObjectsByFilter(
+    {
+      ownerAddress,
+      filter: {
+        StructType: `${normalizeSuiObjectId(ammPackageId)}${AMM_ADMIN_CAP_TYPE_SUFFIX}`
+      }
+    },
+    { suiClient }
+  )
+
+  return adminCaps[0]?.objectId
 }
