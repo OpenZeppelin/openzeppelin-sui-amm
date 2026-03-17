@@ -89,5 +89,8 @@ jobs:
         run: sui move test --coverage
         working-directory: ./packages/dapp/contracts/${{ matrix.package }}
       - name: Generate coverage summary for ${{ matrix.package }}
-        run: sui move coverage summary
+        run: |
+          if [ -f .coverage_map.mvcov ]; then
+            sui move coverage summary
+          fi
         working-directory: ./packages/dapp/contracts/${{ matrix.package }}
