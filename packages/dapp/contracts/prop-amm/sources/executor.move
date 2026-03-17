@@ -24,22 +24,18 @@ use sui::coin::Coin;
 // === Errors ===
 
 #[error(code = 0)]
-const ENotTraderAccountOwner: vector<u8> = b"sender must own the trader account";
-#[error(code = 1)]
-const EBalanceManagerMismatch: vector<u8> = b"balance manager must match the trader account";
-#[error(code = 2)]
 const ETradingPaused: vector<u8> = b"trading is paused";
-#[error(code = 3)]
+#[error(code = 1)]
 const EInvalidPythPriceSign: vector<u8> = b"pyth price must be positive";
-#[error(code = 4)]
+#[error(code = 2)]
 const EInvalidPythPriceExponent: vector<u8> = b"pyth price exponent must be negative";
-#[error(code = 5)]
+#[error(code = 3)]
 const EInvalidPythPriceValue: vector<u8> = b"pyth price must be positive after scaling";
-#[error(code = 6)]
+#[error(code = 4)]
 const ESpreadTooWide: vector<u8> = b"effective spread must be below 10000 bps";
-#[error(code = 7)]
+#[error(code = 5)]
 const EInvalidSlippageBps: vector<u8> = b"slippage bps must be at most 10000";
-#[error(code = 8)]
+#[error(code = 6)]
 const EQuoteBalanceExceeded: vector<u8> =
     b"quote refresh exceeds available trader account balances";
 
@@ -172,14 +168,22 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     let effective_spread_bps = config.base_spread_bps() + volatility_buffer_bps;
     assert!(effective_spread_bps < 10_000, ESpreadTooWide);
 
-    let half_spread =
+    let half_spread = 
         ((oracle_mid_price as u128) * (effective_spread_bps as u128) / 10_000u128) as u64;
-    let outer_half_spread = half_spread * 2;
 
-    let bid_inner = bounded_bid_price(oracle_mid_price, half_spread);
-    let ask_inner = bounded_ask_price(oracle_mid_price, half_spread);
-    let bid_outer = bounded_bid_price(oracle_mid_price, outer_half_spread);
-    let ask_outer = bounded_ask_price(oracle_mid_price, outer_half_spread);
+    // Calculate bids/ask order prices.
+    let bid_inner = oracle_mid_price.checked_sub(half_spread).destroy_or!(constants::min_price());
+    let bid_outer = oracle_mid_price
+        .checked_sub(half_spread * 2)
+        .destroy_or!(constants::min_price());
+    let ask_inner = oracle_mid_price
+        .checked_add(half_spread)
+        .destroy_or!(constants::max_price())
+        .max(constants::max_price());
+    let ask_outer = oracle_mid_price
+        .checked_add(half_spread * 2)
+        .destroy_or!(constants::max_price())
+        .max(constants::max_price());
 
     let max_bid_limit =
         (((oracle_mid_price as u128) * ((10_000 + max_slippage_bps) as u128)) / 10_000u128) as u64;
@@ -350,23 +354,6 @@ fun pyth_price_to_deepbook_price(price_info_object: &PriceInfoObject): u64 {
     assert!(scaled_price <= constants::max_price() as u128, EInvalidPythPriceValue);
 
     scaled_price as u64
-}
-
-fun bounded_bid_price(mid_price: u64, spread: u64): u64 {
-    if (spread >= mid_price) {
-        constants::min_price()
-    } else {
-        mid_price - spread
-    }
-}
-
-fun bounded_ask_price(mid_price: u64, spread: u64): u64 {
-    let ask_price = (mid_price as u128) + (spread as u128);
-    if (ask_price > constants::max_price() as u128) {
-        constants::max_price()
-    } else {
-        ask_price as u64
-    }
 }
 
 // === View helpers ===
