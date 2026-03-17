@@ -12,6 +12,7 @@ This repo is a pnpm workspace containing:
 - a Move packages,
 - a CLI/script layer for localnet + seeding + amm flows,
 - a Next.js UI
+  
 ## DeepBook submodule
 
 Localnet scripts publish DeepBook from a pinned submodule so development is reproducible.
@@ -65,10 +66,11 @@ pnpm dapp mock:register
 # Create and register the AMM
 # Note: --deepbook-package-id and --deepbook-registry-id can be found in the output of the previous command.
 
+# Create an amm config
 pnpm dapp owner:amm:create
 
+# Register your amm package against local deepbook
 pnpm dapp owner:amm:register --deepbook-package-id <0x...> --deepbook-registry-id <0x...>
-
 
 # Create the packages/ui/.env.local file
 ## Copy the sample .env file
@@ -77,24 +79,9 @@ cp packages/ui/.env.example packages/ui/.env.local
 ## Add required field details - you will find these details in the output of the two last pnpm commands. 
 NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<0x...>
 NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
+NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID=<0x..>
 
 # Run the UI
 pnpm ui dev
 
-```
-
-## Setup (localnet)
-
-```bash
-# Setup coins and pyth mocks, deploy local deepbook
-pnpm script mock:setup --network localnet
-
-# Publish prop amm
-pnpm script move:publish --package-path prop-amm --with-unpublished-dependencies false --network localnet
-
-# Register your amm package against local deepbook
-pnpm script mock:register --network localnet
-
-# Create an amm config
-pnpm dapp owner:amm:create --network localnet
 ```
