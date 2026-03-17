@@ -3,6 +3,7 @@ module openzeppelin_market_maker::executor;
 
 use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, WithdrawCap};
 use deepbook::registry::Registry;
+use sui::coin::Coin;
 use sui::event;
 use sui::table::{Self, Table};
 
@@ -87,10 +88,32 @@ public fun register_balance_manager(
     registry: &mut Registry,
     ctx: &mut TxContext,
 ) {
-    assert!(ctx.sender() == trader_account.owner, ENotTraderAccountOwner);
-    assert!(trader_account.balance_manager_id == balance_manager.id(), EBalanceManagerMismatch);
+    assert_sender_can_manage_balance_manager(
+        trader_account,
+        balance_manager,
+        ctx,
+    );
 
     balance_manager.register_balance_manager(registry, ctx);
+}
+
+/// Deposits funds into the trader account's linked balance manager.
+public fun fund_trader_account<T>(
+    trader_account: &TraderAccount,
+    balance_manager: &mut BalanceManager,
+    funding_coin: Coin<T>,
+    ctx: &mut TxContext,
+) {
+    assert_sender_can_manage_balance_manager(
+        trader_account,
+        balance_manager,
+        ctx,
+    );
+
+    balance_manager.deposit(
+        funding_coin,
+        ctx,
+    );
 }
 
 // === Private Functions ===
@@ -143,6 +166,16 @@ fun create_cap_ids(
         deposit_cap_id: object::id(deposit_cap),
         withdraw_cap_id: object::id(withdraw_cap),
     }
+}
+
+/// Ensures the sender owns the trader account and provided the linked balance manager.
+fun assert_sender_can_manage_balance_manager(
+    trader_account: &TraderAccount,
+    balance_manager: &BalanceManager,
+    ctx: &TxContext,
+) {
+    assert!(ctx.sender() == trader_account.owner, ENotTraderAccountOwner);
+    assert!(trader_account.balance_manager_id == balance_manager.id(), EBalanceManagerMismatch);
 }
 
 // === View helpers ===
