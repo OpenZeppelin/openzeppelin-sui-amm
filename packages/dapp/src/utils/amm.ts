@@ -6,6 +6,10 @@ import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
+import {
+  AMM_DEEPBOOK_DEPENDENCY_NAME,
+  AMM_PACKAGE_FOLDER_NAME
+} from "@sui-amm/domain-node/amm"
 import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
 import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
 import type { PublishArtifact } from "@sui-amm/tooling-core/types"
@@ -28,9 +32,6 @@ import { mockArtifactPath } from "./mocks.ts"
 export const DEFAULT_PYTH_PRICE_FEED_LABEL = "MOCK_SUI_FEED"
 export const DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID =
   "0x1111111111111111111111111111111111111111111111111111111111111111"
-
-const AMM_DEEPBOOK_DEPENDENCY_NAME = "deepbook"
-const AMM_PACKAGE_FOLDER_NAME = "prop-amm"
 
 export const resolveAmmPackagePath = (tooling: Pick<Tooling, "suiConfig">) =>
   resolveFullPackagePath(tooling.suiConfig.paths.move, AMM_PACKAGE_FOLDER_NAME)

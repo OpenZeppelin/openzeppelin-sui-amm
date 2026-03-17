@@ -67,8 +67,8 @@ import { signAndExecute } from "../transactions.ts"
 import { getErrnoCode } from "../utils/fs.ts"
 import { parseBooleanEnv } from "./booleans.ts"
 import { parseNonNegativeInteger, parsePositiveInteger } from "./numbers.ts"
-import { pollWithTimeout } from "./poll.ts"
 import { resolveWorkspaceRoot } from "./paths.ts"
+import { pollWithTimeout } from "./poll.ts"
 
 export type LocalnetStartOptions = {
   testId: string
@@ -1605,6 +1605,28 @@ const resolveSourceMoveTomlPath = ({
   return path.join(sourceMoveRoot, relativePath)
 }
 
+const resolveDestinationDependencyPath = ({
+  resolvedSourcePath,
+  destinationMoveRoot,
+  sourceMoveRoot,
+  externalDependencies
+}: {
+  resolvedSourcePath: string
+  destinationMoveRoot: string
+  sourceMoveRoot: string
+  externalDependencies: ExternalDependencyCopyResult
+}) => {
+  if (isPathWithinRoot(resolvedSourcePath, sourceMoveRoot)) {
+    const relativeToSourceRoot = path.relative(
+      sourceMoveRoot,
+      resolvedSourcePath
+    )
+    return path.join(destinationMoveRoot, relativeToSourceRoot)
+  }
+
+  return externalDependencies.sourceToDestinationMap.get(resolvedSourcePath)
+}
+
 const buildLocalDependencyReplacementMap = async ({
   sourceMoveTomlPath,
   destinationMoveTomlPath,
@@ -1627,21 +1649,12 @@ const buildLocalDependencyReplacementMap = async ({
 
   entries.forEach(({ dependencyName, localPath }) => {
     const resolvedSourcePath = path.resolve(sourceDir, localPath)
-    let destinationDependencyPath: string | undefined
-
-    if (isPathWithinRoot(resolvedSourcePath, sourceMoveRoot)) {
-      const relativeToSourceRoot = path.relative(
-        sourceMoveRoot,
-        resolvedSourcePath
-      )
-      destinationDependencyPath = path.join(
-        destinationMoveRoot,
-        relativeToSourceRoot
-      )
-    } else {
-      destinationDependencyPath =
-        externalDependencies.sourceToDestinationMap.get(resolvedSourcePath)
-    }
+    const destinationDependencyPath = resolveDestinationDependencyPath({
+      resolvedSourcePath,
+      destinationMoveRoot,
+      sourceMoveRoot,
+      externalDependencies
+    })
 
     if (!destinationDependencyPath) return
 

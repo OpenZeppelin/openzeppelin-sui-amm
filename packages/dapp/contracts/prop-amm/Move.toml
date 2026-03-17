@@ -13,4 +13,4 @@ deepbook = { published-at = "0x22be4cade64bf2d02412c7e8d0e8beea2f78828b948118d46
 deepbook = { published-at = "0x337f4f4f6567fcd778d5454f27c16c70e2f274cc6377ea6249ddf491482ef497", original-id = "0x2c8d603bc51326b8c13cef9dd07031a408a48dddb541963357661df5d3204809" }
 
 [environments]
-test-publish = "8051a268"
+test-publish = "9e535c29"
