@@ -1,9 +1,9 @@
-module local_mock_pyth::price_info;
+module pyth::price_info;
 
-use local_mock_pyth::i64;
-use local_mock_pyth::price;
-use local_mock_pyth::price_feed::{Self, PriceFeed};
-use local_mock_pyth::price_identifier::{Self, PriceIdentifier};
+use pyth::i64;
+use pyth::price;
+use pyth::price_feed::{Self, PriceFeed};
+use pyth::price_identifier::{Self, PriceIdentifier};
 use sui::clock::Clock;
 
 // === Structs ===
