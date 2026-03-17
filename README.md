@@ -11,7 +11,28 @@ This repo is a pnpm workspace containing:
 
 - a Move packages,
 - a CLI/script layer for localnet + seeding + amm flows,
-- a Next.js UI,
+- a Next.js UI
+
+## DeepBook submodule
+
+Localnet scripts publish DeepBook from a pinned submodule so development is reproducible.
+
+Setup (once per clone):
+```bash
+git submodule update --init --recursive
+```
+
+If you keep DeepBook elsewhere, you can also pass `--deepbook-contract-path`
+
+Update to a newer DeepBook commit:
+```bash
+cd vendor/deepbookv3
+git fetch
+git checkout <commit-or-tag>
+cd ../..
+git add vendor/deepbookv3 .gitmodules
+git commit -m "chore: update deepbook submodule"
+```
 
 ## Quickstart (localnet)
 
@@ -45,10 +66,8 @@ pnpm dapp mock:register
 # Create and register the AMM
 # Note: --deepbook-package-id and --deepbook-registry-id can be found in the output of the previous command.
 
+# Create an amm config
 pnpm dapp owner:amm:create
-
-pnpm dapp owner:amm:register --deepbook-package-id <0x...> --deepbook-registry-id <0x...>
-
 
 # Create the packages/ui/.env.local file
 ## Copy the sample .env file
@@ -61,25 +80,4 @@ NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
 # Run the UI
 pnpm ui dev
 
-```
-
-## DeepBook submodule
-
-Localnet scripts publish DeepBook from a pinned submodule so development is reproducible.
-
-Setup (once per clone):
-```bash
-git submodule update --init --recursive
-```
-
-If you keep DeepBook elsewhere, you can also pass `--deepbook-contract-path`
-
-Update to a newer DeepBook commit:
-```bash
-cd vendor/deepbookv3
-git fetch
-git checkout <commit-or-tag>
-cd ../..
-git add vendor/deepbookv3 .gitmodules
-git commit -m "chore: update deepbook submodule"
 ```

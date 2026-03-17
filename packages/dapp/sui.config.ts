@@ -9,7 +9,7 @@ const defaultAccount = {
 }
 
 export default defineSuiConfig({
-  defaultNetwork: "testnet",
+  defaultNetwork: "localnet",
   networks: {
     localnet: {
       url: "http://127.0.0.1:9000",
