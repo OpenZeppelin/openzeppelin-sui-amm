@@ -102,7 +102,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     let updated_trading_paused = true;
     let updated_pyth_price_feed_id = build_pyth_price_feed_id(1);
 
-    config.update_amm_config_and_emit(
+    config.update_amm_config(
         &admin_cap,
         updated_base_spread_bps,
         updated_volatility_multiplier_bps,
@@ -150,7 +150,7 @@ fun update_amm_config_supports_multiple_updates() {
     let mut config: AMMConfig = scenario.take_shared();
     let first_update_pyth_price_feed_id = build_pyth_price_feed_id(1);
 
-    config.update_amm_config_and_emit(
+    config.update_amm_config(
         &admin_cap,
         20,
         150,
@@ -162,7 +162,7 @@ fun update_amm_config_supports_multiple_updates() {
     scenario.next_tx(sender);
 
     let second_update_pyth_price_feed_id = build_pyth_price_feed_id(2);
-    config.update_amm_config_and_emit(
+    config.update_amm_config(
         &admin_cap,
         30,
         180,

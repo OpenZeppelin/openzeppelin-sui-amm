@@ -59,7 +59,33 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 
 // === Public Functions ===
 
-// TODO#q: return config object
+/// Creates a new AMM configuration object with validated inputs.
+///
+/// Requires the admin capability used to control this config.
+/// Use `create_amm_config_and_share` to emit the creation event.
+public fun create_amm_config(
+    _: &AMMAdminCap,
+    base_spread_bps: u64,
+    volatility_multiplier_bps: u64,
+    use_laser: bool,
+    pyth_price_feed_id: vector<u8>,
+    ctx: &mut TxContext,
+): AMMConfig {
+    assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
+
+    let config = AMMConfig {
+        id: object::new(ctx),
+        base_spread_bps,
+        volatility_multiplier_bps,
+        use_laser,
+        trading_paused: false,
+        pyth_price_feed_id,
+    };
+
+    events::emit_amm_config_created(object::id(&config));
+
+    config
+}
 
 /// Creates, emits, and shares a new AMM configuration.
 /// Requires the admin capability used to control this config.
@@ -82,65 +108,13 @@ public fun create_amm_config_and_share(
     );
     let config_id = object::id(&config);
 
-    events::emit_amm_config_created(config_id);
-
     transfer::share_object(config);
+
     config_id
 }
 
 /// Updates a configuration object and emits an update event.
-public fun update_amm_config_and_emit(
-    config: &mut AMMConfig,
-    admin_cap: &AMMAdminCap,
-    base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
-    use_laser: bool,
-    trading_paused: bool,
-    pyth_price_feed_id: vector<u8>,
-) {
-    config.update_amm_config(
-        admin_cap,
-        base_spread_bps,
-        volatility_multiplier_bps,
-        use_laser,
-        trading_paused,
-        pyth_price_feed_id,
-    );
-
-    events::emit_amm_config_updated(object::id(config))
-}
-
-// === Private Functions ===
-
-/// Creates a new AMM configuration object with validated inputs.
-///
-/// Requires the admin capability used to control this config.
-/// Use `create_amm_config_and_share` to emit the creation event.
-public(package) fun create_amm_config(
-    _: &AMMAdminCap,
-    base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
-    use_laser: bool,
-    pyth_price_feed_id: vector<u8>,
-    ctx: &mut TxContext,
-): AMMConfig {
-    assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
-
-    AMMConfig {
-        id: object::new(ctx),
-        base_spread_bps,
-        volatility_multiplier_bps,
-        use_laser,
-        trading_paused: false,
-        pyth_price_feed_id,
-    }
-}
-
-/// Updates a configuration object; requires the admin capability.
-///
-/// The admin capability is the authorization proof for config mutations.
-/// Use `update_amm_config_and_emit` to emit the update event.
-public(package) fun update_amm_config(
+public fun update_amm_config(
     config: &mut AMMConfig,
     _: &AMMAdminCap,
     base_spread_bps: u64,
@@ -156,7 +130,11 @@ public(package) fun update_amm_config(
     config.use_laser = use_laser;
     config.trading_paused = trading_paused;
     config.pyth_price_feed_id = pyth_price_feed_id;
+
+    events::emit_amm_config_updated(object::id(config))
 }
+
+// === Private Functions ===
 
 /// Validates all inputs for a new or updated configuration.
 macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {

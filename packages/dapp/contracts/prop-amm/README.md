@@ -13,4 +13,4 @@ It is experimental and unaudited.
 
 - Publish the package to initialize the admin capability.
 - Call `create_amm_config_and_share` to create shared config and emit the creation event.
-- Call `update_amm_config_and_emit` with an `AMMAdminCap` to change settings and emit the update event.
+- Call `update_amm_config` with an `AMMAdminCap` to change settings and emit the update event.

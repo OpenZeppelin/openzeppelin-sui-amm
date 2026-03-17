@@ -94,7 +94,7 @@ describe("amm PTB builders", () => {
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
       module: "manager",
-      function: "update_amm_config_and_emit"
+      function: "update_amm_config"
     })
     expect(moveCall.arguments[0]).toMatchObject({
       $kind: "Input",

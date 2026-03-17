@@ -92,7 +92,7 @@ export const buildUpdateAmmConfigTransaction = ({
   const transaction = newTransaction()
 
   transaction.moveCall({
-    target: `${packageId}::manager::update_amm_config_and_emit`,
+    target: `${packageId}::manager::update_amm_config`,
     arguments: [
       transaction.sharedObjectRef(config.sharedRef),
       transaction.object(adminCapId),
