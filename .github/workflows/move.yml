@@ -41,9 +41,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: MystenLabs/move-formatter-action@v1
+        env:
+          npm_config_workspaces: "false"
         with:
           prettier-plugin-move-version: "latest"
-          working-directory: "./packages/dapp/contracts"
+          working-directory: "."
           pattern: "**/*.move"
           write-changes: false
 
