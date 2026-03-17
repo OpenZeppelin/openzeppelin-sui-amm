@@ -11,7 +11,6 @@ use deepbook::balance_manager::{
 };
 use deepbook::constants;
 use deepbook::math;
-use deepbook::order_info::OrderInfo;
 use deepbook::pool::Pool;
 use deepbook::registry::Registry;
 use openzeppelin_market_maker::events;
@@ -158,8 +157,8 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // TODO#q: consider volatility multiplier.
     let oracle_mid_price = pyth_price_to_deepbook_price(price_info_object);
     let base_spread_bps = config.base_spread_bps();
-    let half_spread = 
-        ((oracle_mid_price as u128) * (base_spread_bps as u128) / 10_000u128) as u64;
+    // TODO#q: move spread computation to config
+    let half_spread = ((oracle_mid_price as u128) * (base_spread_bps as u128) / 10_000u128) as u64;
 
     // Calculate bids/ask order prices.
     let bid_inner = oracle_mid_price.checked_sub(half_spread).destroy_or!(constants::min_price());
