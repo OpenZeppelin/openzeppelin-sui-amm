@@ -15,7 +15,7 @@ runs:
       run: |
         mkdir -p ~/.local/bin
         curl -fLJ https://github.com/MystenLabs/sui/releases/download/mainnet-v${{ env.SUI_CLI_VERSION }}/sui-mainnet-v${{ env.SUI_CLI_VERSION }}-ubuntu-x86_64.tgz -o sui.tgz
-        tar -xzf sui.tgz sui
+        tar -xzf sui.tgz
         chmod +x sui
         mv sui ~/.local/bin/
         rm sui.tgz
