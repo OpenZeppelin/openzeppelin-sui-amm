@@ -66,10 +66,8 @@ pnpm dapp mock:register
 # Create and register the AMM
 # Note: --deepbook-package-id and --deepbook-registry-id can be found in the output of the previous command.
 
+# Create an amm config
 pnpm dapp owner:amm:create
-
-pnpm dapp owner:amm:register --deepbook-package-id <0x...> --deepbook-registry-id <0x...>
-
 
 # Create the packages/ui/.env.local file
 ## Copy the sample .env file
@@ -82,21 +80,4 @@ NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
 # Run the UI
 pnpm ui dev
 
-```
-
-
-## Setup (localnet)
-
-```bash
-# Setup coins and pyth mocks, deploy local deepbook
-pnpm script mock:setup --network localnet
-
-# Publish prop amm
-pnpm script move:publish --package-path prop-amm --with-unpublished-dependencies false --network localnet
-
-# Register your amm package against local deepbook
-pnpm script mock:register --network localnet
-
-# Create an amm config
-pnpm dapp owner:amm:create --network localnet
 ```
