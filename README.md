@@ -30,9 +30,33 @@ sui client new-address ed25519
 # Configure this address in Sui config file or export
 export SUI_ACCOUNT_ADDRESS=<0x...>
 export SUI_ACCOUNT_PRIVATE_KEY=<base64 or hex>
+export SUI_NETWORK=localnet
 
 # Start localnet (new terminal) (--with-faucet is recommended as some script auto fund address if fund is missing)
 pnpm script chain:localnet:start --with-faucet
+
+# Publish mocks and contracts
+pnpm dapp mock:setup 
+pnpm dapp move:publish --packagePath contracts/prop-amm/
+
+# Register mocks
+pnpm dapp mock:register
+
+# Create and register the AMM
+# Note: --deepbook-package-id and --deepbook-registry-id can be found in the output of the previous command.
+
+pnpm dapp owner:amm:create
+
+pnpm dapp owner:amm:register --deepbook-package-id <0x...> --deepbook-registry-id <0x...>
+
+
+# Create the packages/ui/.env.local file
+## Copy the sample .env file
+cp packages/ui/.env.example packages/ui/.env.local
+
+## Add required field details - you will find these details in the output of the two last pnpm commands. 
+NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<0x...>
+NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
 
 # Run the UI
 pnpm ui dev
