@@ -16,7 +16,7 @@ permissions:
 env:
   NODE_VERSION: "22.21.1"
   PNPM_VERSION: "10"
-  SUI_CLI_VERSION: "1.63.1"
+  SUI_CLI_VERSION: "1.67.2"
   CI: true
 
 jobs:
@@ -127,8 +127,8 @@ jobs:
       - uses: ./.github/actions/setup-sui
       - name: Run Move tests for ${{ matrix.package }}
         run: |
-          sui move test --path "./packages/dapp/contracts/${{ matrix.package }}" --environment test-publish --coverage --trace --test
-          sui move coverage summary --path "./packages/dapp/contracts/${{ matrix.package }}" --environment test-publish --test
+          sui move test --path "./packages/dapp/contracts/${{ matrix.package }}" --coverage --trace --test
+          sui move coverage summary --path "./packages/dapp/contracts/${{ matrix.package }}" --test
 
   security-audit:
     runs-on: ubuntu-latest
