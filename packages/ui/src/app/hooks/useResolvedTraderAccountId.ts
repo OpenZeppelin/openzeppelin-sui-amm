@@ -29,7 +29,9 @@ const pickTraderAccountId = (traderAccountIds: string[]) => traderAccountIds[0]
 const resolveUnexpectedErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Unable to resolve trader account."
 
-const useResolvedTraderAccountId = (): TraderAccountIdResolutionState => {
+const useResolvedTraderAccountId = (
+  refreshToken?: number
+): TraderAccountIdResolutionState => {
   const suiClient = useSuiClient()
   const currentAccount = useCurrentAccount()
   const contractPackageId = useResolvedPackageId()
@@ -90,7 +92,7 @@ const useResolvedTraderAccountId = (): TraderAccountIdResolutionState => {
     return () => {
       active = false
     }
-  }, [contractPackageId, currentAccount?.address, suiClient])
+  }, [contractPackageId, currentAccount?.address, refreshToken, suiClient])
 
   return state
 }

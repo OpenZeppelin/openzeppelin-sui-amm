@@ -2,6 +2,7 @@
 
 import type { TraderAccountOverview } from "@sui-amm/domain-core/models/traderAccount"
 import { useMemo } from "react"
+import { useTraderAccountContext } from "../providers/TraderAccountProvider"
 import type {
   TTraderAccountCardContent,
   TTraderAccountCardState,
@@ -9,10 +10,8 @@ import type {
   TTraderAccountDetails
 } from "../types/TTraderAccountCard"
 import useExplorerUrl from "./useExplorerUrl"
-import useResolvedTraderAccountId from "./useResolvedTraderAccountId"
-import useTraderAccountOverview, {
-  type TraderAccountStatus
-} from "./useTraderAccountOverview"
+import useTraderAccountHeaderActionViewModel from "./useTraderAccountHeaderActionViewModel"
+import { type TraderAccountStatus } from "./useTraderAccountOverview"
 
 const headerTitle = "Trader account"
 const headerDescription =
@@ -106,10 +105,11 @@ const resolveTraderAccountCardContent = ({
 
 const useTraderAccountCardViewModel = (): TTraderAccountCardState => {
   const explorerUrl = useExplorerUrl()
-  const traderAccountResolution = useResolvedTraderAccountId()
+  const { resolution: traderAccountResolution, overview } =
+    useTraderAccountContext()
   const traderAccountId = traderAccountResolution.traderAccountId
-  const { status, traderAccount, error } =
-    useTraderAccountOverview(traderAccountId)
+  const { status, traderAccount, error } = overview
+  const headerAction = useTraderAccountHeaderActionViewModel()
 
   const content = useMemo(
     () =>
@@ -134,7 +134,8 @@ const useTraderAccountCardViewModel = (): TTraderAccountCardState => {
     description: headerDescription,
     explorerUrl,
     traderAccountId,
-    content
+    content,
+    headerAction
   }
 
   return { viewModel }

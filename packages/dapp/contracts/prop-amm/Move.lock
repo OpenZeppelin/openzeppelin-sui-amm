@@ -5,13 +5,13 @@
 version = 4
 
 [pinned.test-publish.MoveStdlib]
-source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "22f9fc9781732d651e18384c9a8eb1dabddf73a6" }
+source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "b38bca86f0323b3fe8b6b7f4ca0cd7ae7faebe4b" }
 use_environment = "test-publish"
 manifest_digest = "C4FE4C91DE74CBF223B2E380AE40F592177D21870DC2D7EB6227D2D694E05363"
 deps = {}
 
 [pinned.test-publish.Sui]
-source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "22f9fc9781732d651e18384c9a8eb1dabddf73a6" }
+source = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "b38bca86f0323b3fe8b6b7f4ca0cd7ae7faebe4b" }
 use_environment = "test-publish"
 manifest_digest = "7B6E5525FC0BFAECA61725298C425266BB21D456122669E3B2D3A4151A705F69"
 deps = { MoveStdlib = "MoveStdlib" }
@@ -19,7 +19,7 @@ deps = { MoveStdlib = "MoveStdlib" }
 [pinned.test-publish.deepbook]
 source = { local = "../../../../vendor/deepbookv3/packages/deepbook" }
 use_environment = "test-publish"
-manifest_digest = "A36A35AB8F195594524368CF7DBC3FD2B9C6883AC04B3F476D82112D1A6585E8"
+manifest_digest = "F617F0DD2C0A1CE2CC53B5024D9F1ED6EC9101A03658C4238F2CB52D56C4F3DB"
 deps = { std = "MoveStdlib", sui = "Sui", token = "token" }
 
 [pinned.test-publish.openzeppelin_market_maker]
