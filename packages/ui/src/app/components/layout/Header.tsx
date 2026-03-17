@@ -5,11 +5,11 @@ import { Link } from "@radix-ui/themes"
 import Balance from "@suiware/kit/Balance"
 import Image from "next/image"
 import {
-    Suspense,
-    useEffect,
-    useRef,
-    useState,
-    type CSSProperties
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties
 } from "react"
 import Logo from "../../assets/logo.svg"
 import { APP_NAME } from "../../config/main"

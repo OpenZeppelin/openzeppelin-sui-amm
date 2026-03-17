@@ -10,6 +10,7 @@ import type {
   TTraderAccountDetails
 } from "../types/TTraderAccountCard"
 import useExplorerUrl from "./useExplorerUrl"
+import type useResolvedTraderAccountId from "./useResolvedTraderAccountId"
 import useTraderAccountHeaderActionViewModel from "./useTraderAccountHeaderActionViewModel"
 import { type TraderAccountStatus } from "./useTraderAccountOverview"
 

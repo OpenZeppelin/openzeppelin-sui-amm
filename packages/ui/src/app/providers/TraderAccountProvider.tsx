@@ -1,6 +1,13 @@
 "use client"
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode
+} from "react"
 import useCreateTraderAccountAction from "../hooks/useCreateTraderAccountAction"
 import useResolvedTraderAccountId from "../hooks/useResolvedTraderAccountId"
 import useTraderAccountOverview from "../hooks/useTraderAccountOverview"
@@ -12,8 +19,9 @@ type TraderAccountContextValue = {
   refreshTraderAccount: () => void
 }
 
-const TraderAccountContext =
-  createContext<TraderAccountContextValue | undefined>(undefined)
+const TraderAccountContext = createContext<
+  TraderAccountContextValue | undefined
+>(undefined)
 
 export const TraderAccountProvider = ({
   children
