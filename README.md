@@ -12,7 +12,7 @@ This repo is a pnpm workspace containing:
 - a Move packages,
 - a CLI/script layer for localnet + seeding + amm flows,
 - a Next.js UI
-  
+
 ## DeepBook submodule
 
 Localnet scripts publish DeepBook from a pinned submodule so development is reproducible.
@@ -68,9 +68,6 @@ pnpm dapp mock:register
 
 # Create an amm config
 pnpm dapp owner:amm:create
-
-# Register your amm package against local deepbook
-pnpm dapp owner:amm:register --deepbook-package-id <0x...> --deepbook-registry-id <0x...>
 
 # Create the packages/ui/.env.local file
 ## Copy the sample .env file

@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import type { SuiClient } from "@mysten/sui/client"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
@@ -12,22 +14,49 @@ import {
   getAllOwnedObjectsByFilter,
   normalizeIdOrThrow
 } from "@sui-amm/tooling-core/object"
+import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import {
+  findLatestArtifactThat,
   getLatestDeploymentFromArtifact,
   getLatestObjectFromArtifact,
+  loadDeploymentArtifacts,
   loadObjectArtifacts
 } from "@sui-amm/tooling-node/artifacts"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { doesObjectExist } from "@sui-amm/tooling-node/objects"
 import { requireCreatedArtifactIdBySuffix } from "@sui-amm/tooling-node/transactions"
 
-const AMM_PACKAGE_NAME = "openzeppelin_market_maker"
+export const AMM_PACKAGE_NAME = "openzeppelin_market_maker"
+export const AMM_PACKAGE_FOLDER_NAME = "prop-amm"
+export const AMM_DEEPBOOK_DEPENDENCY_NAME = "deepbook"
 
 const resolveExplicitId = (
   id: string | undefined,
   errorMessage: string
 ): string | undefined =>
   id === undefined ? undefined : normalizeIdOrThrow(id, errorMessage)
+
+const isAmmDeploymentArtifact = (artifact: PublishArtifact): boolean => {
+  const normalizedPackageName = artifact.packageName?.trim().toLowerCase()
+  if (normalizedPackageName === AMM_PACKAGE_NAME) {
+    return true
+  }
+
+  const packageFolderName = path
+    .basename(artifact.packagePath)
+    .trim()
+    .toLowerCase()
+  return packageFolderName === AMM_PACKAGE_FOLDER_NAME
+}
+
+const resolveLatestAmmDeploymentArtifact = async (networkName: string) => {
+  const deploymentArtifacts = await loadDeploymentArtifacts(networkName)
+
+  return (
+    findLatestArtifactThat(isAmmDeploymentArtifact, deploymentArtifacts) ??
+    getLatestDeploymentFromArtifact(AMM_PACKAGE_NAME)(networkName)
+  )
+}
 
 const resolveIdFromArtifacts = async <Artifact>({
   explicitId,
@@ -68,7 +97,7 @@ export const resolveAmmPackageId = async ({
     networkName,
     errorMessage:
       "An AMM package id is required; publish the package or provide --amm-package-id.",
-    resolveArtifact: getLatestDeploymentFromArtifact(AMM_PACKAGE_NAME),
+    resolveArtifact: resolveLatestAmmDeploymentArtifact,
     getArtifactId: (artifact) => artifact?.packageId
   })
 }
