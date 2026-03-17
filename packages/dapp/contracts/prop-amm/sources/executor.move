@@ -151,7 +151,8 @@ public fun withdraw<T>(
 /// Flow:
 /// 1) Read latest cached oracle price from `price_info_object`.
 /// 2) Cancel all stale orders for this account in the pool.
-/// 3) Re-place four fresh orders (2 bids, 2 asks) around the oracle mid.
+/// 3) Update balance based on all previously matched orders.
+/// 4) Re-place four fresh orders (2 bids, 2 asks) around the oracle mid.
 public fun refresh_quotes<BaseAsset, QuoteAsset>(
     trader_account: &mut TraderAccount,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
@@ -188,10 +189,12 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     assert!(bid_inner <= max_bid_limit && bid_outer <= max_bid_limit, EInvalidSlippageBps);
     assert!(ask_inner >= min_ask_limit && ask_outer >= min_ask_limit, EInvalidSlippageBps);
 
+    // Generate trade proof.
     let trade_proof = trader_account
         .balance_manager
         .generate_proof_as_trader(&trader_account.caps.trade_cap, ctx);
 
+    // Cancel all previous active orders.
     pool.cancel_all_orders(
         &mut trader_account.balance_manager,
         &trade_proof,
@@ -199,13 +202,17 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         ctx,
     );
 
-    // TODO#q: we should call withdraw_settled_amounts
+    // Update balance manager balance, based on previous settled limit orders
+    pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
 
+    // TODO#q: put expiration time into config
     let expire_timestamp = clock.timestamp_ms() + 30_000;
     let order_type = constants::no_restriction();
+    // TODO#q: remove self matching
     let self_matching_option = constants::self_matching_allowed();
     let pay_with_deep = true;
 
+    // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
     trader_account.place_limit_order(
         pool,
         &trade_proof,
@@ -321,6 +328,7 @@ fun place_limit_order<BaseAsset, QuoteAsset>(
 }
 
 fun pyth_price_to_deepbook_price(price_info_object: &PriceInfoObject): u64 {
+    // TODO#q: use price with expiration?
     let pyth_price = pyth::get_price_unsafe(price_info_object);
     let pyth_price_i64 = pyth_price.get_price();
     assert!(!pyth_price_i64.get_is_negative(), EInvalidPythPriceSign);
@@ -331,6 +339,7 @@ fun pyth_price_to_deepbook_price(price_info_object: &PriceInfoObject): u64 {
     let price_magnitude = pyth_price_i64.get_magnitude_if_positive() as u128;
     let decimals = pyth_expo_i64.get_magnitude_if_negative();
 
+    // TODO#q: use oz math
     let scaled_price = if (decimals <= 9) {
         price_magnitude * 10u128.pow((9 - decimals) as u8)
     } else {
