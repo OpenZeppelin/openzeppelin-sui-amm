@@ -1247,24 +1247,6 @@ const listMoveTomlFiles = async (rootDir: string): Promise<string[]> => {
   return files
 }
 
-const listMoveLockFiles = async (rootDir: string): Promise<string[]> => {
-  const entries = await readdir(rootDir, { withFileTypes: true })
-  const files: string[] = []
-
-  await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = path.join(rootDir, entry.name)
-      if (entry.isDirectory()) {
-        files.push(...(await listMoveLockFiles(fullPath)))
-      } else if (entry.isFile() && entry.name === "Move.lock") {
-        files.push(fullPath)
-      }
-    })
-  )
-
-  return files
-}
-
 const normalizeTomlPath = (value: string) => value.replace(/\\/g, "/")
 
 const resolveTomlLineEnding = (contents: string) =>
@@ -1344,18 +1326,6 @@ const collectLocalDependencyNames = (contents: string) =>
       ({ dependencyName }) => dependencyName
     )
   )
-
-const moveLockLocalSourcePattern =
-  /^\s*source\s*=\s*\{[^}]*\blocal\s*=\s*"([^"]+)"[^}]*\}\s*$/
-
-const collectMoveLockLocalSourcePaths = (contents: string) => {
-  const lines = contents.split(/\r?\n/)
-
-  return lines.flatMap((line) => {
-    const entryMatch = line.match(moveLockLocalSourcePattern)
-    return entryMatch?.[1] ? [entryMatch[1]] : []
-  })
-}
 
 const isTomlCommentOrEmptyLine = (line: string) => {
   const trimmedLine = line.trim()
