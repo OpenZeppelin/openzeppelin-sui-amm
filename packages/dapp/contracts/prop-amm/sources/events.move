@@ -27,8 +27,6 @@ public struct QuoteUpdated has copy, drop {
     price: u64,
     /// Effective spread in bps used for this update.
     spread: u64,
-    /// Millisecond timestamp when quotes were refreshed.
-    ts: u64,
 }
 
 /// Emitted when an order placement immediately executes against resting liquidity.
@@ -66,26 +64,26 @@ public(package) fun emit_trader_account_created(trader_account_id: ID) {
     event::emit(TraderAccountCreated { trader_account_id });
 }
 
-/// Emit a `QuoteUpdated` event.
-public(package) fun emit_quote_updated(price: u64, spread: u64, ts: u64) {
-    event::emit(QuoteUpdated { price, spread, ts });
-}
-
-/// Emit an `OrderExecuted` event.
-public(package) fun emit_order_executed(order_id: u128, fill_price: u64) {
-    event::emit(OrderExecuted { order_id, fill_price });
-}
-
 /// Builds an `TraderAccountCreated` payload.
 #[test_only]
 public(package) fun trader_account_created(trader_account_id: ID): TraderAccountCreated {
     TraderAccountCreated { trader_account_id }
 }
 
+/// Emit a `QuoteUpdated` event.
+public(package) fun emit_quote_updated(price: u64, spread: u64) {
+    event::emit(QuoteUpdated { price, spread });
+}
+
 /// Builds a `QuoteUpdated` payload.
 #[test_only]
-public(package) fun quote_updated(price: u64, spread: u64, ts: u64): QuoteUpdated {
-    QuoteUpdated { price, spread, ts }
+public(package) fun quote_updated(price: u64, spread: u64): QuoteUpdated {
+    QuoteUpdated { price, spread }
+}
+
+/// Emit an `OrderExecuted` event.
+public(package) fun emit_order_executed(order_id: u128, fill_price: u64) {
+    event::emit(OrderExecuted { order_id, fill_price });
 }
 
 /// Builds an `OrderExecuted` payload.
