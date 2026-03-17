@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  SUI_CLI_VERSION: "1.63.3"
+  SUI_CLI_VERSION: "1.67.3"
 
 jobs:
   setup:
@@ -65,10 +65,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-sui
       - name: Lint ${{ matrix.package }}
-        run: sui move build --lint --warnings-are-errors --environment test-publish
+        run: sui move build --lint --warnings-are-errors -e test-publish
         working-directory: ./packages/dapp/contracts/${{ matrix.package }}
       - name: Lint tests for ${{ matrix.package }}
-        run: sui move build --test --lint --warnings-are-errors --environment test-publish
+        run: sui move build --test --lint --warnings-are-errors -e test-publish
         working-directory: ./packages/dapp/contracts/${{ matrix.package }}
 
   move-tests:
@@ -86,8 +86,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-sui
       - name: Run Move tests for ${{ matrix.package }}
-        run: sui move test --coverage --trace --test --environment test-publish
+        run: sui move test --coverage --trace --test -e test-publish
         working-directory: ./packages/dapp/contracts/${{ matrix.package }}
       - name: Generate coverage summary for ${{ matrix.package }}
-        run: sui move coverage summary --test --environment test-publish
+        run: sui move coverage summary --test -e test-publish
         working-directory: ./packages/dapp/contracts/${{ matrix.package }}
