@@ -1,7 +1,7 @@
 /// AMM configuration and admin controls.
 module openzeppelin_market_maker::manager;
 
-use sui::event;
+use openzeppelin_market_maker::events;
 use sui::package;
 
 // === Constants ===
@@ -42,34 +42,6 @@ public struct AMMAdminCap has key, store {
     id: UID,
 }
 
-// === Events ===
-
-/// Emitted when a new configuration object is created.
-public struct AMMConfigCreatedEvent has copy, drop {
-    /// ID of the configuration object.
-    config_id: ID,
-}
-
-/// Emitted when a configuration object is updated.
-public struct AMMConfigUpdatedEvent has copy, drop {
-    /// ID of the configuration object.
-    config_id: ID,
-}
-
-/// Builds an `AMMConfigCreatedEvent` payload.
-public(package) fun new_amm_config_created_event(config_id: ID): AMMConfigCreatedEvent {
-    AMMConfigCreatedEvent {
-        config_id,
-    }
-}
-
-/// Builds an `AMMConfigCreatedEvent` payload.
-public(package) fun new_amm_config_updated_event(config_id: ID): AMMConfigUpdatedEvent {
-    AMMConfigUpdatedEvent {
-        config_id,
-    }
-}
-
 // === Init ===
 
 /// One-time publisher witness created at publish time.
@@ -106,10 +78,10 @@ public fun create_amm_config_and_share(
         pyth_price_feed_id,
         ctx,
     );
-    let config_id = config.id.to_inner();
-    event::emit(AMMConfigCreatedEvent {
-        config_id,
-    });
+    let config_id = object::id(&config);
+
+    events::emit_amm_config_created(config_id);
+
     transfer::share_object(config);
     config_id
 }
@@ -132,10 +104,8 @@ public fun update_amm_config_and_emit(
         trading_paused,
         pyth_price_feed_id,
     );
-    let config_id = config.id.to_inner();
-    event::emit(AMMConfigUpdatedEvent {
-        config_id,
-    });
+
+    events::emit_amm_config_updated(object::id(config))
 }
 
 // === Private Functions ===

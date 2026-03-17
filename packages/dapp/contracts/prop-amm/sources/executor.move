@@ -1,9 +1,9 @@
-/// Execution-time state and events for the AMM.
+/// Execution-time state for the AMM.
 module openzeppelin_market_maker::executor;
 
 use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, WithdrawCap};
 use deepbook::registry::Registry;
-use sui::event;
+use openzeppelin_market_maker::events;
 use sui::table::{Self, Table};
 
 // === Errors ===
@@ -42,14 +42,6 @@ public struct TraderAccount has key, store {
     cap_ids: CapIds,
     /// Active order IDs keyed by pool ID (table entries are stored on-chain).
     active_orders: Table<ID, vector<ID>>,
-}
-
-// === Events ===
-
-/// Emitted when a trader account is created.
-public struct TraderAccountCreatedEvent has copy, drop {
-    /// ID of the trader account object.
-    trader_account_id: ID,
 }
 
 // === Public Functions ===
@@ -125,9 +117,7 @@ public(package) fun create_trader_account(
         active_orders: table::new(ctx),
     };
 
-    event::emit(TraderAccountCreatedEvent {
-        trader_account_id: trader_account.id.to_inner(),
-    });
+    events::emit_trader_account_created(object::id(&trader_account));
 
     (balance_manager, deposit_cap, withdraw_cap, trade_cap, trader_account)
 }

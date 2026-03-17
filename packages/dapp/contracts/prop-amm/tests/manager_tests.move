@@ -2,13 +2,8 @@
 #[test_only]
 module openzeppelin_market_maker::manager_tests;
 
-use openzeppelin_market_maker::manager::{
-    Self,
-    new_amm_config_created_event,
-    new_amm_config_updated_event,
-    AMMAdminCap,
-    AMMConfig
-};
+use openzeppelin_market_maker::events::{amm_config_created, amm_config_updated};
+use openzeppelin_market_maker::manager::{Self, AMMAdminCap, AMMConfig};
 use openzeppelin_market_maker::test_helpers::assert_emitted;
 use std::unit_test::assert_eq;
 use sui::test_scenario;
@@ -61,7 +56,7 @@ fun create_amm_config_shares_config_and_emits_event() {
         pyth_price_feed_id,
         scenario.ctx(),
     );
-    assert_emitted!(new_amm_config_created_event(config_id));
+    assert_emitted!(amm_config_created(config_id));
     scenario.next_tx(sender);
 
     let config: AMMConfig = scenario.take_shared();
@@ -115,7 +110,7 @@ fun update_amm_config_updates_config_and_emits_event() {
         updated_trading_paused,
         updated_pyth_price_feed_id,
     );
-    assert_emitted!(new_amm_config_updated_event(config.config_id()));
+    assert_emitted!(amm_config_updated(config.config_id()));
     scenario.next_tx(sender);
 
     assert_eq!(config.base_spread_bps(), updated_base_spread_bps);
@@ -163,7 +158,7 @@ fun update_amm_config_supports_multiple_updates() {
         true,
         first_update_pyth_price_feed_id,
     );
-    assert_emitted!(new_amm_config_updated_event(config.config_id()));
+    assert_emitted!(amm_config_updated(config.config_id()));
     scenario.next_tx(sender);
 
     let second_update_pyth_price_feed_id = build_pyth_price_feed_id(2);
@@ -175,7 +170,7 @@ fun update_amm_config_supports_multiple_updates() {
         false,
         second_update_pyth_price_feed_id,
     );
-    assert_emitted!(new_amm_config_updated_event(config.config_id()));
+    assert_emitted!(amm_config_updated(config.config_id()));
     scenario.next_tx(sender);
 
     assert_eq!(config.base_spread_bps(), 30);
