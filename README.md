@@ -54,7 +54,7 @@ pnpm dapp owner:amm:register --deepbook-package-id <0x...> --deepbook-registry-i
 ## Copy the sample .env file
 cp packages/ui/.env.example packages/ui/.env.local
 
-## Add reuqired field details - you will find these details in the output of the two last pnpm commands. 
+## Add required field details - you will find these details in the output of the two last pnpm commands. 
 NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<0x...>
 NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
 
