@@ -2,12 +2,18 @@
 module openzeppelin_market_maker::executor;
 
 use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, WithdrawCap};
+use deepbook::constants;
+use deepbook::math;
+use deepbook::order_info::OrderInfo;
+use deepbook::pool::Pool;
 use deepbook::registry::Registry;
 use openzeppelin_market_maker::events;
+use openzeppelin_market_maker::manager::AMMConfig;
+use pyth::price_info::PriceInfoObject;
+use pyth::pyth;
 use openzeppelin_market_maker::manager::AMMAdminCap;
 use sui::clock::Clock;
 use sui::coin::Coin;
-use sui::table::{Self, Table};
 
 // === Errors ===
 
@@ -15,6 +21,20 @@ use sui::table::{Self, Table};
 const ENotTraderAccountOwner: vector<u8> = b"sender must own the trader account";
 #[error(code = 1)]
 const EBalanceManagerMismatch: vector<u8> = b"balance manager must match the trader account";
+#[error(code = 2)]
+const ETradingPaused: vector<u8> = b"trading is paused";
+#[error(code = 3)]
+const EInvalidPythPriceSign: vector<u8> = b"pyth price must be positive";
+#[error(code = 4)]
+const EInvalidPythPriceExponent: vector<u8> = b"pyth price exponent must be negative";
+#[error(code = 5)]
+const EInvalidPythPriceValue: vector<u8> = b"pyth price must be positive after scaling";
+#[error(code = 6)]
+const ESpreadTooWide: vector<u8> = b"effective spread must be below 10000 bps";
+#[error(code = 7)]
+const EInvalidSlippageBps: vector<u8> = b"slippage bps must be at most 10000";
+#[error(code = 8)]
+const EQuoteBalanceExceeded: vector<u8> = b"quote refresh exceeds available trader account balances";
 
 // === Structs ===
 
@@ -119,7 +139,282 @@ public fun withdraw<T>(
         .withdraw_with_cap(&trader_account.caps.withdraw_cap, withdraw_amount, ctx)
 }
 
+/// Public quote refresh entrypoint for bot-driven PTBs.
+///
+/// Flow:
+/// 1) Read latest cached oracle price from `price_info_object`.
+/// 2) Cancel all stale orders for this account in the pool.
+/// 3) Re-place four fresh orders (2 bids, 2 asks) around the oracle mid.
+public fun refresh_quotes<BaseAsset, QuoteAsset>(
+    trader_account: &mut TraderAccount,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    config: &AMMConfig,
+    price_info_object: &PriceInfoObject,
+    inner_quantity: u64,
+    outer_quantity: u64,
+    volatility_buffer_bps: u64,
+    max_slippage_bps: u64,
+    clock: &Clock,
+    ctx: &TxContext,
+) {
+    assert!(!config.trading_paused(), ETradingPaused);
+    assert!(max_slippage_bps <= 10_000, EInvalidSlippageBps);
+
+    let oracle_mid_price = pyth_price_to_deepbook_price(price_info_object);
+    let effective_spread_bps = config.base_spread_bps() + volatility_buffer_bps;
+    assert!(effective_spread_bps < 10_000, ESpreadTooWide);
+
+    let half_spread =
+        ((oracle_mid_price as u128) * (effective_spread_bps as u128) / 10_000u128) as u64;
+    let outer_half_spread = half_spread * 2;
+
+    let bid_inner = bounded_bid_price(oracle_mid_price, half_spread);
+    let ask_inner = bounded_ask_price(oracle_mid_price, half_spread);
+    let bid_outer = bounded_bid_price(oracle_mid_price, outer_half_spread);
+    let ask_outer = bounded_ask_price(oracle_mid_price, outer_half_spread);
+
+    let max_bid_limit =
+        (((oracle_mid_price as u128) * ((10_000 + max_slippage_bps) as u128)) / 10_000u128)
+            as u64;
+    let min_ask_limit =
+        (((oracle_mid_price as u128) * ((10_000 - max_slippage_bps) as u128)) / 10_000u128)
+            as u64;
+
+    assert!(bid_inner <= max_bid_limit && bid_outer <= max_bid_limit, EInvalidSlippageBps);
+    assert!(ask_inner >= min_ask_limit && ask_outer >= min_ask_limit, EInvalidSlippageBps);
+
+    let trade_proof = trader_account
+        .balance_manager
+        .generate_proof_as_trader(&trader_account.caps.trade_cap, ctx);
+
+    pool.cancel_all_orders(
+        &mut trader_account.balance_manager,
+        &trade_proof,
+        clock,
+        ctx,
+    );
+
+    let expire_timestamp = clock.timestamp_ms() + 30_000;
+    let order_type = constants::no_restriction();
+    let self_matching_option = constants::self_matching_allowed();
+    let pay_with_deep = true;
+
+    place_checked_limit_order(
+        trader_account,
+        pool,
+        1,
+        order_type,
+        self_matching_option,
+        bid_outer,
+        outer_quantity,
+        true,
+        pay_with_deep,
+        expire_timestamp,
+        clock,
+        ctx,
+    );
+    place_checked_limit_order(
+        trader_account,
+        pool,
+        2,
+        order_type,
+        self_matching_option,
+        bid_inner,
+        inner_quantity,
+        true,
+        pay_with_deep,
+        expire_timestamp,
+        clock,
+        ctx,
+    );
+    place_checked_limit_order(
+        trader_account,
+        pool,
+        3,
+        order_type,
+        self_matching_option,
+        ask_inner,
+        inner_quantity,
+        false,
+        pay_with_deep,
+        expire_timestamp,
+        clock,
+        ctx,
+    );
+    place_checked_limit_order(
+        trader_account,
+        pool,
+        4,
+        order_type,
+        self_matching_option,
+        ask_outer,
+        outer_quantity,
+        false,
+        pay_with_deep,
+        expire_timestamp,
+        clock,
+        ctx,
+    );
+
+    events::emit_quote_updated(oracle_mid_price, effective_spread_bps, clock.timestamp_ms());
+}
+
 // === Private Functions ===
+
+/// TODO#q: remove function?
+/// Place a limit order. Quantity is in base asset terms.
+/// For current version pay_with_deep must be true, so the fee will be paid with
+/// DEEP tokens.
+public(package) fun place_limit_order<BaseAsset, QuoteAsset>(
+    trader_account: &mut TraderAccount,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    client_order_id: u64,
+    order_type: u8,
+    self_matching_option: u8,
+    price: u64,
+    quantity: u64,
+    is_bid: bool,
+    pay_with_deep: bool,
+    expire_timestamp: u64,
+    clock: &Clock,
+    ctx: &TxContext,
+): OrderInfo {
+    let trade_proof = trader_account
+        .balance_manager
+        .generate_proof_as_trader(
+            &trader_account.caps.trade_cap,
+            ctx,
+        );
+
+    pool.place_limit_order(
+        &mut trader_account.balance_manager,
+        &trade_proof,
+        client_order_id,
+        order_type,
+        self_matching_option,
+        price,
+        quantity,
+        is_bid,
+        pay_with_deep,
+        expire_timestamp,
+        clock,
+        ctx,
+    )
+}
+
+// TODO#q: remove function
+/// Cancel an order. The order must be owned by the balance_manager.
+/// The order is removed from the book and the balance_manager's open orders.
+/// The balance_manager's balance is updated with the order's remaining
+/// quantity.
+/// Order canceled event is emitted.
+public(package) fun cancel_order<BaseAsset, QuoteAsset>(
+    trader_account: &mut TraderAccount,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    order_id: u128,
+    clock: &Clock,
+    ctx: &TxContext,
+) {
+    let trade_proof = trader_account
+        .balance_manager
+        .generate_proof_as_trader(
+            &trader_account.caps.trade_cap,
+            ctx,
+        );
+
+    pool.cancel_order(&mut trader_account.balance_manager, &trade_proof, order_id, clock, ctx)
+}
+
+fun place_checked_limit_order<BaseAsset, QuoteAsset>(
+    trader_account: &mut TraderAccount,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    client_order_id: u64,
+    order_type: u8,
+    self_matching_option: u8,
+    price: u64,
+    quantity: u64,
+    is_bid: bool,
+    pay_with_deep: bool,
+    expire_timestamp: u64,
+    clock: &Clock,
+    ctx: &TxContext,
+) {
+    assert!(
+        pool.can_place_limit_order(
+            &trader_account.balance_manager,
+            price,
+            quantity,
+            is_bid,
+            pay_with_deep,
+            expire_timestamp,
+            clock,
+        ),
+        EQuoteBalanceExceeded,
+    );
+
+    let order_info = place_limit_order(
+        trader_account,
+        pool,
+        client_order_id,
+        order_type,
+        self_matching_option,
+        price,
+        quantity,
+        is_bid,
+        pay_with_deep,
+        expire_timestamp,
+        clock,
+        ctx,
+    );
+
+    if (order_info.executed_quantity() > 0) {
+        let fill_price = math::div(
+            order_info.cumulative_quote_quantity(),
+            order_info.executed_quantity(),
+        );
+        events::emit_order_executed(order_info.order_id(), fill_price);
+    };
+}
+
+fun pyth_price_to_deepbook_price(price_info_object: &PriceInfoObject): u64 {
+    let pyth_price = pyth::get_price_unsafe(price_info_object);
+    let pyth_price_i64 = pyth_price.get_price();
+    assert!(!pyth_price_i64.get_is_negative(), EInvalidPythPriceSign);
+
+    let pyth_expo_i64 = pyth_price.get_expo();
+    assert!(pyth_expo_i64.get_is_negative(), EInvalidPythPriceExponent);
+
+    let price_magnitude = pyth_price_i64.get_magnitude_if_positive() as u128;
+    let decimals = pyth_expo_i64.get_magnitude_if_negative();
+
+    let scaled_price = if (decimals <= 9) {
+        price_magnitude * 10u128.pow((9 - decimals) as u8)
+    } else {
+        price_magnitude / 10u128.pow((decimals - 9) as u8)
+    };
+
+    assert!(scaled_price > 0, EInvalidPythPriceValue);
+    assert!(scaled_price <= constants::max_price() as u128, EInvalidPythPriceValue);
+
+    scaled_price as u64
+}
+
+fun bounded_bid_price(mid_price: u64, spread: u64): u64 {
+    if (spread >= mid_price) {
+        constants::min_price()
+    } else {
+        mid_price - spread
+    }
+}
+
+fun bounded_ask_price(mid_price: u64, spread: u64): u64 {
+    let ask_price = (mid_price as u128) + (spread as u128);
+    if (ask_price > constants::max_price() as u128) {
+        constants::max_price()
+    } else {
+        ask_price as u64
+    }
+}
 
 // === View helpers ===
 

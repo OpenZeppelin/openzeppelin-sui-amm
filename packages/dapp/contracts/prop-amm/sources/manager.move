@@ -59,6 +59,8 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 
 // === Public Functions ===
 
+// TODO#q: return config object
+
 /// Creates, emits, and shares a new AMM configuration.
 /// Requires the admin capability used to control this config.
 /// Returns the new configuration's object ID.

@@ -1,5 +1,5 @@
 [package]
-name = "local_mock_pyth"
+name = "pyth"
 edition = "2024"
 
 [environments]
