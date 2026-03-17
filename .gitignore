@@ -9,12 +9,11 @@ coverage
 
 deployments/
 
-packages/tooling/tests-integration/**/build/
-packages/dapp/contracts/**/build/
-packages/dapp/contracts/**/.trace
-packages/dapp/contracts/**/.coverage*
-packages/dapp/contracts/**/Pub.*.toml
-packages/dapp/contracts/**/Published.toml
+**/build/
+**/.trace
+**/.coverage*
+**/Pub.*.toml
+**/Published.toml
 
 **/*tsbuildinfo
 
