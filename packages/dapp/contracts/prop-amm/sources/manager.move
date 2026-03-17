@@ -155,11 +155,13 @@ public fun base_spread_bps(config: &AMMConfig): u64 {
     config.base_spread_bps
 }
 
+// TODO#q: use volatility_multiplier_bps pricing
 /// Returns the volatility multiplier in basis points.
 public fun volatility_multiplier_bps(config: &AMMConfig): u64 {
     config.volatility_multiplier_bps
 }
 
+// TODO#q: use LASER pricing
 /// Returns whether LASER pricing is enabled.
 public fun use_laser(config: &AMMConfig): bool {
     config.use_laser
@@ -170,6 +172,7 @@ public fun trading_paused(config: &AMMConfig): bool {
     config.trading_paused
 }
 
+// TODO#q: use pyth_price_feed_id
 /// Returns the Pyth price feed ID bytes.
 public fun pyth_price_feed_id(config: &AMMConfig): vector<u8> {
     config.pyth_price_feed_id
