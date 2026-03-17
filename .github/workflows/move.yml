@@ -43,7 +43,7 @@ jobs:
       - uses: MystenLabs/move-formatter-action@v1
         with:
           prettier-plugin-move-version: "latest"
-          working-directory: "."
+          working-directory: "./packages/dapp/contracts"
           pattern: "**/*.move"
           write-changes: false
 
