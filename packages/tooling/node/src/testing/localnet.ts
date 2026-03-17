@@ -67,8 +67,8 @@ import { signAndExecute } from "../transactions.ts"
 import { getErrnoCode } from "../utils/fs.ts"
 import { parseBooleanEnv } from "./booleans.ts"
 import { parseNonNegativeInteger, parsePositiveInteger } from "./numbers.ts"
-import { pollWithTimeout } from "./poll.ts"
 import { resolveWorkspaceRoot } from "./paths.ts"
+import { pollWithTimeout } from "./poll.ts"
 
 export type LocalnetStartOptions = {
   testId: string
@@ -1647,7 +1647,10 @@ const resolveDestinationDependencyPath = ({
   externalDependencies: ExternalDependencyCopyResult
 }) => {
   if (isPathWithinRoot(resolvedSourcePath, sourceMoveRoot)) {
-    const relativeToSourceRoot = path.relative(sourceMoveRoot, resolvedSourcePath)
+    const relativeToSourceRoot = path.relative(
+      sourceMoveRoot,
+      resolvedSourcePath
+    )
     return path.join(destinationMoveRoot, relativeToSourceRoot)
   }
 
@@ -1695,44 +1698,6 @@ const buildLocalDependencyReplacementMap = async ({
   return replacements
 }
 
-const buildMoveLockLocalSourceReplacementMap = async ({
-  sourceMoveLockPath,
-  destinationMoveLockPath,
-  destinationMoveRoot,
-  sourceMoveRoot,
-  externalDependencies
-}: {
-  sourceMoveLockPath: string
-  destinationMoveLockPath: string
-  destinationMoveRoot: string
-  sourceMoveRoot: string
-  externalDependencies: ExternalDependencyCopyResult
-}) => {
-  const sourceDir = path.dirname(sourceMoveLockPath)
-  const destinationDir = path.dirname(destinationMoveLockPath)
-  const replacements = new Map<string, string>()
-
-  const contents = await readFile(sourceMoveLockPath, "utf8")
-  const localSourcePaths = collectMoveLockLocalSourcePaths(contents)
-
-  localSourcePaths.forEach((localPath) => {
-    const resolvedSourcePath = path.resolve(sourceDir, localPath)
-    const destinationDependencyPath = resolveDestinationDependencyPath({
-      resolvedSourcePath,
-      destinationMoveRoot,
-      sourceMoveRoot,
-      externalDependencies
-    })
-
-    if (!destinationDependencyPath) return
-
-    const relativePath = path.relative(destinationDir, destinationDependencyPath)
-    replacements.set(localPath, normalizeRelativeTomlPath(relativePath))
-  })
-
-  return replacements
-}
-
 const rewriteMoveTomlLocalDependencyEntries = ({
   destinationContents,
   dependencyReplacements
@@ -1753,44 +1718,6 @@ const rewriteMoveTomlLocalDependencyEntries = ({
     if (!entryMatch?.[1]) return line
 
     const replacementPath = dependencyReplacements.get(entryMatch[1])
-    if (!replacementPath) return line
-
-    const nextLine = line.replace(
-      /local\s*=\s*"[^"]*"/,
-      `local = "${replacementPath}"`
-    )
-    if (nextLine !== line) didUpdate = true
-
-    return nextLine
-  })
-
-  return {
-    updatedContents: updatedLines.join(lineEnding),
-    didUpdate
-  }
-}
-
-const rewriteMoveLockLocalSourceEntries = ({
-  destinationContents,
-  sourceReplacements
-}: {
-  destinationContents: string
-  sourceReplacements: Map<string, string>
-}) => {
-  if (sourceReplacements.size === 0) {
-    return { updatedContents: destinationContents, didUpdate: false }
-  }
-
-  const lineEnding = resolveTomlLineEnding(destinationContents)
-  const lines = destinationContents.split(/\r?\n/)
-  let didUpdate = false
-
-  const updatedLines = lines.map((line) => {
-    const entryMatch = line.match(moveLockLocalSourcePattern)
-    const sourcePath = entryMatch?.[1]
-    if (!sourcePath) return line
-
-    const replacementPath = sourceReplacements.get(sourcePath)
     if (!replacementPath) return line
 
     const nextLine = line.replace(
@@ -1853,47 +1780,6 @@ const rewriteMoveTomlLocalDependencyPathsInTempRoot = async ({
   )
 }
 
-const rewriteMoveLockLocalSourcePathsInTempRoot = async ({
-  destinationMoveRoot,
-  sourceMoveRoot,
-  externalDependencies
-}: {
-  destinationMoveRoot: string
-  sourceMoveRoot: string
-  externalDependencies: ExternalDependencyCopyResult
-}) => {
-  const moveLockFiles = await listMoveLockFiles(destinationMoveRoot)
-
-  await Promise.all(
-    moveLockFiles.map(async (destinationMoveLockPath) => {
-      const sourceMoveLockPath = resolveSourceMoveTomlPath({
-        destinationMoveTomlPath: destinationMoveLockPath,
-        destinationMoveRoot,
-        sourceMoveRoot,
-        externalDependencies
-      })
-      if (!(await pathExists(sourceMoveLockPath))) return
-
-      const sourceReplacements = await buildMoveLockLocalSourceReplacementMap({
-        sourceMoveLockPath,
-        destinationMoveLockPath,
-        destinationMoveRoot,
-        sourceMoveRoot,
-        externalDependencies
-      })
-
-      const destinationContents = await readFile(destinationMoveLockPath, "utf8")
-      const { updatedContents, didUpdate } = rewriteMoveLockLocalSourceEntries({
-        destinationContents,
-        sourceReplacements
-      })
-      if (!didUpdate) return
-
-      await writeFile(destinationMoveLockPath, updatedContents, "utf8")
-    })
-  )
-}
-
 const sanitizeLocalnetMoveMetadataInTempRoot = async (moveRootPath: string) => {
   const moveTomlFiles = await listMoveTomlFiles(moveRootPath)
 
@@ -1924,12 +1810,6 @@ export const prepareMoveSourcesForLocalnetTests = async ({
   })
 
   await rewriteMoveTomlLocalDependencyPathsInTempRoot({
-    destinationMoveRoot,
-    sourceMoveRoot,
-    externalDependencies
-  })
-
-  await rewriteMoveLockLocalSourcePathsInTempRoot({
     destinationMoveRoot,
     sourceMoveRoot,
     externalDependencies

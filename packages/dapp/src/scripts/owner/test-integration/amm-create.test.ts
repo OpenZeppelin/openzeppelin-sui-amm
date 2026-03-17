@@ -150,40 +150,4 @@ describe("owner amm-create integration", () => {
       )
     })
   })
-
-  it("resolves the AMM package id from the latest deployment when packageName metadata is missing", async () => {
-    await testEnv.withTestContext(
-      "owner-amm-create-legacy-deployment",
-      async (context) => {
-        const publisher = context.createAccount("publisher")
-        await context.fundAccount(publisher, { minimumCoinObjects: 2 })
-
-        await context.publishPackage("prop-amm", publisher, {
-          withUnpublishedDependencies: true
-        })
-
-        const scriptRunner = createSuiScriptRunner(context)
-        const result = await scriptRunner.runScript(
-          resolveOwnerScriptPath("amm-create"),
-          {
-            account: publisher,
-            args: {
-              json: true
-            }
-          }
-        )
-
-        expect(result.exitCode).toBe(0)
-
-        const output = parseJsonFromScriptOutput<AmmCreateOutput>(
-          result.stdout,
-          "amm-create output"
-        )
-
-        expect(output.adminCapId).toBeTruthy()
-        expect(output.ammConfig?.configId).toBeTruthy()
-        expect(output.transactionSummary?.label).toBe("create-amm")
-      }
-    )
-  })
 })
