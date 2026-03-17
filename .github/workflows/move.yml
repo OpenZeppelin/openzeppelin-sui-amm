@@ -40,14 +40,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Hide workspace package.json from the CI job
+        run: mv package.json package.json.bak
       - uses: MystenLabs/move-formatter-action@v1
-        env:
-          npm_config_workspaces: "false"
         with:
           prettier-plugin-move-version: "latest"
           working-directory: "."
           pattern: "**/*.move"
           write-changes: false
+      - name: Restore package.json
+        if: always()
+        run: mv package.json.bak package.json
 
   move-lint:
     name: Move Lint ${{ matrix.package }}
