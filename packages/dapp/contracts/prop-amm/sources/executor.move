@@ -32,10 +32,6 @@ const EInvalidPythPriceExponent: vector<u8> = b"pyth price exponent must be nega
 #[error(code = 3)]
 const EInvalidPythPriceValue: vector<u8> = b"pyth price must be positive after scaling";
 #[error(code = 4)]
-const ESpreadTooWide: vector<u8> = b"effective spread must be below 10000 bps";
-#[error(code = 5)]
-const EInvalidSlippageBps: vector<u8> = b"slippage bps must be at most 10000";
-#[error(code = 6)]
 const EQuoteBalanceExceeded: vector<u8> =
     b"quote refresh exceeds available trader account balances";
 
@@ -154,22 +150,16 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     config: &AMMConfig,
     price_info_object: &PriceInfoObject,
-    inner_quantity: u64,
-    outer_quantity: u64,
-    volatility_buffer_bps: u64,
-    max_slippage_bps: u64,
     clock: &Clock,
     ctx: &TxContext,
 ) {
     assert!(!config.trading_paused(), ETradingPaused);
-    assert!(max_slippage_bps <= 10_000, EInvalidSlippageBps);
 
+    // TODO#q: consider volatility multiplier.
     let oracle_mid_price = pyth_price_to_deepbook_price(price_info_object);
-    let effective_spread_bps = config.base_spread_bps() + volatility_buffer_bps;
-    assert!(effective_spread_bps < 10_000, ESpreadTooWide);
-
+    let base_spread_bps = config.base_spread_bps();
     let half_spread = 
-        ((oracle_mid_price as u128) * (effective_spread_bps as u128) / 10_000u128) as u64;
+        ((oracle_mid_price as u128) * (base_spread_bps as u128) / 10_000u128) as u64;
 
     // Calculate bids/ask order prices.
     let bid_inner = oracle_mid_price.checked_sub(half_spread).destroy_or!(constants::min_price());
@@ -185,14 +175,6 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         .destroy_or!(constants::max_price())
         .max(constants::max_price());
 
-    let max_bid_limit =
-        (((oracle_mid_price as u128) * ((10_000 + max_slippage_bps) as u128)) / 10_000u128) as u64;
-    let min_ask_limit =
-        (((oracle_mid_price as u128) * ((10_000 - max_slippage_bps) as u128)) / 10_000u128) as u64;
-
-    assert!(bid_inner <= max_bid_limit && bid_outer <= max_bid_limit, EInvalidSlippageBps);
-    assert!(ask_inner >= min_ask_limit && ask_outer >= min_ask_limit, EInvalidSlippageBps);
-
     // Generate trade proof.
     let trade_proof = trader_account
         .balance_manager
@@ -206,7 +188,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         ctx,
     );
 
-    // Update balance manager balance, based on previous settled limit orders
+    // Update balance manager, based on previous settled limit orders.
     pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
 
     // TODO#q: put expiration time into config
@@ -215,6 +197,10 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // TODO#q: remove self matching
     let self_matching_option = constants::self_matching_allowed();
     let pay_with_deep = true;
+
+    // TODO#q: compute quantity
+    let inner_quantity = 1000;
+    let outer_quantity = 1000;
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
     trader_account.place_limit_order(
@@ -274,7 +260,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         ctx,
     );
 
-    events::emit_quote_updated(oracle_mid_price, effective_spread_bps);
+    events::emit_quote_updated(oracle_mid_price, base_spread_bps);
 }
 
 // === Private Functions ===
@@ -327,6 +313,7 @@ fun place_limit_order<BaseAsset, QuoteAsset>(
             order_info.cumulative_quote_quantity(),
             order_info.executed_quantity(),
         );
+        // TODO#q: should we emit here? Deepbook emits order execution already. We don't emit when order wasn't instantly executed
         events::emit_order_executed(order_info.order_id(), fill_price);
     };
 }
