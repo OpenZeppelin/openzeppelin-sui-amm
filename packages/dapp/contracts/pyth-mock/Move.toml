@@ -1,9 +1,3 @@
 [package]
-name = "local_mock_pyth"
+name = "pyth"
 edition = "2024"
-
-[addresses]
-pyth = "0x0"
-
-[environments]
-test-publish = "c90e6192"

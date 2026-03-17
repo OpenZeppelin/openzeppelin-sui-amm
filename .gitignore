@@ -1,4 +1,5 @@
 PLAN*.md
+AGENTS.md
 node_modules
 dist
 coverage
@@ -12,17 +13,13 @@ packages/tooling/tests-integration/**/build/
 packages/dapp/contracts/**/build/
 packages/dapp/contracts/**/.trace
 packages/dapp/contracts/**/.coverage*
-packages/dapp/contracts/**/Pub.localnet.toml
+packages/dapp/contracts/**/Pub.*.toml
 packages/dapp/contracts/**/Published.toml
 
 **/*tsbuildinfo
 
 patches/pyth-crosschain/
 
-tmp.json
-
-.pnpm-store 
+.pnpm-store
 
 tmp*
-
-AGENTS.md
