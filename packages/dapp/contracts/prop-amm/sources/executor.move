@@ -5,6 +5,8 @@ use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, With
 use deepbook::registry::Registry;
 use openzeppelin_market_maker::events;
 use openzeppelin_market_maker::manager::AMMAdminCap;
+use sui::clock::Clock;
+use sui::coin::Coin;
 use sui::table::{Self, Table};
 
 // === Errors ===
@@ -95,8 +97,29 @@ public fun create_trader_account_and_transfer(
     trader_account_id
 }
 
-// === Private Functions ===
+/// Deposit funds into a balance manager.
+public fun deposit<T>(
+    trader_account: &mut TraderAccount,
+    _: &AMMAdminCap,
+    coin: Coin<T>,
+    ctx: &TxContext,
+) {
+    trader_account.balance_manager.deposit_with_cap(&trader_account.caps.deposit_cap, coin, ctx)
+}
 
+/// Withdraw funds from a balance manager.
+public fun withdraw<T>(
+    trader_account: &mut TraderAccount,
+    _: &AMMAdminCap,
+    withdraw_amount: u64,
+    ctx: &mut TxContext,
+): Coin<T> {
+    trader_account
+        .balance_manager
+        .withdraw_with_cap(&trader_account.caps.withdraw_cap, withdraw_amount, ctx)
+}
+
+// === Private Functions ===
 
 // === View helpers ===
 
