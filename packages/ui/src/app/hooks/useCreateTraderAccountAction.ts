@@ -58,6 +58,10 @@ const useCreateTraderAccountAction = ({
     return resolveDeepbookRegistryIdForNetwork(network)
   }, [network])
   const localnetClient = useMemo(() => getLocalnetClient(), [])
+  const reloadUi = useCallback(() => {
+    if (typeof window === "undefined") return
+    window.location.reload()
+  }, [])
 
   const isLocalnet = network === ENetwork.LOCALNET
   const localnetExecutor = useMemo(
@@ -188,6 +192,8 @@ const useCreateTraderAccountAction = ({
       } else {
         notification.success("Trader account created.", toastId)
       }
+
+      reloadUi()
     } catch (error) {
       const localnetSupportNote =
         isLocalnet && !localnetSupported
@@ -232,6 +238,7 @@ const useCreateTraderAccountAction = ({
     localnetSupported,
     network,
     onCreated,
+    reloadUi,
     signAndExecuteTransaction,
     suiClient,
     walletAddress
