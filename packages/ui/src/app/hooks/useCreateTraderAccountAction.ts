@@ -8,37 +8,51 @@ import {
   useSuiClient,
   useSuiClientContext
 } from "@mysten/dapp-kit"
-import type { IdentifierString } from "@mysten/wallet-standard"
-import { resolveDeepbookRegistryIdForNetwork } from "@sui-amm/domain-core/models/deepbook"
 import { buildCreateTraderAccountTransaction } from "@sui-amm/domain-core/ptb/deepbook"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useCallback, useMemo, useState } from "react"
+import { resolveDeepbookRegistryIdForNetwork } from "@sui-amm/domain-core/models/deepbook"
 import { LOCALNET_DEEPBOOK_REGISTRY_ID } from "../config/network"
 import {
   getLocalnetClient,
-  makeLocalnetExecutor,
-  walletSupportsChain
+  makeLocalnetExecutor
 } from "../helpers/localnet"
 import { transactionUrl } from "../helpers/network"
 import { notification } from "../helpers/notification"
+import {
+  executeTransaction,
+  resolveLocalnetSupportNote,
+  withOptionalSupportNote
+} from "../helpers/transactionExecution"
 import {
   formatErrorMessage,
   safeJsonStringify,
   serializeForJson
 } from "../helpers/transactionErrors"
-import { waitForTransactionBlock } from "../helpers/transactionWait"
+import {
+  buildTraderAccountCreateSummary,
+  type TraderAccountCreateSummary
+} from "../helpers/traderAccountCreateSummary"
+import { resolveWalletNetworkPreflight } from "../helpers/walletPreflight"
 import useExplorerUrl from "./useExplorerUrl"
 import useResolvedPackageId from "./useResolvedPackageId"
 
 type CreateTraderAccountTransactionState =
   | { status: "idle" }
   | { status: "processing" }
-  | { status: "success"; digest: string }
+  | { status: "success"; summary: TraderAccountCreateSummary }
   | { status: "error"; error: string; details?: string }
 
 const networkUnsupportedMessage =
   "Trader account creation is not configured for the active network."
+const missingGasCoinsErrorFragment =
+  "no valid gas coins found for the transaction"
+
+const includesMissingGasCoinsError = (error: unknown) =>
+  (error instanceof Error ? error.message : String(error))
+    .toLowerCase()
+    .includes(missingGasCoinsErrorFragment)
 
 const useCreateTraderAccountAction = ({
   onCreated
@@ -58,10 +72,6 @@ const useCreateTraderAccountAction = ({
     return resolveDeepbookRegistryIdForNetwork(network)
   }, [network])
   const localnetClient = useMemo(() => getLocalnetClient(), [])
-  const reloadUi = useCallback(() => {
-    if (typeof window === "undefined") return
-    window.location.reload()
-  }, [])
 
   const isLocalnet = network === ENetwork.LOCALNET
   const localnetExecutor = useMemo(
@@ -74,25 +84,21 @@ const useCreateTraderAccountAction = ({
   )
   const [transactionState, setTransactionState] =
     useState<CreateTraderAccountTransactionState>({ status: "idle" })
+  const resetTransactionState = useCallback(() => {
+    setTransactionState({ status: "idle" })
+  }, [])
 
   const walletAddress = currentAccount?.address
-  const expectedChain = `sui:${network}` as IdentifierString
-  const accountChains = useMemo(
-    () => currentAccount?.chains ?? [],
-    [currentAccount?.chains]
-  )
-  const chainMismatch = useMemo(
-    () => accountChains.length > 0 && !accountChains.includes(expectedChain),
-    [accountChains, expectedChain]
-  )
-  const localnetSupported = useMemo(
-    () =>
-      walletSupportsChain(
-        currentWallet ?? currentAccount ?? undefined,
-        expectedChain
-      ),
-    [currentAccount, currentWallet, expectedChain]
-  )
+  const { expectedChain, accountChains, chainMismatch, localnetSupported } =
+    useMemo(
+      () =>
+        resolveWalletNetworkPreflight({
+          network,
+          accountChainsInput: currentAccount?.chains,
+          walletChainSupport: currentWallet ?? currentAccount ?? undefined
+        }),
+      [currentAccount, currentWallet, network]
+    )
 
   const disabledReason = !walletAddress
     ? "Connect a wallet to create a trader account."
@@ -161,30 +167,36 @@ const useCreateTraderAccountAction = ({
         { suiClient }
       )
 
-      const transaction = buildCreateTraderAccountTransaction({
-        ammPackageId,
-        deepbookRegistry,
-        ownerAddress: walletAddress
-      })
-      transaction.setSender(walletAddress)
-
-      let digest = ""
-
-      if (isLocalnet) {
-        const result = await localnetExecutor(transaction, {
-          chain: expectedChain
+      const buildTransaction = () => {
+        const transaction = buildCreateTraderAccountTransaction({
+          ammPackageId,
+          deepbookRegistry,
+          ownerAddress: walletAddress
         })
-        digest = result.digest
-      } else {
-        const result = await signAndExecuteTransaction.mutateAsync({
-          transaction,
-          chain: expectedChain
-        })
-        digest = result.digest
-        await waitForTransactionBlock(suiClient, digest)
+        transaction.setSender(walletAddress)
+        return transaction
       }
 
-      setTransactionState({ status: "success", digest })
+      const { digest, transactionBlock } = await executeTransaction({
+        buildTransaction,
+        isLocalnet,
+        expectedChain,
+        localnetExecutor,
+        signAndExecuteTransaction: signAndExecuteTransaction.mutateAsync,
+        suiClient,
+        retryLocalnetWithoutDryRunWhen: includesMissingGasCoinsError
+      })
+
+      const summary = buildTraderAccountCreateSummary({
+        digest,
+        transactionBlock,
+        ownerAddress: walletAddress
+      })
+
+      setTransactionState({
+        status: "success",
+        summary
+      })
       onCreated?.()
 
       if (explorerUrl) {
@@ -192,17 +204,16 @@ const useCreateTraderAccountAction = ({
       } else {
         notification.success("Trader account created.", toastId)
       }
-
-      reloadUi()
     } catch (error) {
-      const localnetSupportNote =
-        isLocalnet && !localnetSupported
-          ? "Wallet may not support sui:localnet signing."
-          : undefined
+      const localnetSupportNote = resolveLocalnetSupportNote({
+        isLocalnet,
+        localnetSupported
+      })
       const formattedError = formatErrorMessage(error)
-      const errorMessage = localnetSupportNote
-        ? `${formattedError} ${localnetSupportNote}`
-        : formattedError
+      const errorMessage = withOptionalSupportNote({
+        message: formattedError,
+        supportNote: localnetSupportNote
+      })
       const errorDetails = safeJsonStringify(
         {
           network,
@@ -238,7 +249,6 @@ const useCreateTraderAccountAction = ({
     localnetSupported,
     network,
     onCreated,
-    reloadUi,
     signAndExecuteTransaction,
     suiClient,
     walletAddress
@@ -248,7 +258,8 @@ const useCreateTraderAccountAction = ({
     canCreate: Boolean(canCreate),
     disabledReason,
     transactionState,
-    createTraderAccount
+    createTraderAccount,
+    resetTransactionState
   }
 }
 

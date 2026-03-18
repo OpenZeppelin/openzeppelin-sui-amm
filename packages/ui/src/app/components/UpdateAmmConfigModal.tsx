@@ -13,7 +13,6 @@ import {
   ModalBody,
   ModalErrorFooter,
   ModalErrorNotice,
-  ModalFrame,
   ModalHeader,
   ModalSection,
   ModalStatusHeader,
@@ -26,6 +25,8 @@ import {
   modalFieldTitleClassName
 } from "./ModalPrimitives"
 import TransactionRecap from "./TransactionRecap"
+import TransactionStateModal from "./TransactionStateModal"
+import { SummaryIdRow, SummaryValueCard } from "./SummaryPrimitives"
 
 const inputClassName = (error?: string) =>
   [modalFieldInputClassName, error ? modalFieldInputErrorClassName : ""]
@@ -81,30 +82,6 @@ const ToggleField = ({
   </label>
 )
 
-const ConfigValueCard = ({
-  label,
-  value,
-  detail
-}: {
-  label: string
-  value: string
-  detail?: string
-}) => (
-  <div className="rounded-xl border border-slate-200/70 bg-white/80 p-3 text-xs dark:border-slate-50/15 dark:bg-slate-950/60">
-    <div className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60">
-      {label}
-    </div>
-    <div className="mt-1 text-sm font-semibold text-sds-dark dark:text-sds-light">
-      {value}
-    </div>
-    {detail ? (
-      <div className="mt-2 overflow-auto text-[0.7rem] text-slate-500 dark:text-slate-200/60">
-        {detail}
-      </div>
-    ) : undefined}
-  </div>
-)
-
 const AmmConfigSummarySection = ({
   summary,
   explorerUrl
@@ -117,31 +94,32 @@ const AmmConfigSummarySection = ({
     subtitle="Latest on-chain values for this AMM"
   >
     <div className="grid gap-3 text-xs sm:grid-cols-2">
-      <ConfigValueCard
+      <SummaryValueCard
         label="Base spread (bps)"
         value={summary.ammConfig.baseSpreadBps}
       />
-      <ConfigValueCard
+      <SummaryValueCard
         label="Volatility multiplier (bps)"
         value={summary.ammConfig.volatilityMultiplierBps}
       />
-      <ConfigValueCard
+      <SummaryValueCard
         label="Laser"
         value={summary.ammConfig.useLaser ? "Enabled" : "Disabled"}
       />
-      <ConfigValueCard
+      <SummaryValueCard
         label="Trading status"
         value={summary.ammConfig.tradingPaused ? "Paused" : "Live"}
       />
       <div className="sm:col-span-2">
-        <ConfigValueCard
+        <SummaryValueCard
           label="Pyth price feed id"
           value={shortenId(summary.ammConfig.pythPriceFeedIdHex, 10, 8)}
           detail={summary.ammConfig.pythPriceFeedIdHex}
+          detailClassName="mt-2 overflow-auto text-[0.7rem] text-slate-500 dark:text-slate-200/60"
         />
       </div>
     </div>
-    <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+    <SummaryIdRow>
       <CopyableId
         value={summary.ammConfig.configId}
         label="AMM config"
@@ -152,7 +130,7 @@ const AmmConfigSummarySection = ({
         label="Admin cap"
         explorerUrl={explorerUrl}
       />
-    </div>
+    </SummaryIdRow>
   </ModalSection>
 )
 
@@ -240,7 +218,6 @@ const UpdateAmmConfigModal = ({
     transactionState,
     transactionSummary,
     isSuccessState,
-    isErrorState,
     canSubmit,
     handleInputChange,
     markFieldBlur,
@@ -254,36 +231,37 @@ const UpdateAmmConfigModal = ({
     onConfigUpdated
   })
 
-  if (!open) return null
-
-  if (isSuccessState && transactionSummary) {
-    return (
-      <ModalFrame onClose={onClose}>
+  return (
+    <TransactionStateModal
+      open={open}
+      onClose={onClose}
+      status={transactionState.status}
+      summary={isSuccessState ? transactionSummary : undefined}
+      error={
+        transactionState.status === "error" ? transactionState.error : undefined
+      }
+      details={
+        transactionState.status === "error"
+          ? transactionState.details
+          : undefined
+      }
+      renderSuccess={(summary) => (
         <AmmConfigSuccessView
-          summary={transactionSummary}
+          summary={summary}
           explorerUrl={explorerUrl}
           onClose={onClose}
           onReset={resetForm}
         />
-      </ModalFrame>
-    )
-  }
-
-  if (isErrorState && transactionState.status === "error") {
-    return (
-      <ModalFrame onClose={onClose}>
+      )}
+      renderError={(error, details) => (
         <AmmConfigErrorView
-          error={transactionState.error}
-          details={transactionState.details}
+          error={error}
+          details={details}
           onClose={onClose}
           onReset={resetForm}
         />
-      </ModalFrame>
-    )
-  }
-
-  return (
-    <ModalFrame onClose={onClose}>
+      )}
+    >
       <ModalHeader
         eyebrow="AMM configuration"
         title="Update AMM config"
@@ -453,7 +431,7 @@ const UpdateAmmConfigModal = ({
           </div>
         </div>
       </div>
-    </ModalFrame>
+    </TransactionStateModal>
   )
 }
 

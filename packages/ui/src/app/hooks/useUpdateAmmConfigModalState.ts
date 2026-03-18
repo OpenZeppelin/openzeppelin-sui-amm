@@ -9,7 +9,6 @@ import {
   useSuiClientContext
 } from "@mysten/dapp-kit"
 import type { SuiTransactionBlockResponse } from "@mysten/sui/client"
-import type { IdentifierString } from "@mysten/wallet-standard"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
   DEFAULT_BASE_SPREAD_BPS,
@@ -33,8 +32,7 @@ import {
 } from "../helpers/inputValidation"
 import {
   getLocalnetClient,
-  makeLocalnetExecutor,
-  walletSupportsChain
+  makeLocalnetExecutor
 } from "../helpers/localnet"
 import {
   extractErrorDetails,
@@ -42,7 +40,15 @@ import {
   safeJsonStringify,
   serializeForJson
 } from "../helpers/transactionErrors"
-import { waitForTransactionBlock } from "../helpers/transactionWait"
+import {
+  executeTransaction,
+  resolveLocalnetSupportNote,
+  withOptionalSupportNote
+} from "../helpers/transactionExecution"
+import {
+  buildWalletPreflightContext,
+  resolveWalletNetworkPreflight
+} from "../helpers/walletPreflight"
 import { useIdleFieldValidation } from "./useIdleFieldValidation"
 
 const PYTH_PRICE_FEED_ID_BYTES = 32
@@ -198,6 +204,46 @@ export const useUpdateAmmConfigModalState = ({
   } = useIdleFieldValidation<keyof AmmUpdateFormState>({ idleDelayMs: 600 })
 
   const walletAddress = currentAccount?.address
+  const { expectedChain, accountChains, chainMismatch, localnetSupported } =
+    useMemo(
+      () =>
+        resolveWalletNetworkPreflight({
+          network,
+          accountChainsInput: currentAccount?.chains,
+          walletChainSupport: currentWallet ?? currentAccount ?? undefined
+        }),
+      [currentAccount, currentWallet, network]
+    )
+  const walletFeatureKeys = useMemo(
+    () => (currentWallet ? Object.keys(currentWallet.features) : []),
+    [currentWallet]
+  )
+  const walletContext = useMemo(
+    () => ({
+      ...buildWalletPreflightContext({
+        appNetwork: network,
+        expectedChain,
+        walletName: currentWallet?.name,
+        walletVersion: currentWallet?.version,
+        accountAddress: walletAddress,
+        accountChains,
+        chainMismatch,
+        localnetSupported
+      }),
+      walletFeatureKeys
+    }),
+    [
+      accountChains,
+      chainMismatch,
+      currentWallet?.name,
+      currentWallet?.version,
+      expectedChain,
+      localnetSupported,
+      network,
+      walletAddress,
+      walletFeatureKeys
+    ]
+  )
 
   const fieldErrors = useMemo(() => buildFieldErrors(formState), [formState])
   const hasFieldErrors = Object.values(fieldErrors).some(Boolean)
@@ -279,30 +325,6 @@ export const useUpdateAmmConfigModalState = ({
 
     if (hasFieldErrors) return
 
-    const expectedChain = `sui:${network}` as IdentifierString
-    const accountChains = currentAccount?.chains ?? []
-    const localnetSupported = walletSupportsChain(
-      currentWallet ?? currentAccount ?? undefined,
-      expectedChain
-    )
-    const walletFeatureKeys = currentWallet
-      ? Object.keys(currentWallet.features)
-      : []
-    const chainMismatch =
-      accountChains.length > 0 && !accountChains.includes(expectedChain)
-
-    const walletContext = {
-      appNetwork: network,
-      expectedChain,
-      walletName: currentWallet?.name,
-      walletVersion: currentWallet?.version,
-      accountAddress: walletAddress,
-      accountChains,
-      chainMismatch,
-      localnetSupported,
-      walletFeatureKeys
-    }
-
     if (!isLocalnet && chainMismatch) {
       setTransactionState({
         status: "error",
@@ -368,27 +390,18 @@ export const useUpdateAmmConfigModalState = ({
       })
       updateTransaction.setSender(walletAddress)
 
-      let digest = ""
-      let transactionBlock: SuiTransactionBlockResponse
-
-      if (isLocalnet) {
-        failureStage = "execute"
-        const result = await localnetExecutor(updateTransaction, {
-          chain: expectedChain
-        })
-        digest = result.digest
-        transactionBlock = result
-      } else {
-        failureStage = "execute"
-        const result = await signAndExecuteTransaction.mutateAsync({
-          transaction: updateTransaction,
-          chain: expectedChain
-        })
-
-        failureStage = "fetch"
-        digest = result.digest
-        transactionBlock = await waitForTransactionBlock(suiClient, digest)
-      }
+      failureStage = "execute"
+      const { digest, transactionBlock } = await executeTransaction({
+        buildTransaction: () => updateTransaction,
+        isLocalnet,
+        expectedChain,
+        localnetExecutor,
+        signAndExecuteTransaction: signAndExecuteTransaction.mutateAsync,
+        suiClient,
+        onBeforeRemoteFetch: () => {
+          failureStage = "fetch"
+        }
+      })
 
       const optimisticOverview = buildFallbackOverview({
         configId,
@@ -436,8 +449,11 @@ export const useUpdateAmmConfigModalState = ({
     } catch (error) {
       const errorDetails = extractErrorDetails(error)
       const localnetSupportNote =
-        isLocalnet && !localnetSupported && failureStage === "execute"
-          ? "Wallet may not support sui:localnet signing."
+        failureStage === "execute"
+          ? resolveLocalnetSupportNote({
+              isLocalnet,
+              localnetSupported
+            })
           : undefined
       const errorDetailsRaw = safeJsonStringify(
         {
@@ -450,9 +466,10 @@ export const useUpdateAmmConfigModalState = ({
         2
       )
       const formattedError = formatErrorMessage(error)
-      const errorMessage = localnetSupportNote
-        ? `${formattedError} ${localnetSupportNote}`
-        : formattedError
+      const errorMessage = withOptionalSupportNote({
+        message: formattedError,
+        supportNote: localnetSupportNote
+      })
       setTransactionState({
         status: "error",
         error: errorMessage,
@@ -461,17 +478,20 @@ export const useUpdateAmmConfigModalState = ({
     }
   }, [
     ammConfigId,
-    currentAccount,
     currentWallet,
+    expectedChain,
     formState,
     hasFieldErrors,
     isLocalnet,
+    localnetSupported,
     localnetExecutor,
     network,
     onConfigUpdated,
     signAndExecuteTransaction,
     suiClient,
-    walletAddress
+    walletAddress,
+    walletContext,
+    chainMismatch
   ])
 
   const isSuccessState = transactionState.status === "success"

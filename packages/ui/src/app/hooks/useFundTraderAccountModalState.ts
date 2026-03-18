@@ -10,7 +10,6 @@ import {
 } from "@mysten/dapp-kit"
 import type { SuiClient, SuiTransactionBlockResponse } from "@mysten/sui/client"
 import type { Transaction, TransactionArgument } from "@mysten/sui/transactions"
-import type { IdentifierString } from "@mysten/wallet-standard"
 import { fundTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
 import {
   getCoinBalances,
@@ -29,18 +28,25 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { resolveValidationMessage } from "../helpers/inputValidation"
 import {
   getLocalnetClient,
-  makeLocalnetExecutor,
-  walletSupportsChain
+  makeLocalnetExecutor
 } from "../helpers/localnet"
 import { transactionUrl } from "../helpers/network"
 import { notification } from "../helpers/notification"
+import {
+  executeTransaction,
+  resolveLocalnetSupportNote,
+  withOptionalSupportNote
+} from "../helpers/transactionExecution"
 import {
   extractErrorDetails,
   formatErrorMessage,
   safeJsonStringify,
   serializeForJson
 } from "../helpers/transactionErrors"
-import { waitForTransactionBlock } from "../helpers/transactionWait"
+import {
+  buildWalletPreflightContext,
+  resolveWalletNetworkPreflight
+} from "../helpers/walletPreflight"
 import useExplorerUrl from "./useExplorerUrl"
 import { useIdleFieldValidation } from "./useIdleFieldValidation"
 import useResolvedPackageId from "./useResolvedPackageId"
@@ -67,6 +73,7 @@ type WalletCoinBalancesState =
 export type TraderAccountFundSummary = {
   digest: string
   transactionBlock: SuiTransactionBlockResponse
+  ownerAddress: string
   traderAccountId: string
   balanceManagerId: string
   coinType: string
@@ -288,13 +295,11 @@ const resolveFundingCoinArgument = async ({
 export const useFundTraderAccountModalState = ({
   open,
   traderAccountId,
-  balanceManagerId,
-  onFunded
+  balanceManagerId
 }: {
   open: boolean
   traderAccountId?: string
   balanceManagerId?: string
-  onFunded?: () => void
 }) => {
   const currentAccount = useCurrentAccount()
   const { currentWallet } = useCurrentWallet()
@@ -416,34 +421,37 @@ export const useFundTraderAccountModalState = ({
     [formState.coinType, walletCoinBalancesState]
   )
 
-  const expectedChain = `sui:${network}` as IdentifierString
-  const accountChains = currentAccount?.chains ?? []
-  const chainMismatch =
-    accountChains.length > 0 && !accountChains.includes(expectedChain)
-  const localnetSupported = walletSupportsChain(
-    currentWallet ?? currentAccount ?? undefined,
-    expectedChain
-  )
+  const { expectedChain, accountChains, chainMismatch, localnetSupported } =
+    useMemo(
+      () =>
+        resolveWalletNetworkPreflight({
+          network,
+          accountChainsInput: currentAccount?.chains,
+          walletChainSupport: currentWallet ?? currentAccount ?? undefined
+        }),
+      [currentAccount, currentWallet, network]
+    )
 
   const walletContext = useMemo(
-    () => ({
-      appNetwork: network,
-      expectedChain,
-      walletName: currentWallet?.name,
-      walletVersion: currentWallet?.version,
-      accountAddress: walletAddress,
-      accountChains,
-      chainMismatch,
-      localnetSupported
-    }),
+    () =>
+      buildWalletPreflightContext({
+        appNetwork: network,
+        expectedChain,
+        walletName: currentWallet?.name,
+        walletVersion: currentWallet?.version,
+        accountAddress: walletAddress,
+        accountChains,
+        chainMismatch,
+        localnetSupported
+      }),
     [
       accountChains,
       chainMismatch,
       currentWallet?.name,
       currentWallet?.version,
       expectedChain,
-      localnetSupported,
       network,
+      localnetSupported,
       walletAddress
     ]
   )
@@ -585,30 +593,21 @@ export const useFundTraderAccountModalState = ({
       })
       transaction.setSender(walletAddress)
 
-      let digest = ""
-      let transactionBlock: SuiTransactionBlockResponse
-
-      if (isLocalnet) {
-        const result = await localnetExecutor(transaction, {
-          chain: expectedChain
-        })
-        digest = result.digest
-        transactionBlock = result
-      } else {
-        const result = await signAndExecuteTransaction.mutateAsync({
-          transaction,
-          chain: expectedChain
-        })
-
-        digest = result.digest
-        transactionBlock = await waitForTransactionBlock(suiClient, digest)
-      }
+      const { digest, transactionBlock } = await executeTransaction({
+        buildTransaction: () => transaction,
+        isLocalnet,
+        expectedChain,
+        localnetExecutor,
+        signAndExecuteTransaction: signAndExecuteTransaction.mutateAsync,
+        suiClient
+      })
 
       setTransactionState({
         status: "success",
         summary: {
           digest,
           transactionBlock,
+          ownerAddress: walletAddress,
           traderAccountId,
           balanceManagerId,
           coinType: normalizedCoinType,
@@ -616,7 +615,6 @@ export const useFundTraderAccountModalState = ({
         }
       })
       refreshWalletBalances()
-      onFunded?.()
 
       if (explorerUrl) {
         notification.txSuccess(transactionUrl(explorerUrl, digest), toastId)
@@ -625,10 +623,10 @@ export const useFundTraderAccountModalState = ({
       }
     } catch (error) {
       const errorDetails = extractErrorDetails(error)
-      const localnetSupportNote =
-        isLocalnet && !localnetSupported
-          ? "Wallet may not support sui:localnet signing."
-          : undefined
+      const localnetSupportNote = resolveLocalnetSupportNote({
+        isLocalnet,
+        localnetSupported
+      })
       const errorDetailsRaw = safeJsonStringify(
         {
           summary: errorDetails,
@@ -639,9 +637,10 @@ export const useFundTraderAccountModalState = ({
         2
       )
       const formattedError = formatErrorMessage(error)
-      const errorMessage = localnetSupportNote
-        ? `${formattedError} ${localnetSupportNote}`
-        : formattedError
+      const errorMessage = withOptionalSupportNote({
+        message: formattedError,
+        supportNote: localnetSupportNote
+      })
 
       setTransactionState({
         status: "error",
@@ -658,7 +657,6 @@ export const useFundTraderAccountModalState = ({
     ammPackageId,
     balanceManagerId,
     chainMismatch,
-    currentAccount,
     currentWallet,
     expectedChain,
     explorerUrl,
@@ -669,7 +667,7 @@ export const useFundTraderAccountModalState = ({
     localnetExecutor,
     localnetSupported,
     network,
-    onFunded,
+    refreshWalletBalances,
     signAndExecuteTransaction,
     suiClient,
     traderAccountId,

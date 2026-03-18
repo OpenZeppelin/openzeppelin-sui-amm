@@ -1,5 +1,6 @@
 export {
   extractCreatedObjects,
+  summarizeGasUsed,
   summarizeObjectChanges,
   type ObjectChangeDetail
 } from "@sui-amm/tooling-core/transactions"

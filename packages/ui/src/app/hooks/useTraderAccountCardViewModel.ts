@@ -13,7 +13,6 @@ import type {
 import useExplorerUrl from "./useExplorerUrl"
 import type useResolvedTraderAccountId from "./useResolvedTraderAccountId"
 import useTraderAccountAssetBalances from "./useTraderAccountAssetBalances"
-import useTraderAccountHeaderActionViewModel from "./useTraderAccountHeaderActionViewModel"
 import { type TraderAccountStatus } from "./useTraderAccountOverview"
 
 const headerTitle = "Trader account"
@@ -154,7 +153,6 @@ const useTraderAccountCardViewModel = (): TTraderAccountCardState => {
   )
   const traderAccountId = traderAccountResolution.traderAccountId
   const { status, traderAccount, error } = overview
-  const headerAction = useTraderAccountHeaderActionViewModel()
 
   const content = useMemo(
     () =>
@@ -181,8 +179,7 @@ const useTraderAccountCardViewModel = (): TTraderAccountCardState => {
     description: headerDescription,
     explorerUrl,
     traderAccountId,
-    content,
-    headerAction
+    content
   }
 
   return { viewModel }

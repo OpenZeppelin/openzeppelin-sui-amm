@@ -4,6 +4,7 @@ import type { SuiTransactionBlockResponse } from "@mysten/sui/client"
 
 import {
   formatTimestamp,
+  summarizeGasUsed,
   summarizeObjectChanges
 } from "../helpers/transactionFormat"
 import CopyableId from "./CopyableId"
@@ -22,6 +23,7 @@ const TransactionRecap = ({
   const error = transactionBlock.effects?.status?.error
   const objectChanges = transactionBlock.objectChanges ?? []
   const objectChangeSummary = summarizeObjectChanges(objectChanges)
+  const gasSummary = summarizeGasUsed(transactionBlock.effects?.gasUsed)
 
   const explorerLink =
     explorerUrl && digest ? `${explorerUrl}/txblock/${digest}` : undefined
@@ -32,7 +34,7 @@ const TransactionRecap = ({
       subtitle="On-chain confirmation details"
     >
       <div className="space-y-4 text-xs text-slate-600 dark:text-slate-200/70">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-50/15 dark:bg-slate-950/60">
             <div className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60">
               Status
@@ -54,6 +56,21 @@ const TransactionRecap = ({
             {transactionBlock.checkpoint ? (
               <div className="mt-1 text-[0.65rem] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60">
                 Checkpoint {transactionBlock.checkpoint}
+              </div>
+            ) : undefined}
+          </div>
+          <div className="rounded-xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-50/15 dark:bg-slate-950/60">
+            <div className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60">
+              Gas used
+            </div>
+            <div className="mt-1 text-sm font-semibold text-sds-dark dark:text-sds-light">
+              {gasSummary ? gasSummary.total.toString() : "Unknown"}
+            </div>
+            {gasSummary ? (
+              <div className="mt-1 text-[0.65rem] text-slate-500 dark:text-slate-200/60">
+                C {gasSummary.computation.toString()} / S{" "}
+                {gasSummary.storage.toString()} / R{" "}
+                {gasSummary.rebate.toString()}
               </div>
             ) : undefined}
           </div>

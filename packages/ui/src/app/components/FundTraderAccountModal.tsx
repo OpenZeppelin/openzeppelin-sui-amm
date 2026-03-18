@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback } from "react"
 import { getStructLabel, shortenId } from "../helpers/format"
 import {
   useFundTraderAccountModalState,
@@ -12,7 +13,6 @@ import {
   ModalBody,
   ModalErrorFooter,
   ModalErrorNotice,
-  ModalFrame,
   ModalHeader,
   ModalSection,
   ModalStatusHeader,
@@ -23,7 +23,9 @@ import {
   modalFieldLabelClassName,
   modalFieldTitleClassName
 } from "./ModalPrimitives"
+import { SummaryIdRow, SummaryValueCard } from "./SummaryPrimitives"
 import TransactionRecap from "./TransactionRecap"
+import TransactionStateModal from "./TransactionStateModal"
 
 const inputClassName = (error?: string) =>
   [modalFieldInputClassName, error ? modalFieldInputErrorClassName : ""]
@@ -45,30 +47,24 @@ const FundSummarySection = ({
     subtitle="Latest funded transfer details"
   >
     <div className="grid gap-3 text-xs sm:grid-cols-2">
-      <div className="rounded-xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-50/15 dark:bg-slate-950/60">
-        <div className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60">
-          Coin
-        </div>
-        <div className="mt-1 text-sm font-semibold text-sds-dark dark:text-sds-light">
-          {getStructLabel(summary.coinType)}
-        </div>
-        <div className="mt-1 break-all text-[0.65rem] text-slate-500 dark:text-slate-200/70">
-          {summary.coinType}
-        </div>
-      </div>
-      <div className="rounded-xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-50/15 dark:bg-slate-950/60">
-        <div className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60">
-          Amount
-        </div>
-        <div className="mt-1 text-sm font-semibold text-sds-dark dark:text-sds-light">
-          {summary.amount}
-        </div>
-        <div className="mt-1 text-[0.65rem] text-slate-500 dark:text-slate-200/70">
-          Base units
-        </div>
-      </div>
+      <SummaryValueCard
+        label="Coin"
+        value={getStructLabel(summary.coinType)}
+        detail={summary.coinType}
+      />
+      <SummaryValueCard
+        label="Amount"
+        value={summary.amount}
+        detail="Base units"
+      />
+      <SummaryValueCard
+        label="Sender"
+        value={shortenId(summary.ownerAddress)}
+        detail={summary.ownerAddress}
+      />
     </div>
-    <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+    <SummaryIdRow>
+      <CopyableId value={summary.ownerAddress} label="Sender" showExplorer={false} />
       <CopyableId
         value={summary.traderAccountId}
         label="Trader account"
@@ -79,7 +75,7 @@ const FundSummarySection = ({
         label="Balance manager"
         explorerUrl={explorerUrl}
       />
-    </div>
+    </SummaryIdRow>
   </ModalSection>
 )
 
@@ -167,7 +163,6 @@ const FundTraderAccountModal = ({
     transactionState,
     transactionSummary,
     isSuccessState,
-    isErrorState,
     canSubmit,
     handleInputChange,
     markFieldBlur,
@@ -177,45 +172,51 @@ const FundTraderAccountModal = ({
   } = useFundTraderAccountModalState({
     open,
     traderAccountId,
-    balanceManagerId,
-    onFunded
+    balanceManagerId
   })
-
-  if (!open) return null
-
-  if (isSuccessState && transactionSummary) {
-    return (
-      <ModalFrame onClose={onClose}>
-        <FundSuccessView
-          summary={transactionSummary}
-          explorerUrl={explorerUrl}
-          onClose={onClose}
-          onReset={resetForm}
-        />
-      </ModalFrame>
-    )
-  }
-
-  if (isErrorState && transactionState.status === "error") {
-    return (
-      <ModalFrame onClose={onClose}>
-        <FundErrorView
-          error={transactionState.error}
-          details={transactionState.details}
-          onClose={onClose}
-          onReset={resetForm}
-        />
-      </ModalFrame>
-    )
-  }
+  const handleClose = useCallback(() => {
+    if (isSuccessState) {
+      onFunded?.()
+    }
+    onClose()
+  }, [isSuccessState, onClose, onFunded])
 
   return (
-    <ModalFrame onClose={onClose}>
+    <TransactionStateModal
+      open={open}
+      onClose={handleClose}
+      status={transactionState.status}
+      summary={isSuccessState ? transactionSummary : undefined}
+      error={
+        transactionState.status === "error" ? transactionState.error : undefined
+      }
+      details={
+        transactionState.status === "error"
+          ? transactionState.details
+          : undefined
+      }
+      renderSuccess={(summary) => (
+        <FundSuccessView
+          summary={summary}
+          explorerUrl={explorerUrl}
+          onClose={handleClose}
+          onReset={resetForm}
+        />
+      )}
+      renderError={(error, details) => (
+        <FundErrorView
+          error={error}
+          details={details}
+          onClose={handleClose}
+          onReset={resetForm}
+        />
+      )}
+    >
       <ModalHeader
         eyebrow="Trader account"
         title="Fund trader account"
         description="Choose a wallet coin and funding amount to deposit into your DeepBook balance manager."
-        onClose={onClose}
+        onClose={handleClose}
       />
       <ModalBody>
         {traderAccountId && balanceManagerId ? (
@@ -350,7 +351,7 @@ const FundTraderAccountModal = ({
           </div>
         </div>
       </div>
-    </ModalFrame>
+    </TransactionStateModal>
   )
 }
 
