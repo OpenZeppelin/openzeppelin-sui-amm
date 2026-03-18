@@ -93,11 +93,13 @@ const renderAssetBalances = (
 const renderContent = ({
   content,
   explorerUrl,
-  onOpenFundModal
+  onOpenFundModal,
+  onOpenWithdrawModal
 }: {
   content: TTraderAccountCardContent
   explorerUrl?: string
   onOpenFundModal?: () => void
+  onOpenWithdrawModal?: () => void
 }) => {
   switch (content.state) {
     case "loading":
@@ -179,15 +181,28 @@ const renderContent = ({
                 "Unknown"
               )}
             </InfoTile>
-            {onOpenFundModal ? (
+            {onOpenFundModal || onOpenWithdrawModal ? (
               <div className="flex">
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  onClick={onOpenFundModal}
-                >
-                  Add fund
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {onOpenFundModal ? (
+                    <Button
+                      variant="secondary"
+                      size="compact"
+                      onClick={onOpenFundModal}
+                    >
+                      Add fund
+                    </Button>
+                  ) : null}
+                  {onOpenWithdrawModal ? (
+                    <Button
+                      variant="secondary"
+                      size="compact"
+                      onClick={onOpenWithdrawModal}
+                    >
+                      Withdraw fund
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
             <InfoTile label="Asset balances" className="md:col-span-2">
@@ -209,9 +224,11 @@ const TraderAccountCardView = ({
   traderAccountId,
   content,
   headerAction,
-  onOpenFundModal
+  onOpenFundModal,
+  onOpenWithdrawModal
 }: TTraderAccountCardViewModel & {
   onOpenFundModal?: () => void
+  onOpenWithdrawModal?: () => void
 }) => {
   return (
     <section className="w-full max-w-4xl px-4">
@@ -253,7 +270,12 @@ const TraderAccountCardView = ({
               </span>
             )}
           </div>
-          {renderContent({ content, explorerUrl, onOpenFundModal })}
+          {renderContent({
+            content,
+            explorerUrl,
+            onOpenFundModal,
+            onOpenWithdrawModal
+          })}
         </div>
       </div>
     </section>

@@ -6,6 +6,7 @@ import { useTraderAccountContext } from "../providers/TraderAccountProvider"
 import CreateTraderAccountModal from "./CreateTraderAccountModal"
 import FundTraderAccountModal from "./FundTraderAccountModal"
 import TraderAccountCardView from "./TraderAccountCardView"
+import WithdrawTraderAccountModal from "./WithdrawTraderAccountModal"
 
 const TraderAccountCard = () => {
   const { viewModel } = useTraderAccountCardViewModel()
@@ -19,8 +20,9 @@ const TraderAccountCard = () => {
   } = createAction
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isFundModalOpen, setIsFundModalOpen] = useState(false)
-  const canOpenFundModal = viewModel.content.state === "ready"
-  const shouldForceCloseFundModal =
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false)
+  const canOpenAccountActionModals = viewModel.content.state === "ready"
+  const shouldForceCloseActionModals =
     resolution.status === "wallet-required" ||
     resolution.status === "missing-config" ||
     resolution.status === "not-found" ||
@@ -52,10 +54,11 @@ const TraderAccountCard = () => {
   }, [resetTransactionState])
 
   useEffect(() => {
-    if (shouldForceCloseFundModal) {
+    if (shouldForceCloseActionModals) {
       setIsFundModalOpen(false)
+      setIsWithdrawModalOpen(false)
     }
-  }, [shouldForceCloseFundModal])
+  }, [shouldForceCloseActionModals])
 
   return (
     <>
@@ -63,7 +66,14 @@ const TraderAccountCard = () => {
         {...viewModel}
         headerAction={headerAction}
         onOpenFundModal={
-          canOpenFundModal ? () => setIsFundModalOpen(true) : undefined
+          canOpenAccountActionModals
+            ? () => setIsFundModalOpen(true)
+            : undefined
+        }
+        onOpenWithdrawModal={
+          canOpenAccountActionModals
+            ? () => setIsWithdrawModalOpen(true)
+            : undefined
         }
       />
       <CreateTraderAccountModal
@@ -78,6 +88,14 @@ const TraderAccountCard = () => {
         explorerUrl={viewModel.explorerUrl}
         onClose={() => setIsFundModalOpen(false)}
         onFunded={refreshTraderAccount}
+      />
+      <WithdrawTraderAccountModal
+        open={isWithdrawModalOpen}
+        traderAccountId={overview.traderAccount?.traderAccountId}
+        balanceManagerId={overview.traderAccount?.balanceManagerId}
+        explorerUrl={viewModel.explorerUrl}
+        onClose={() => setIsWithdrawModalOpen(false)}
+        onWithdrawn={refreshTraderAccount}
       />
     </>
   )
