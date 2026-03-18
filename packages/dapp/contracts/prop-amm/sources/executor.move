@@ -157,20 +157,22 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // TODO#q: consider volatility multiplier.
     let oracle_mid_price = pyth_price_to_deepbook_price(price_info_object);
     let base_spread_bps = config.base_spread_bps();
-    // TODO#q: move spread computation to config
-    let half_spread = ((oracle_mid_price as u128) * (base_spread_bps as u128) / 10_000u128) as u64;
+    let volatility_multiplier_bps = config.volatility_multiplier_bps();
+    // TODO#q: move spread computation to the config
+    let half_base_spread = ((oracle_mid_price as u128) * (base_spread_bps as u128) / 10_000u128) as u64;
+    let half_volatility_spread = ((oracle_mid_price as u128) * (volatility_multiplier_bps as u128) / 10_000u128) as u64;
 
     // Calculate bids/ask order prices.
-    let bid_inner = oracle_mid_price.checked_sub(half_spread).destroy_or!(constants::min_price());
+    let bid_inner = oracle_mid_price.checked_sub(half_base_spread).destroy_or!(constants::min_price());
     let bid_outer = oracle_mid_price
-        .checked_sub(half_spread * 2)
+        .checked_sub(half_volatility_spread)
         .destroy_or!(constants::min_price());
     let ask_inner = oracle_mid_price
-        .checked_add(half_spread)
+        .checked_add(half_base_spread)
         .destroy_or!(constants::max_price())
         .max(constants::max_price());
     let ask_outer = oracle_mid_price
-        .checked_add(half_spread * 2)
+        .checked_add(half_volatility_spread)
         .destroy_or!(constants::max_price())
         .max(constants::max_price());
 

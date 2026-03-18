@@ -155,7 +155,6 @@ public fun base_spread_bps(config: &AMMConfig): u64 {
     config.base_spread_bps
 }
 
-// TODO#q: use volatility_multiplier_bps pricing
 /// Returns the volatility multiplier in basis points.
 public fun volatility_multiplier_bps(config: &AMMConfig): u64 {
     config.volatility_multiplier_bps
