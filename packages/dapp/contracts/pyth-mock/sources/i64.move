@@ -1,4 +1,4 @@
-module local_mock_pyth::i64;
+module pyth::i64;
 
 // === Constants ===
 

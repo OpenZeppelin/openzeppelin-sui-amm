@@ -6,4 +6,4 @@ edition = "2024"
 pyth = "0x0"
 
 [environments]
-test-publish = "33fcc910"
+test-publish = "a25e3781"

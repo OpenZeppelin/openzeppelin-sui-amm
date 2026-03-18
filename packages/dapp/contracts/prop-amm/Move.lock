@@ -19,7 +19,7 @@ deps = { MoveStdlib = "MoveStdlib" }
 [pinned.test-publish.deepbook]
 source = { local = "../../../../vendor/deepbookv3/packages/deepbook" }
 use_environment = "test-publish"
-manifest_digest = "F617F0DD2C0A1CE2CC53B5024D9F1ED6EC9101A03658C4238F2CB52D56C4F3DB"
+manifest_digest = "CD76F6A174FC1131D4BE0A2719A71EDD795D6BE9CA88E4BF635472D82ADDFEB8"
 deps = { std = "MoveStdlib", sui = "Sui", token = "token" }
 
 [pinned.test-publish.openzeppelin_market_maker]

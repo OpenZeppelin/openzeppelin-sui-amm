@@ -1,7 +1,7 @@
-module local_mock_pyth::pyth;
+module pyth::pyth;
 
-use local_mock_pyth::price::Price;
-use local_mock_pyth::price_info::{Self, PriceInfoObject};
+use pyth::price::Price;
+use pyth::price_info::{Self, PriceInfoObject};
 use sui::clock::Clock;
 
 // === Constants ===
