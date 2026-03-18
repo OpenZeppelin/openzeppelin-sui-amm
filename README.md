@@ -73,7 +73,7 @@ pnpm dapp owner:amm:create
 ## Copy the sample .env file
 cp packages/ui/.env.example packages/ui/.env.local
 
-## Add required field details - you will find these details in the output of the two last pnpm commands. 
+## Add required field details - you will find these details in the output of the two last pnpm commands. Also in deployment.localnet.json and mock.localnet.json
 NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<0x...>
 NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
 NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID=<0x..>
@@ -81,4 +81,14 @@ NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID=<0x..>
 # Run the UI
 pnpm ui dev
 
+```
+
+### Scripts
+```bash
+
+# Get your address's coin balances and coin's object ids (also visible from UI) (optional --address default to current active one)
+pnpm dapp chain:describe-coin-balances
+
+# Fund an account (also possible cia UI)
+pnpm dapp user:trader-account:fund --coin-object-id <0xCOIN_OBJECT_ID> --amount 10000
 ```
