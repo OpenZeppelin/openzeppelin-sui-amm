@@ -231,10 +231,7 @@ fun fund_trader_account_deposits_into_matching_balance_manager() {
         scenario.ctx(),
     );
 
-    assert_eq!(
-        balance_manager.balance<SUI>(),
-        deposit_amount,
-    );
+    assert_eq!(balance_manager.balance<SUI>(), deposit_amount);
 
     scenario.return_to_sender(trader_account);
     test_scenario::return_shared(balance_manager);
