@@ -1,3 +1,4 @@
+[package]
 name = "pyth"
 edition = "2024"
 
