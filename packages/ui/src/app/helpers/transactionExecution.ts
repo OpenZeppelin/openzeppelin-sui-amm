@@ -33,7 +33,10 @@ export const executeTransaction = async ({
   onBeforeLocalExecute?: () => void
   onBeforeRemoteExecute?: () => void
   onBeforeRemoteFetch?: () => void
-}): Promise<{ digest: string; transactionBlock: SuiTransactionBlockResponse }> => {
+}): Promise<{
+  digest: string
+  transactionBlock: SuiTransactionBlockResponse
+}> => {
   if (isLocalnet) {
     onBeforeLocalExecute?.()
 

@@ -180,16 +180,16 @@ const renderContent = ({
               )}
             </InfoTile>
             {onOpenFundModal ? (
-            <div className="flex">
-              <Button
-                variant="secondary"
-                size="compact"
-                onClick={onOpenFundModal}
-              >
-                Add fund
-              </Button>
-            </div>
-          ) : null}
+              <div className="flex">
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  onClick={onOpenFundModal}
+                >
+                  Add fund
+                </Button>
+              </div>
+            ) : null}
             <InfoTile label="Asset balances" className="md:col-span-2">
               {renderAssetBalances(details.assetBalances)}
             </InfoTile>

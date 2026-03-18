@@ -14,10 +14,7 @@ import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useCallback, useMemo, useState } from "react"
 import { resolveDeepbookRegistryIdForNetwork } from "@sui-amm/domain-core/models/deepbook"
 import { LOCALNET_DEEPBOOK_REGISTRY_ID } from "../config/network"
-import {
-  getLocalnetClient,
-  makeLocalnetExecutor
-} from "../helpers/localnet"
+import { getLocalnetClient, makeLocalnetExecutor } from "../helpers/localnet"
 import { transactionUrl } from "../helpers/network"
 import { notification } from "../helpers/notification"
 import {

@@ -30,10 +30,7 @@ import {
   resolveValidationMessage,
   validateRequiredHexBytes
 } from "../helpers/inputValidation"
-import {
-  getLocalnetClient,
-  makeLocalnetExecutor
-} from "../helpers/localnet"
+import { getLocalnetClient, makeLocalnetExecutor } from "../helpers/localnet"
 import {
   extractErrorDetails,
   formatErrorMessage,

@@ -97,10 +97,17 @@ export type SuiCoinBalance = {
   balance: bigint
 }
 
-export const selectRichestCoin = (coins: SuiCoinBalance[]) =>
-  coins.reduce<SuiCoinBalance | undefined>((richest, coin) => {
+export const selectRichestCoin = <
+  TCoin extends {
+    coinObjectId: string
+    balance: bigint | string
+  }
+>(
+  coins: TCoin[]
+) =>
+  coins.reduce<TCoin | undefined>((richest, coin) => {
     if (!richest) return coin
-    return coin.balance > richest.balance ? coin : richest
+    return BigInt(coin.balance) > BigInt(richest.balance) ? coin : richest
   }, undefined)
 
 export const fetchCoinBalances = async (

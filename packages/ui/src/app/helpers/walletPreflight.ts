@@ -21,7 +21,10 @@ export const resolveWalletNetworkPreflight = ({
   const accountChains = accountChainsInput ? [...accountChainsInput] : []
   const chainMismatch =
     accountChains.length > 0 && !accountChains.includes(expectedChain)
-  const localnetSupported = walletSupportsChain(walletChainSupport, expectedChain)
+  const localnetSupported = walletSupportsChain(
+    walletChainSupport,
+    expectedChain
+  )
 
   return {
     expectedChain,

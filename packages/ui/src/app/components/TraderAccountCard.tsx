@@ -40,7 +40,12 @@ const TraderAccountCard = () => {
       tooltip: disabledReason,
       onClick: () => setIsCreateModalOpen(true)
     }
-  }, [canCreate, createTransactionState.status, disabledReason, resolution.status])
+  }, [
+    canCreate,
+    createTransactionState.status,
+    disabledReason,
+    resolution.status
+  ])
   const handleCloseCreateModal = useCallback(() => {
     resetTransactionState()
     setIsCreateModalOpen(false)

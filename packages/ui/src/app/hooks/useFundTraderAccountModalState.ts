@@ -26,10 +26,7 @@ import { parseTypeNameFromString } from "@sui-amm/tooling-core/utils/type-name"
 import { parsePositiveU64 } from "@sui-amm/tooling-core/utils/utility"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { resolveValidationMessage } from "../helpers/inputValidation"
-import {
-  getLocalnetClient,
-  makeLocalnetExecutor
-} from "../helpers/localnet"
+import { getLocalnetClient, makeLocalnetExecutor } from "../helpers/localnet"
 import { transactionUrl } from "../helpers/network"
 import { notification } from "../helpers/notification"
 import {

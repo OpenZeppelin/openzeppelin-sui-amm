@@ -64,7 +64,11 @@ const FundSummarySection = ({
       />
     </div>
     <SummaryIdRow>
-      <CopyableId value={summary.ownerAddress} label="Sender" showExplorer={false} />
+      <CopyableId
+        value={summary.ownerAddress}
+        label="Sender"
+        showExplorer={false}
+      />
       <CopyableId
         value={summary.traderAccountId}
         label="Trader account"

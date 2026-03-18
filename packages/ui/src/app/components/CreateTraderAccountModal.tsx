@@ -239,7 +239,9 @@ const CreateTraderAccountModal = ({
             and owner caps required for funding and trading.
           </div>
           {disabledReason ? (
-            <div className={modalFieldWarningTextClassName}>{disabledReason}</div>
+            <div className={modalFieldWarningTextClassName}>
+              {disabledReason}
+            </div>
           ) : undefined}
         </ModalSection>
       </ModalBody>
