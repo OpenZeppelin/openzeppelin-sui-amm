@@ -1,3 +1,13 @@
+export type TTraderAccountAssetBalance = {
+  coinType: string
+  balance: string
+}
+
+export type TTraderAccountAssetBalancesContent =
+  | { state: "loading" }
+  | { state: "error"; message: string }
+  | { state: "ready"; balances: TTraderAccountAssetBalance[] }
+
 export type TTraderAccountDetails = {
   ownerAddress: string
   balanceManagerId: string
@@ -5,6 +15,7 @@ export type TTraderAccountDetails = {
   depositCapId?: string
   withdrawCapId?: string
   activeOrdersTableId?: string
+  assetBalances: TTraderAccountAssetBalancesContent
 }
 
 export type TTraderAccountCardContent =

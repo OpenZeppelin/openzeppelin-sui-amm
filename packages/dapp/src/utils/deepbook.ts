@@ -1,5 +1,7 @@
 import path from "node:path"
 
+import type { SuiClient } from "@mysten/sui/client"
+import { parseTypeNameFromString } from "@sui-amm/tooling-core/utils/type-name"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import {
   canonicalizePackagePath,
@@ -8,6 +10,10 @@ import {
 } from "@sui-amm/tooling-node/move"
 import { DEFAULT_DEEPBOOK_PATH } from "./mocks.ts"
 import { resolveAmmPackagePath } from "./amm.ts"
+import {
+  loadPublishTransaction,
+  resolveCreatedObjectFromPublishTransaction
+} from "./publish.ts"
 
 const DEEPBOOK_DEPENDENCY_NAME = "deepbook"
 const DEEPBOOK_TOKEN_DEPENDENCY_NAME = "token"
@@ -43,6 +49,47 @@ export const resolveDeepbookPublishedIds = (networkName: string) =>
   DEEPBOOK_PUBLISHED_IDS_BY_NETWORK[
     networkName as keyof typeof DEEPBOOK_PUBLISHED_IDS_BY_NETWORK
   ]
+
+export type DeepbookPublishObjects = {
+  deepbookPackageId: string
+  deepbookRegistryId: string
+  deepbookAdminCapId: string
+}
+
+export const resolveDeepbookPublishObjectsFromDigest = async ({
+  publishDigest,
+  suiClient
+}: {
+  publishDigest: string
+  suiClient: SuiClient
+}): Promise<DeepbookPublishObjects> => {
+  const publishTransaction = await loadPublishTransaction({
+    publishDigest,
+    suiClient
+  })
+
+  const deepbookRegistryObject = resolveCreatedObjectFromPublishTransaction({
+    publishTransaction,
+    objectTypeSuffix: "::registry::Registry"
+  })
+  const deepbookAdminCap = resolveCreatedObjectFromPublishTransaction({
+    publishTransaction,
+    objectTypeSuffix: "::registry::DeepbookAdminCap"
+  })
+  const deepbookRegistryType = deepbookRegistryObject.objectType
+
+  if (!deepbookRegistryType) {
+    throw new Error(
+      `Unable to resolve DeepBook package id from registry object ${deepbookRegistryObject.objectId}.`
+    )
+  }
+
+  return {
+    deepbookPackageId: parseTypeNameFromString(deepbookRegistryType).packageId,
+    deepbookRegistryId: deepbookRegistryObject.objectId,
+    deepbookAdminCapId: deepbookAdminCap.objectId
+  }
+}
 
 const resolveMoveTomlPath = (packagePath: string) =>
   path.join(packagePath, "Move.toml")

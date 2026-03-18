@@ -1,9 +1,4 @@
-import {
-  findOwnedTraderAccountIds,
-  getTraderAccountOverview,
-  resolveTraderAccountType,
-  type TraderAccountOverview
-} from "@sui-amm/domain-core/models/traderAccount"
+import { type TraderAccountOverview } from "@sui-amm/domain-core/models/traderAccount"
 import {
   buildCreateTraderAccountTransaction,
   buildRegisterBalanceManagerTransaction
@@ -11,14 +6,13 @@ import {
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { ensureCreatedObject } from "@sui-amm/tooling-node/transactions"
 import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
+import {
+  getOwnedTraderAccountOverview,
+  resolveOwnedTraderAccountId
+} from "./trader-account.ts"
+import { buildSummaryLabel } from "./transaction-summary.ts"
 
 const CREATE_TRADER_ACCOUNT_LABEL = "create-trader-account"
-
-const buildSummaryLabel = (label: string): TransactionSummary => ({
-  label,
-  objectChanges: [],
-  balanceChanges: []
-})
 
 export type RegisterBalanceManagerResult = {
   status: "registered" | "dry-run-create-only"
@@ -29,30 +23,6 @@ export type RegisterBalanceManagerResult = {
     registerBalanceManager?: TransactionSummary
   }
 }
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
-const buildModelError = ({
-  operation,
-  traderAccountId,
-  expectedOwner,
-  expectedPackageId,
-  error
-}: {
-  operation: string
-  traderAccountId: string
-  expectedOwner: string
-  expectedPackageId: string
-  error: unknown
-}) =>
-  new Error(
-    `${operation} failed for traderAccountId ${traderAccountId} (expected owner ${expectedOwner}, expected package ${expectedPackageId}, expected type ${resolveTraderAccountType(
-      expectedPackageId
-    )}). Cause: ${getErrorMessage(error)}`
-  )
 
 const createTraderAccount = async ({
   tooling,
@@ -124,22 +94,13 @@ const resolveTraderAccountForRegistration = async ({
   traderAccountId?: string
   ownerAddress: string
   ammPackageId: string
-}): Promise<string | undefined> => {
-  if (traderAccountId) return traderAccountId
-
-  const ownedTraderAccountIds = await findOwnedTraderAccountIds({
+}): Promise<string | undefined> =>
+  resolveOwnedTraderAccountId({
+    tooling,
+    traderAccountId,
     ownerAddress,
-    packageId: ammPackageId,
-    suiClient: tooling.suiClient
+    ammPackageId
   })
-
-  if (ownedTraderAccountIds.length > 1)
-    throw new Error(
-      `Multiple owned trader accounts were found for the active owner (${ownedTraderAccountIds.length}). Provide --trader-account-id to choose one explicitly.`
-    )
-
-  return ownedTraderAccountIds[0]
-}
 
 const maybeCreateTraderAccount = async ({
   tooling,
@@ -237,26 +198,13 @@ const registerBalanceManagerForTraderAccount = async ({
   traderAccount: TraderAccountOverview
   registerBalanceManagerSummary: TransactionSummary
 }> => {
-  let traderAccount: TraderAccountOverview
-  try {
-    traderAccount = await getTraderAccountOverview(
-      traderAccountId,
-      tooling.suiClient
-    )
-  } catch (error) {
-    throw buildModelError({
-      operation: "Trader account lookup",
-      traderAccountId,
-      expectedOwner: ownerAddress,
-      expectedPackageId: ammPackageId,
-      error
-    })
-  }
-
-  if (traderAccount.ownerAddress !== ownerAddress)
-    throw new Error(
-      `Trader account owner mismatch for traderAccountId ${traderAccountId}. Expected owner ${ownerAddress}, found ${traderAccount.ownerAddress}, expected package ${ammPackageId}.`
-    )
+  const traderAccount = await getOwnedTraderAccountOverview({
+    tooling,
+    traderAccountId,
+    ownerAddress,
+    ammPackageId,
+    operation: "Trader account lookup"
+  })
 
   const [balanceManager, deepbookRegistry] = await Promise.all([
     tooling.getImmutableSharedObject({

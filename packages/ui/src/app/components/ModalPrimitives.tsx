@@ -6,7 +6,7 @@ import { copyToClipboard } from "../helpers/clipboard"
 import Button from "./Button"
 
 export const modalFieldLabelClassName =
-  "flex flex-col text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60"
+  "flex flex-col text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60 mb-2"
 
 export const modalFieldTitleClassName = "min-h-[1rem] leading-snug"
 

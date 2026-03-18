@@ -11,7 +11,6 @@ import {
   AMM_PACKAGE_FOLDER_NAME
 } from "@sui-amm/domain-node/amm"
 import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
-import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
 import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import {
   findLatestArtifactThat,
@@ -28,6 +27,7 @@ import {
 } from "@sui-amm/tooling-node/move"
 import type { MockArtifact } from "./mocks.ts"
 import { mockArtifactPath } from "./mocks.ts"
+import { resolveCreatedObjectFromPublishDigest } from "./publish.ts"
 
 export const DEFAULT_PYTH_PRICE_FEED_LABEL = "MOCK_SUI_FEED"
 export const DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID =
@@ -161,13 +161,13 @@ export const resolveAmmAdminCapIdFromPublishDigest = async ({
   publishDigest: string
   suiClient: SuiClient
 }): Promise<string> => {
-  const publishTransaction = await suiClient.getTransactionBlock({
-    digest: publishDigest,
-    options: { showObjectChanges: true }
+  const createdObject = await resolveCreatedObjectFromPublishDigest({
+    publishDigest,
+    suiClient,
+    objectTypeSuffix: AMM_ADMIN_CAP_TYPE_SUFFIX
   })
 
-  return ensureCreatedObject(AMM_ADMIN_CAP_TYPE_SUFFIX, publishTransaction)
-    .objectId
+  return createdObject.objectId
 }
 
 export const resolveAmmAdminCapIdFromArtifacts = async ({

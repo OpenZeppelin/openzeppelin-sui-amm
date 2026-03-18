@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 import type {
+  TTraderAccountAssetBalancesContent,
   TTraderAccountCardContent,
   TTraderAccountCardViewModel
 } from "../types/TTraderAccountCard"
@@ -11,13 +12,22 @@ import Loading from "./Loading"
 
 const InfoTile = ({
   label,
-  children
+  children,
+  className
 }: {
   label: string
   children: ReactNode
+  className?: string
 }) => {
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white/80 p-4 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.4)] dark:border-slate-50/15 dark:bg-slate-950/70">
+    <div
+      className={[
+        "rounded-xl border border-slate-200/80 bg-white/80 p-4 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.4)] dark:border-slate-50/15 dark:bg-slate-950/70",
+        className
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/70">
         {label}
       </div>
@@ -34,12 +44,60 @@ const assertUnreachable = (value: never): never => {
   )
 }
 
+const renderAssetBalances = (
+  assetBalances: TTraderAccountAssetBalancesContent
+) => {
+  if (assetBalances.state === "loading") {
+    return (
+      <div className="text-xs text-slate-500 dark:text-slate-200/70">
+        Loading balances...
+      </div>
+    )
+  }
+
+  if (assetBalances.state === "error") {
+    return (
+      <div className="text-xs text-rose-600 dark:text-rose-200">
+        {assetBalances.message}
+      </div>
+    )
+  }
+
+  if (assetBalances.balances.length === 0) {
+    return (
+      <div className="text-xs text-slate-500 dark:text-slate-200/70">
+        No balances funded yet.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {assetBalances.balances.map((assetBalance) => (
+        <div
+          key={assetBalance.coinType}
+          className="flex flex-col gap-1 rounded-lg border border-slate-200/70 bg-white/70 px-3 py-2 text-xs shadow-[0_10px_24px_-22px_rgba(15,23,42,0.45)] dark:border-slate-50/15 dark:bg-slate-950/50"
+        >
+          <div className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500 dark:text-slate-200/60">
+            {assetBalance.coinType}
+          </div>
+          <div className="font-semibold text-sds-dark dark:text-sds-light">
+            {assetBalance.balance}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const renderContent = ({
   content,
-  explorerUrl
+  explorerUrl,
+  onOpenFundModal
 }: {
   content: TTraderAccountCardContent
   explorerUrl?: string
+  onOpenFundModal?: () => void
 }) => {
   switch (content.state) {
     case "loading":
@@ -55,71 +113,87 @@ const renderContent = ({
       const { details } = content
 
       return (
-        <div className="grid gap-4 md:grid-cols-2">
-          <InfoTile label="Owner address">
-            <CopyableId
-              value={details.ownerAddress}
-              label="Owner"
-              showExplorer={false}
-              className="w-full"
-            />
-          </InfoTile>
-          <InfoTile label="Balance manager">
-            <CopyableId
-              value={details.balanceManagerId}
-              label="Manager"
-              explorerUrl={explorerUrl}
-              className="w-full"
-            />
-          </InfoTile>
-          <InfoTile label="Trade cap">
-            {details.tradeCapId ? (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InfoTile label="Owner address">
               <CopyableId
-                value={details.tradeCapId}
-                label="Trade"
+                value={details.ownerAddress}
+                label="Owner"
+                showExplorer={false}
+                className="w-full"
+              />
+            </InfoTile>
+            <InfoTile label="Balance manager">
+              <CopyableId
+                value={details.balanceManagerId}
+                label="Manager"
                 explorerUrl={explorerUrl}
                 className="w-full"
               />
-            ) : (
-              "Unknown"
-            )}
-          </InfoTile>
-          <InfoTile label="Deposit cap">
-            {details.depositCapId ? (
-              <CopyableId
-                value={details.depositCapId}
-                label="Deposit"
-                explorerUrl={explorerUrl}
-                className="w-full"
-              />
-            ) : (
-              "Unknown"
-            )}
-          </InfoTile>
-          <InfoTile label="Withdraw cap">
-            {details.withdrawCapId ? (
-              <CopyableId
-                value={details.withdrawCapId}
-                label="Withdraw"
-                explorerUrl={explorerUrl}
-                className="w-full"
-              />
-            ) : (
-              "Unknown"
-            )}
-          </InfoTile>
-          <InfoTile label="Active orders table">
-            {details.activeOrdersTableId ? (
-              <CopyableId
-                value={details.activeOrdersTableId}
-                label="Orders"
-                explorerUrl={explorerUrl}
-                className="w-full"
-              />
-            ) : (
-              "Unknown"
-            )}
-          </InfoTile>
+            </InfoTile>
+            <InfoTile label="Trade cap">
+              {details.tradeCapId ? (
+                <CopyableId
+                  value={details.tradeCapId}
+                  label="Trade"
+                  explorerUrl={explorerUrl}
+                  className="w-full"
+                />
+              ) : (
+                "Unknown"
+              )}
+            </InfoTile>
+            <InfoTile label="Deposit cap">
+              {details.depositCapId ? (
+                <CopyableId
+                  value={details.depositCapId}
+                  label="Deposit"
+                  explorerUrl={explorerUrl}
+                  className="w-full"
+                />
+              ) : (
+                "Unknown"
+              )}
+            </InfoTile>
+            <InfoTile label="Withdraw cap">
+              {details.withdrawCapId ? (
+                <CopyableId
+                  value={details.withdrawCapId}
+                  label="Withdraw"
+                  explorerUrl={explorerUrl}
+                  className="w-full"
+                />
+              ) : (
+                "Unknown"
+              )}
+            </InfoTile>
+            <InfoTile label="Active orders table">
+              {details.activeOrdersTableId ? (
+                <CopyableId
+                  value={details.activeOrdersTableId}
+                  label="Orders"
+                  explorerUrl={explorerUrl}
+                  className="w-full"
+                />
+              ) : (
+                "Unknown"
+              )}
+            </InfoTile>
+            {onOpenFundModal ? (
+            <div className="flex">
+              <Button
+                variant="secondary"
+                size="compact"
+                onClick={onOpenFundModal}
+              >
+                Add fund
+              </Button>
+            </div>
+          ) : null}
+            <InfoTile label="Asset balances" className="md:col-span-2">
+              {renderAssetBalances(details.assetBalances)}
+            </InfoTile>
+          </div>
         </div>
       )
     }
@@ -134,8 +208,11 @@ const TraderAccountCardView = ({
   explorerUrl,
   traderAccountId,
   content,
-  headerAction
-}: TTraderAccountCardViewModel) => {
+  headerAction,
+  onOpenFundModal
+}: TTraderAccountCardViewModel & {
+  onOpenFundModal?: () => void
+}) => {
   return (
     <section className="w-full max-w-4xl px-4">
       <div className="rounded-2xl border border-slate-300/80 bg-white/90 shadow-[0_22px_65px_-45px_rgba(15,23,42,0.45)] backdrop-blur-md transition dark:border-slate-50/30 dark:bg-slate-950/70">
@@ -176,7 +253,7 @@ const TraderAccountCardView = ({
               </span>
             )}
           </div>
-          {renderContent({ content, explorerUrl })}
+          {renderContent({ content, explorerUrl, onOpenFundModal })}
         </div>
       </div>
     </section>

@@ -55,6 +55,10 @@ export type SuiScriptRunner = {
     scriptName: string,
     options?: ScriptRunOptions
   ) => Promise<ScriptRunResult>
+  runUserScript: (
+    scriptName: string,
+    options?: ScriptRunOptions
+  ) => Promise<ScriptRunResult>
   runOwnerScript: (
     scriptName: string,
     options?: ScriptRunOptions
@@ -72,6 +76,9 @@ export const resolveScriptPathIn = (scriptFolder: string, scriptName: string) =>
 
 export const resolveBuyerScriptPath = (scriptName: string) =>
   resolveScriptPathIn("buyer", scriptName)
+
+export const resolveUserScriptPath = (scriptName: string) =>
+  resolveScriptPathIn("user", scriptName)
 
 export const resolveOwnerScriptPath = (scriptName: string) =>
   resolveScriptPathIn("owner", scriptName)
@@ -327,6 +334,11 @@ export const createSuiScriptRunner = (
     options?: ScriptRunOptions
   ) => runScript(resolveBuyerScriptPath(scriptName), options)
 
+  const runUserScript = async (
+    scriptName: string,
+    options?: ScriptRunOptions
+  ) => runScript(resolveUserScriptPath(scriptName), options)
+
   const runOwnerScript = async (
     scriptName: string,
     options?: ScriptRunOptions
@@ -335,6 +347,7 @@ export const createSuiScriptRunner = (
   return {
     runScript,
     runBuyerScript,
+    runUserScript,
     runOwnerScript
   }
 }

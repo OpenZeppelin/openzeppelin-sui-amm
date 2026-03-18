@@ -13,6 +13,7 @@ import useResolvedTraderAccountId from "../hooks/useResolvedTraderAccountId"
 import useTraderAccountOverview from "../hooks/useTraderAccountOverview"
 
 type TraderAccountContextValue = {
+  refreshVersion: number
   resolution: ReturnType<typeof useResolvedTraderAccountId>
   overview: ReturnType<typeof useTraderAccountOverview>
   createAction: ReturnType<typeof useCreateTraderAccountAction>
@@ -44,12 +45,13 @@ export const TraderAccountProvider = ({
 
   const value = useMemo(
     () => ({
+      refreshVersion: refreshToken,
       resolution,
       overview,
       createAction,
       refreshTraderAccount
     }),
-    [createAction, overview, refreshTraderAccount, resolution]
+    [createAction, overview, refreshToken, refreshTraderAccount, resolution]
   )
 
   return (

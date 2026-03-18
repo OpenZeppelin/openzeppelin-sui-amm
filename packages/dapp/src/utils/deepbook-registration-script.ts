@@ -1,6 +1,6 @@
 import { logKeyValueGreen } from "@sui-amm/tooling-node/log"
-import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
 import type { RegisterBalanceManagerResult } from "./deepbook-registration.ts"
+import { toTransactionSummaryView } from "./transaction-summary.ts"
 
 export const OWNER_SIGNER_MISMATCH_ERROR =
   "Owner address must match the active signer when registering the balance manager."
@@ -14,24 +14,6 @@ export const assertOwnerMatchesSigner = ({
 }) => {
   if (ownerAddress !== signerAddress) {
     throw new Error(OWNER_SIGNER_MISMATCH_ERROR)
-  }
-}
-
-export type TransactionSummaryView = Pick<
-  TransactionSummary,
-  "label" | "digest" | "status" | "error"
->
-
-export const toTransactionSummaryView = (
-  summary?: TransactionSummary
-): TransactionSummaryView | undefined => {
-  if (!summary) return undefined
-
-  return {
-    label: summary.label,
-    digest: summary.digest,
-    status: summary.status,
-    error: summary.error
   }
 }
 

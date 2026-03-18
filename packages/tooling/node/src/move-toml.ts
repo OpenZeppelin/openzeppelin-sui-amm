@@ -6,6 +6,7 @@ import type { ToolingContext } from "./factory.ts"
 import { logWarning } from "./log.ts"
 import { resolveMoveCliEnvironmentName } from "./move.ts"
 import { getSuiCliEnvironmentChainId } from "./suiCli.ts"
+import { listFilesByNameRecursively } from "./utils/fs-walk.ts"
 import { isErrnoWithCode } from "./utils/fs.ts"
 import { escapeRegExp } from "./utils/regex.ts"
 
@@ -30,23 +31,11 @@ const getLineStartOffsets = (contents: string) => {
   return offsets
 }
 
-const listMoveTomlFiles = async (rootPath: string): Promise<string[]> => {
-  const entries = await fs.readdir(rootPath, { withFileTypes: true })
-  const files: string[] = []
-
-  await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = path.join(rootPath, entry.name)
-      if (entry.isDirectory()) {
-        files.push(...(await listMoveTomlFiles(fullPath)))
-      } else if (entry.isFile() && entry.name === "Move.toml") {
-        files.push(fullPath)
-      }
-    })
-  )
-
-  return files
-}
+const listMoveTomlFiles = async (rootPath: string): Promise<string[]> =>
+  listFilesByNameRecursively({
+    rootDir: rootPath,
+    fileName: "Move.toml"
+  })
 
 const findSectionBlock = (
   contents: string,
