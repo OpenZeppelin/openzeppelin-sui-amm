@@ -27,6 +27,7 @@ import {
   toTransactionSummaryView,
   type TransactionSummaryView
 } from "./transaction-summary.ts"
+import { extractCoinAssetTypeFromCoinObjectType } from "./coin-type.ts"
 
 const FUND_TRADER_ACCOUNT_LABEL = "fund-trader-account"
 const PREPARE_SUI_GAS_LABEL = "prepare-sui-gas-coin"
@@ -59,19 +60,6 @@ const assertSignerOwnsFundingCoin = ({
 
 const isSuiCoinObjectType = (coinType: string) =>
   coinType.endsWith(NORMALIZED_SUI_COIN_OBJECT_TYPE_SUFFIX)
-
-const resolveCoinAssetType = (coinObjectType: string) => {
-  const genericStartIndex = coinObjectType.indexOf("<")
-  const genericEndIndex = coinObjectType.lastIndexOf(">")
-
-  if (genericStartIndex < 0 || genericEndIndex <= genericStartIndex) {
-    throw new Error(
-      `Coin object type ${coinObjectType} is missing its asset type argument.`
-    )
-  }
-
-  return coinObjectType.slice(genericStartIndex + 1, genericEndIndex).trim()
-}
 
 const resolveGasBudget = ({
   tooling
@@ -409,7 +397,10 @@ export const fundExistingTraderAccount = async ({
     balanceManager,
     fundingCoinObjectId: normalizedCoinObjectId,
     fundingAmount,
-    coinAssetType: resolveCoinAssetType(coinOwnership.coinType),
+    coinAssetType: extractCoinAssetTypeFromCoinObjectType({
+      coinObjectType: coinOwnership.coinType,
+      valueLabel: "Coin object type"
+    }),
     signerAddress,
     gasPaymentReference
   })
