@@ -1,4 +1,4 @@
-module pyth::i64;
+module local_mock_pyth::i64;
 
 // === Errors ===
 #[error(code = 0)]

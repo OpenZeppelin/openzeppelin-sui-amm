@@ -1,6 +1,6 @@
-module pyth::price;
+module local_mock_pyth::price;
 
-use pyth::i64::I64;
+use local_mock_pyth::i64::I64;
 
 // === Structs ===
 

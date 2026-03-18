@@ -8,29 +8,29 @@ import {
   useSuiClient,
   useSuiClientContext
 } from "@mysten/dapp-kit"
+import { resolveDeepbookRegistryIdForNetwork } from "@sui-amm/domain-core/models/deepbook"
 import { buildCreateTraderAccountTransaction } from "@sui-amm/domain-core/ptb/deepbook"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useCallback, useMemo, useState } from "react"
-import { resolveDeepbookRegistryIdForNetwork } from "@sui-amm/domain-core/models/deepbook"
 import { LOCALNET_DEEPBOOK_REGISTRY_ID } from "../config/network"
 import { getLocalnetClient, makeLocalnetExecutor } from "../helpers/localnet"
 import { transactionUrl } from "../helpers/network"
 import { notification } from "../helpers/notification"
 import {
-  executeTransaction,
-  resolveLocalnetSupportNote,
-  withOptionalSupportNote
-} from "../helpers/transactionExecution"
+  buildTraderAccountCreateSummary,
+  type TraderAccountCreateSummary
+} from "../helpers/traderAccountCreateSummary"
 import {
   formatErrorMessage,
   safeJsonStringify,
   serializeForJson
 } from "../helpers/transactionErrors"
 import {
-  buildTraderAccountCreateSummary,
-  type TraderAccountCreateSummary
-} from "../helpers/traderAccountCreateSummary"
+  executeTransaction,
+  resolveLocalnetSupportNote,
+  withOptionalSupportNote
+} from "../helpers/transactionExecution"
 import { resolveWalletNetworkPreflight } from "../helpers/walletPreflight"
 import useExplorerUrl from "./useExplorerUrl"
 import useResolvedPackageId from "./useResolvedPackageId"

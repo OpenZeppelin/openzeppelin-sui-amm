@@ -179,7 +179,8 @@ const useTraderAccountCardViewModel = (): TTraderAccountCardState => {
     description: headerDescription,
     explorerUrl,
     traderAccountId,
-    content
+    content,
+    headerAction
   }
 
   return { viewModel }
