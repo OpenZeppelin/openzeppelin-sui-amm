@@ -13,6 +13,8 @@ use sui::table::{Self, Table};
 const ENotTraderAccountOwner: vector<u8> = b"sender must own the trader account";
 #[error(code = 1)]
 const EBalanceManagerMismatch: vector<u8> = b"balance manager must match the trader account";
+#[error(code = 2)]
+const EInvalidWithdrawAmount: vector<u8> = b"withdraw amount must be greater than zero";
 
 // === Structs ===
 
@@ -114,6 +116,26 @@ public fun fund_trader_account<T>(
         funding_coin,
         ctx,
     );
+}
+
+/// Withdraws funds from the trader account's linked balance manager to the sender.
+public fun withdraw_trader_account<T>(
+    trader_account: &TraderAccount,
+    balance_manager: &mut BalanceManager,
+    withdraw_amount: u64,
+    ctx: &mut TxContext,
+): Coin<T> {
+    assert_sender_can_manage_balance_manager(
+        trader_account,
+        balance_manager,
+        ctx,
+    );
+    assert!(withdraw_amount > 0, EInvalidWithdrawAmount);
+
+    balance_manager.withdraw<T>(
+        withdraw_amount,
+        ctx,
+    )
 }
 
 // === Private Functions ===
