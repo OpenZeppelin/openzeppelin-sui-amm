@@ -11,11 +11,7 @@ import {
   type AmmSeedScriptArguments,
   type CompleteAmmSeedOutput
 } from "./helpers.ts"
-import {
-  resolveKeepTemp,
-  resolveOnChainSharedVersion,
-  resolveWithFaucet
-} from "./test-helpers.ts"
+import { resolveOnChainSharedVersion } from "./test-helpers.ts"
 
 const SEEDED_BASE_SPREAD_BPS = "37"
 const SEEDED_VOLATILITY_MULTIPLIER_BPS = "420"
@@ -51,8 +47,6 @@ const expectSeededAmmConfigValues = (output: CompleteAmmSeedOutput) => {
 
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
-  keepTemp: resolveKeepTemp(),
-  withFaucet: resolveWithFaucet(),
   moveSourceRootPath: resolveDappMoveRoot()
 })
 

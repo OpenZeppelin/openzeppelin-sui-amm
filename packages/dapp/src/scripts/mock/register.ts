@@ -31,8 +31,7 @@ import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summ
 import {
   assertOwnerMatchesSigner,
   logRegistrationResult,
-  toRegistrationResultView,
-  toTransactionSummaryView
+  toRegistrationResultView
 } from "../../utils/deepbook-registration-script.ts"
 import { createTraderAccountAndRegisterBalanceManager } from "../../utils/deepbook-registration.ts"
 import { mockArtifactPath, type MockArtifact } from "../../utils/mocks.ts"
@@ -40,6 +39,7 @@ import {
   withAmmPackageIdOption,
   withCommonRegistrationOptions
 } from "../../utils/register-script-options.ts"
+import { toTransactionSummaryView } from "../../utils/transaction-summary.ts"
 
 type RegisterLocalnetCliArgs = {
   ammPackageId?: string

@@ -17,11 +17,7 @@ import {
   parseJsonFromScriptOutput
 } from "@sui-amm/tooling-node/testing/scripts"
 import { DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID } from "../../../utils/amm.ts"
-import {
-  resolveKeepTemp,
-  resolveOnChainSharedVersion,
-  resolveWithFaucet
-} from "./test-helpers.ts"
+import { resolveOnChainSharedVersion } from "./test-helpers.ts"
 
 type AmmCreateOutput = {
   adminCapId?: string
@@ -66,8 +62,6 @@ const findObjectArtifactById = (
 
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
-  keepTemp: resolveKeepTemp(),
-  withFaucet: resolveWithFaucet(),
   moveSourceRootPath: resolveDappMoveRoot()
 })
 

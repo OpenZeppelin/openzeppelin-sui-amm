@@ -13,6 +13,7 @@ import {
   mapOwnerToLabel,
   type OwnedObjectSummary
 } from "@sui-amm/tooling-core/object-info"
+import type { CoinBalanceSummary } from "@sui-amm/tooling-core/address"
 import { resolveOwnerAddress } from "@sui-amm/tooling-node/account"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import {
@@ -25,13 +26,6 @@ import { runSuiScript } from "@sui-amm/tooling-node/process"
 
 type GetAddressInfoCliArgs = {
   address?: string
-}
-
-type CoinBalanceSummary = {
-  coinType: string
-  coinObjectCount: number
-  totalBalance: bigint
-  lockedBalanceTotal: bigint
 }
 
 type StakeSummary = {

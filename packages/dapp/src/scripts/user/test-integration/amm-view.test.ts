@@ -1,4 +1,3 @@
-import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -12,11 +11,9 @@ import {
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
 import { extractInitialSharedVersion } from "@sui-amm/tooling-core/shared-object"
 import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
+import { pickRootNonDependencyArtifact } from "@sui-amm/tooling-node/package"
 import { createSuiLocalnetTestEnv } from "@sui-amm/tooling-node/testing/env"
-import {
-  resolveDappMoveRoot,
-  resolveDappRoot
-} from "@sui-amm/tooling-node/testing/paths"
+import { resolveDappMoveRoot } from "@sui-amm/tooling-node/testing/paths"
 import {
   createSuiScriptRunner,
   parseJsonFromScriptOutput
@@ -31,12 +28,6 @@ type AmmViewOutput = {
   initialSharedVersion?: string
 }
 
-type PublishArtifact = {
-  digest: string
-  isDependency?: boolean
-  packageId: string
-}
-
 type CreatedAmmConfigSnapshot = {
   ammConfigId: string
   baseSpreadBps: bigint
@@ -46,35 +37,8 @@ type CreatedAmmConfigSnapshot = {
   volatilityMultiplierBps: bigint
 }
 
-const resolveKeepTemp = () => process.env.SUI_IT_KEEP_TEMP === "1"
-
-const resolveWithFaucet = () => process.env.SUI_IT_WITH_FAUCET !== "0"
-
-const resolveUserScriptPath = (scriptName: string) =>
-  path.join(
-    resolveDappRoot(),
-    "src",
-    "scripts",
-    "user",
-    scriptName.endsWith(".ts") ? scriptName : `${scriptName}.ts`
-  )
-
-const pickRootPublishArtifact = (publishArtifacts: PublishArtifact[]) => {
-  const rootPublishArtifact =
-    publishArtifacts.find((publishArtifact) => !publishArtifact.isDependency) ??
-    publishArtifacts[0]
-
-  if (!rootPublishArtifact) {
-    throw new Error("Expected at least one publish artifact.")
-  }
-
-  return rootPublishArtifact
-}
-
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
-  keepTemp: resolveKeepTemp(),
-  withFaucet: resolveWithFaucet(),
   moveSourceRootPath: resolveDappMoveRoot()
 })
 
@@ -89,7 +53,7 @@ describe("amm-view script", () => {
         publisher,
         { withUnpublishedDependencies: true }
       )
-      const rootArtifact = pickRootPublishArtifact(publishArtifacts)
+      const rootArtifact = pickRootNonDependencyArtifact(publishArtifacts)
       const adminCapId = await resolveAmmAdminCapIdFromPublishDigest({
         publishDigest: rootArtifact.digest,
         suiClient: context.suiClient
@@ -113,11 +77,10 @@ describe("amm-view script", () => {
           pythPriceFeedIdBytes: parsePythPriceFeedIdBytes(pythPriceFeedIdHex)
         })
 
-        const createResult = await context.signAndExecuteTransaction(
+        const createResult = await context.signAndExecuteTransactionAndWait(
           createTransaction,
           publisher
         )
-        await context.waitForFinality(createResult.digest)
 
         const createdConfig = ensureCreatedObject(
           AMM_CONFIG_TYPE_SUFFIX,
@@ -154,13 +117,10 @@ describe("amm-view script", () => {
       })
 
       const scriptRunner = createSuiScriptRunner(context)
-      const result = await scriptRunner.runScript(
-        resolveUserScriptPath("amm-view"),
-        {
-          account: publisher,
-          args: { json: true }
-        }
-      )
+      const result = await scriptRunner.runUserScript("amm-view", {
+        account: publisher,
+        args: { json: true }
+      })
 
       expect(result.exitCode).toBe(0)
 

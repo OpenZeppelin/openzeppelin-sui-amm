@@ -21,7 +21,6 @@ import {
   DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID,
   resolveAmmAdminCapIdFromPublishDigest
 } from "../../../utils/amm.ts"
-import { resolveKeepTemp, resolveWithFaucet } from "./test-helpers.ts"
 
 type AmmUpdateOutput = {
   ammConfig?: AmmConfigOverview
@@ -40,8 +39,6 @@ const UPDATED_TRADING_PAUSED = true
 
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
-  keepTemp: resolveKeepTemp(),
-  withFaucet: resolveWithFaucet(),
   moveSourceRootPath: resolveDappMoveRoot()
 })
 
@@ -79,11 +76,10 @@ describe("owner amm-update integration", () => {
         )
       })
 
-      const createResult = await context.signAndExecuteTransaction(
+      const createResult = await context.signAndExecuteTransactionAndWait(
         initialConfigTransaction,
         publisher
       )
-      await context.waitForFinality(createResult.digest)
 
       const ammConfigId = ensureCreatedObject(
         AMM_CONFIG_TYPE_SUFFIX,

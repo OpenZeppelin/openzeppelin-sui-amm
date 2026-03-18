@@ -50,7 +50,6 @@ import {
 import { runSuiScript } from "@sui-amm/tooling-node/process"
 import { waitForObjectState } from "@sui-amm/tooling-node/testing/objects"
 import {
-  ensureCreatedObject,
   findCreatedObjectIds,
   newTransaction
 } from "@sui-amm/tooling-node/transactions"
@@ -71,6 +70,7 @@ import {
   mockArtifactPath,
   writeMockArtifact
 } from "../../utils/mocks.ts"
+import { resolveDeepbookPublishObjectsFromDigest } from "../../utils/deepbook.ts"
 
 process.env.SUI_NETWORK = "localnet"
 
@@ -521,30 +521,6 @@ const waitForPackageAvailability = async (
   })
 }
 
-const resolveDeepbookObjectsFromPublish = async (
-  publishDigest: string,
-  suiClient: SuiClient
-) => {
-  const publishTransaction = await suiClient.getTransactionBlock({
-    digest: publishDigest,
-    options: { showObjectChanges: true }
-  })
-
-  const deepbookRegistryId = ensureCreatedObject(
-    "::registry::Registry",
-    publishTransaction
-  ).objectId
-  const deepbookAdminCapId = ensureCreatedObject(
-    "::registry::DeepbookAdminCap",
-    publishTransaction
-  ).objectId
-
-  return {
-    deepbookRegistryId,
-    deepbookAdminCapId
-  }
-}
-
 const syncDeepbookTokenDependencyPublishedIds = async ({
   deepbookContractPath,
   tokenPackageId
@@ -711,20 +687,20 @@ const ensureDeepbookArtifacts = async (
     "deepbook"
   )
 
-  const { deepbookRegistryId, deepbookAdminCapId } =
-    await resolveDeepbookObjectsFromPublish(
-      deepbookPublish.digest,
-      tooling.suiClient
-    )
+  const { deepbookPackageId, deepbookRegistryId, deepbookAdminCapId } =
+    await resolveDeepbookPublishObjectsFromDigest({
+      publishDigest: deepbookPublish.digest,
+      suiClient: tooling.suiClient
+    })
 
   await writeMockArtifact(mockArtifactPath, {
-    deepbookPackageId: deepbookPublish.packageId,
+    deepbookPackageId,
     deepbookRegistryId,
     deepbookAdminCapId
   })
 
   return {
-    deepbookPackageId: deepbookPublish.packageId,
+    deepbookPackageId,
     deepbookRegistryId,
     deepbookAdminCapId
   }

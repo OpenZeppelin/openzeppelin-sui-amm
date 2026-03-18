@@ -5,6 +5,9 @@
  */
 import yargs from "yargs"
 
+import type { SuiClient } from "@mysten/sui/client"
+import type { CoinBalanceSummary } from "@sui-amm/tooling-core/address"
+import { fetchCoinBalances } from "@sui-amm/tooling-core/coin"
 import { resolveOwnerAddress } from "@sui-amm/tooling-node/account"
 import {
   logEachGreen,
@@ -18,12 +21,11 @@ type CoinBalancesCliArgs = {
   address?: string
 }
 
-type CoinBalanceSummary = {
-  coinType: string
-  coinObjectCount: number
-  totalBalance: bigint
-  lockedBalanceTotal: bigint
+type CoinBalanceDetails = CoinBalanceSummary & {
+  coinObjectIds: string[]
 }
+
+const MAX_LOGGED_COIN_OBJECT_IDS = 5
 
 runSuiScript<CoinBalancesCliArgs>(
   async (tooling, _cliArguments) => {
@@ -42,7 +44,13 @@ runSuiScript<CoinBalancesCliArgs>(
       address: addressToInspect
     })
 
-    logCoinBalances(balances)
+    const balancesWithCoinObjectIds = await resolveCoinBalanceDetails({
+      address: addressToInspect,
+      balances,
+      suiClient: tooling.suiClient
+    })
+
+    logCoinBalances(balancesWithCoinObjectIds)
   },
   yargs()
     .option("address", {
@@ -54,7 +62,33 @@ runSuiScript<CoinBalancesCliArgs>(
     .strict()
 )
 
-const logCoinBalances = (balances: CoinBalanceSummary[]) => {
+const resolveCoinBalanceDetails = async ({
+  address,
+  balances,
+  suiClient
+}: {
+  address: string
+  balances: CoinBalanceSummary[]
+  suiClient: SuiClient
+}): Promise<CoinBalanceDetails[]> =>
+  Promise.all(
+    balances.map(async (balance): Promise<CoinBalanceDetails> => {
+      const ownedCoins = await fetchCoinBalances(
+        {
+          owner: address,
+          coinType: balance.coinType
+        },
+        { suiClient }
+      )
+
+      return {
+        ...balance,
+        coinObjectIds: ownedCoins.map((coin) => coin.coinObjectId)
+      }
+    })
+  )
+
+const logCoinBalances = (balances: CoinBalanceDetails[]) => {
   const sortedBalances = [...balances].sort((left, right) =>
     left.coinType.localeCompare(right.coinType)
   )
@@ -73,6 +107,7 @@ const logCoinBalances = (balances: CoinBalanceSummary[]) => {
       objects: balance.coinObjectCount,
       total: formatBigInt(balance.totalBalance),
       locked: formatBigInt(balance.lockedBalanceTotal),
+      coinObjectIds: formatCoinObjectIds(balance.coinObjectIds),
       "": ""
     })
   )
@@ -94,3 +129,18 @@ const logInspectionContext = ({
 }
 
 const formatBigInt = (value: bigint) => value.toString()
+
+const formatCoinObjectIds = (coinObjectIds: string[]) => {
+  if (coinObjectIds.length === 0) return "none"
+  if (coinObjectIds.length <= MAX_LOGGED_COIN_OBJECT_IDS) {
+    return coinObjectIds.join(", ")
+  }
+
+  const visibleCoinObjectIds = coinObjectIds
+    .slice(0, MAX_LOGGED_COIN_OBJECT_IDS)
+    .join(", ")
+  const hiddenCoinObjectCount =
+    coinObjectIds.length - MAX_LOGGED_COIN_OBJECT_IDS
+
+  return `${visibleCoinObjectIds} (+${hiddenCoinObjectCount} more)`
+}
