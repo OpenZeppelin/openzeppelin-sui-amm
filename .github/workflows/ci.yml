@@ -123,6 +123,8 @@ jobs:
           - prop-amm
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/setup-sui
       - name: Run Move tests for ${{ matrix.package }}
