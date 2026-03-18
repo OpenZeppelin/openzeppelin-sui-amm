@@ -69,20 +69,6 @@ const renderContent = (content: TAmmConfigCardContent) => {
               {details.tradingBadge.label}
             </span>
           </ConfigTile>
-          <div className="md:col-span-2">
-            <ConfigTile label="Pyth price feed id">
-              {details.pythPriceFeedIdHex ? (
-                <CopyableId
-                  value={details.pythPriceFeedIdHex}
-                  label="Feed"
-                  showExplorer={false}
-                  className="w-full"
-                />
-              ) : (
-                "Unknown"
-              )}
-            </ConfigTile>
-          </div>
         </div>
       )
     }
