@@ -168,12 +168,11 @@ const buildFieldErrors = ({
     return errors
   }
 
-  const selectedTraderAccountCoinBalance = resolveSelectedTraderAccountCoinBalance(
-    {
+  const selectedTraderAccountCoinBalance =
+    resolveSelectedTraderAccountCoinBalance({
       coinType: formState.coinType,
       traderAccountCoinBalancesState
-    }
-  )
+    })
   if (
     selectedTraderAccountCoinBalance &&
     withdrawalAmount > selectedTraderAccountCoinBalance.totalBalance
@@ -356,11 +355,11 @@ export const useWithdrawTraderAccountModalState = ({
   const canSubmit =
     Boolean(
       walletAddress &&
-        ammPackageId &&
-        traderAccountId &&
-        balanceManagerId &&
-        traderAccountCoinBalancesState.status === "success" &&
-        !hasFieldErrors
+      ammPackageId &&
+      traderAccountId &&
+      balanceManagerId &&
+      traderAccountCoinBalancesState.status === "success" &&
+      !hasFieldErrors
     ) &&
     transactionState.status !== "processing" &&
     !isSubmissionPending
@@ -377,7 +376,10 @@ export const useWithdrawTraderAccountModalState = ({
   }, [refreshBalances, resetFieldState])
 
   const handleInputChange = useCallback(
-    <K extends keyof WithdrawFormState>(key: K, value: WithdrawFormState[K]) => {
+    <K extends keyof WithdrawFormState>(
+      key: K,
+      value: WithdrawFormState[K]
+    ) => {
       markFieldChange(key)
       setFormState((currentState) => ({
         ...currentState,
