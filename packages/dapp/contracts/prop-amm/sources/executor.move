@@ -56,6 +56,7 @@ public struct TraderAccountCreatedEvent has copy, drop {
 
 /// Creates a trader account, transfers the owner caps, transfers the trader account,
 /// and shares the linked balance manager.
+#[allow(lint(share_owned))] // TODO: https://github.com/OpenZeppelin/openzeppelin-sui-amm/issues/106
 public fun create_trader_account_with_shared_manager_and_owner_caps(
     deepbook_registry: &Registry,
     owner: address,

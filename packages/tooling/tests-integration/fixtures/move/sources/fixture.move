@@ -1,6 +1,6 @@
-module Fixture::fixture;
+module Fixture::fixture {
+  // === Structs ===
 
-// === Structs ===
-
-/// Placeholder struct to keep the fixture package structurally valid.
-public struct FixtureMarker has drop {}
+  /// Placeholder struct to keep the fixture package structurally valid.
+  public struct FixtureMarker has drop {}
+}
