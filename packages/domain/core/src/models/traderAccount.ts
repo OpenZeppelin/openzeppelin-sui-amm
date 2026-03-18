@@ -1,13 +1,18 @@
 import type { SuiClient, SuiObjectData } from "@mysten/sui/client"
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils"
 
+import { getAllDynamicFields } from "@sui-amm/tooling-core/dynamic-fields"
 import {
   getAllOwnedObjectsByFilter,
   getSuiObject,
   normalizeOptionalIdFromValue,
   unwrapMoveObjectFields
 } from "@sui-amm/tooling-core/object"
-import { unwrapMoveFields } from "@sui-amm/tooling-core/utils/move-values"
+import {
+  extractFieldValueByKeys,
+  normalizeBigIntFromMoveValue,
+  unwrapMoveFields
+} from "@sui-amm/tooling-core/utils/move-values"
 
 export const TRADER_ACCOUNT_TYPE_SUFFIX = "::executor::TraderAccount"
 
@@ -24,6 +29,11 @@ export type TraderAccountOverview = {
   activeOrdersTableId?: string
 }
 
+export type TraderAccountAssetBalance = {
+  coinType: string
+  balance: bigint
+}
+
 type TraderAccountFields = {
   owner?: unknown
   balance_manager_id?: unknown
@@ -36,6 +46,12 @@ type TraderAccountCapFields = {
   deposit_cap_id?: unknown
   withdraw_cap_id?: unknown
 }
+
+type BalanceManagerFields = {
+  balances?: unknown
+}
+
+const BALANCE_KEY_TYPE_PREFIX = "::balance_manager::BalanceKey<"
 
 const requireAddressField = (value: unknown, label: string): string => {
   if (typeof value !== "string") throw new Error(`${label} is required.`)
@@ -65,6 +81,129 @@ const resolveCapIds = (capIdsValue: unknown) => {
     tradeCapId: resolveCapId(capIds.trade_cap_id, "Trade cap id"),
     depositCapId: resolveCapId(capIds.deposit_cap_id, "Deposit cap id"),
     withdrawCapId: resolveCapId(capIds.withdraw_cap_id, "Withdraw cap id")
+  }
+}
+
+const extractGenericTypeArgument = (
+  value: string,
+  typePrefix: string
+): string | undefined => {
+  const prefixIndex = value.indexOf(typePrefix)
+  if (prefixIndex < 0) return undefined
+
+  const genericValueStartIndex = prefixIndex + typePrefix.length
+  let depth = 1
+
+  for (let index = genericValueStartIndex; index < value.length; index += 1) {
+    const currentCharacter = value[index]
+    if (currentCharacter === "<") depth += 1
+    if (currentCharacter === ">") {
+      depth -= 1
+      if (depth === 0) {
+        const candidateType = value.slice(genericValueStartIndex, index).trim()
+        return candidateType || undefined
+      }
+    }
+  }
+
+  return undefined
+}
+
+const resolveBalanceManagerBagId = (balanceManagerObject: SuiObjectData) => {
+  const fields =
+    unwrapMoveObjectFields<BalanceManagerFields>(balanceManagerObject)
+  return requireIdField(fields.balances, "Balance manager balances bag id")
+}
+
+const resolveCoinTypeFromDynamicField = (
+  dynamicField: Awaited<ReturnType<typeof getAllDynamicFields>>[number]
+): string | undefined => {
+  const fieldTypeCandidates = [
+    typeof dynamicField.name?.type === "string"
+      ? dynamicField.name.type
+      : undefined,
+    dynamicField.objectType
+  ].filter((candidateType): candidateType is string => Boolean(candidateType))
+
+  const coinTypeCandidate = fieldTypeCandidates
+    .map((fieldType) =>
+      extractGenericTypeArgument(fieldType, BALANCE_KEY_TYPE_PREFIX)
+    )
+    .find((fieldType): fieldType is string => Boolean(fieldType))
+
+  return coinTypeCandidate?.trim() || undefined
+}
+
+const resolveBalanceAmountFromDynamicFieldObject = (
+  dynamicFieldObject: SuiObjectData
+): bigint | undefined => {
+  const dynamicFieldFields =
+    unwrapMoveObjectFields<Record<string, unknown>>(dynamicFieldObject)
+  const balanceValue = extractFieldValueByKeys(dynamicFieldFields, ["value"])
+  if (balanceValue === undefined) return undefined
+
+  const resolvedBalance = normalizeBigIntFromMoveValue(balanceValue)
+  if (resolvedBalance !== undefined) return resolvedBalance
+
+  const nestedBalanceFields = unwrapMoveFields(balanceValue)
+  if (!nestedBalanceFields) return undefined
+
+  return normalizeBigIntFromMoveValue(
+    extractFieldValueByKeys(nestedBalanceFields, ["value", "balance"])
+  )
+}
+
+const mergeAndSortAssetBalances = (
+  assetBalances: TraderAccountAssetBalance[]
+): TraderAccountAssetBalance[] => {
+  const balancesByCoinType = assetBalances.reduce<Map<string, bigint>>(
+    (nextBalancesByCoinType, assetBalance) => {
+      const currentBalance =
+        nextBalancesByCoinType.get(assetBalance.coinType) ?? 0n
+      nextBalancesByCoinType.set(
+        assetBalance.coinType,
+        currentBalance + assetBalance.balance
+      )
+
+      return nextBalancesByCoinType
+    },
+    new Map()
+  )
+
+  return Array.from(balancesByCoinType.entries())
+    .map(([coinType, balance]) => ({
+      coinType,
+      balance
+    }))
+    .sort((leftBalance, rightBalance) =>
+      leftBalance.coinType.localeCompare(rightBalance.coinType)
+    )
+}
+
+const resolveAssetBalanceFromDynamicField = async ({
+  dynamicField,
+  suiClient
+}: {
+  dynamicField: Awaited<ReturnType<typeof getAllDynamicFields>>[number]
+  suiClient: SuiClient
+}): Promise<TraderAccountAssetBalance | undefined> => {
+  const coinType = resolveCoinTypeFromDynamicField(dynamicField)
+  if (!coinType) return undefined
+
+  const { object } = await getSuiObject(
+    {
+      objectId: dynamicField.objectId,
+      options: { showContent: true, showType: true }
+    },
+    { suiClient }
+  )
+
+  const balance = resolveBalanceAmountFromDynamicFieldObject(object)
+  if (balance === undefined) return undefined
+
+  return {
+    coinType,
+    balance
   }
 }
 
@@ -108,6 +247,44 @@ export const getTraderAccountOverview = async (
     traderAccountId,
     object
   })
+}
+
+export const getBalanceManagerAssetBalances = async (
+  balanceManagerId: string,
+  suiClient: SuiClient
+): Promise<TraderAccountAssetBalance[]> => {
+  const { object: balanceManagerObject } = await getSuiObject(
+    {
+      objectId: balanceManagerId,
+      options: { showContent: true, showType: true }
+    },
+    { suiClient }
+  )
+
+  const balancesBagId = resolveBalanceManagerBagId(balanceManagerObject)
+  const dynamicFields = await getAllDynamicFields(
+    {
+      parentObjectId: balancesBagId
+    },
+    { suiClient }
+  )
+
+  if (dynamicFields.length === 0) return []
+
+  const assetBalanceCandidates = await Promise.all(
+    dynamicFields.map((dynamicField) =>
+      resolveAssetBalanceFromDynamicField({
+        dynamicField,
+        suiClient
+      })
+    )
+  )
+
+  return mergeAndSortAssetBalances(
+    assetBalanceCandidates.flatMap((assetBalance) =>
+      assetBalance ? [assetBalance] : []
+    )
+  )
 }
 
 export const findOwnedTraderAccountIds = async ({

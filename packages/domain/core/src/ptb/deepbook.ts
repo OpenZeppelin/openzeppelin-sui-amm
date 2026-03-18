@@ -1,3 +1,4 @@
+import type { Transaction, TransactionArgument } from "@mysten/sui/transactions"
 import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { newTransaction } from "@sui-amm/tooling-core/transactions"
 
@@ -94,3 +95,28 @@ export const buildRegisterBalanceManagerTransaction = ({
 
   return transaction
 }
+
+export const fundTraderAccount = ({
+  transaction,
+  ammPackageId,
+  traderAccountId,
+  balanceManager,
+  fundingCoin,
+  coinAssetType
+}: {
+  transaction: Transaction
+  ammPackageId: string
+  traderAccountId: string
+  balanceManager: WrappedSuiSharedObject
+  fundingCoin: TransactionArgument
+  coinAssetType: string
+}) =>
+  transaction.moveCall({
+    target: `${ammPackageId}::executor::fund_trader_account`,
+    typeArguments: [coinAssetType],
+    arguments: [
+      transaction.object(traderAccountId),
+      transaction.sharedObjectRef(balanceManager.sharedRef),
+      fundingCoin
+    ]
+  })
