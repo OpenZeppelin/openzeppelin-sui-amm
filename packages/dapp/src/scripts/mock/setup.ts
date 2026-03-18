@@ -231,7 +231,7 @@ runSuiScript(
       .map((seeded) => seeded.coin)
 
     if (inputs.traderAddress)
-      await transferQuarterTreasuryToBuyer(
+      await transferQuarterTreasuryToTrader(
         {
           coins: createdCoins,
           traderAddress: inputs.traderAddress,
@@ -288,7 +288,7 @@ runSuiScript(
     .option("traderAddress", {
       alias: ["trader-address", "trader"],
       type: "string",
-      description: "Buyer address to receive quarter of each minted mock coin"
+      description: "Trader address to receive quarter of each minted mock coin"
     })
     .option("coinPackageId", {
       alias: "coin-package-id",
@@ -871,7 +871,7 @@ const ensureCoin = async (
   }
 }
 
-const transferQuarterTreasuryToBuyer = async (
+const transferQuarterTreasuryToTrader = async (
   {
     coins,
     traderAddress,
@@ -923,7 +923,7 @@ const transferQuarterTreasuryForCoin = async (
 
   if (!treasurySnapshot) {
     logWarning(
-      `No coin objects found for ${coin.label} (${coin.coinType}); skipping buyer transfer.`
+      `No coin objects found for ${coin.label} (${coin.coinType}); skipping trader transfer.`
     )
     return
   }
@@ -931,7 +931,7 @@ const transferQuarterTreasuryForCoin = async (
   const transferAmount = calculateQuarterBalance(treasurySnapshot.balance)
   if (transferAmount <= 0n) {
     logWarning(
-      `Balance too small to split for ${coin.label} (${coin.coinType}); skipping buyer transfer.`
+      `Balance too small to split for ${coin.label} (${coin.coinType}); skipping trader transfer.`
     )
     return
   }
@@ -957,7 +957,7 @@ const transferQuarterTreasuryForCoin = async (
     signer
   })
 
-  logKeyValueGreen("Buyer transfer")(`${coin.label} ${coin.coinType}`)
+  logKeyValueGreen("Trader transfer")(`${coin.label} ${coin.coinType}`)
   logKeyValueGreen("amount")(transferAmount.toString())
   logKeyValueGreen("from")(signerAddress)
   logKeyValueGreen("to")(traderAddress)

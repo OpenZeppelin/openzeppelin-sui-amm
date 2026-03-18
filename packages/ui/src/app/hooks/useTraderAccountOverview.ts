@@ -22,7 +22,10 @@ const emptyTraderAccountState = (): TraderAccountState => ({
 const resolveUnexpectedErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Unable to load trader account."
 
-const useTraderAccountOverview = (traderAccountId?: string) => {
+const useTraderAccountOverview = (
+  traderAccountId?: string,
+  refreshToken?: number
+) => {
   const suiClient = useSuiClient()
   const [state, setState] = useState<TraderAccountState>(
     emptyTraderAccountState()
@@ -67,7 +70,7 @@ const useTraderAccountOverview = (traderAccountId?: string) => {
     return () => {
       active = false
     }
-  }, [traderAccountId, suiClient])
+  }, [refreshToken, traderAccountId, suiClient])
 
   return state
 }

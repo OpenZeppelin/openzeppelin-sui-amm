@@ -1,4 +1,4 @@
-module pyth::price_identifier;
+module local_mock_pyth::price_identifier;
 
 // === Constants ===
 

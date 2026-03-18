@@ -5,6 +5,7 @@ import type {
   TTraderAccountCardContent,
   TTraderAccountCardViewModel
 } from "../types/TTraderAccountCard"
+import Button from "./Button"
 import CopyableId from "./CopyableId"
 import Loading from "./Loading"
 
@@ -132,7 +133,8 @@ const TraderAccountCardView = ({
   description,
   explorerUrl,
   traderAccountId,
-  content
+  content,
+  headerAction
 }: TTraderAccountCardViewModel) => {
   return (
     <section className="w-full max-w-4xl px-4">
@@ -146,6 +148,19 @@ const TraderAccountCardView = ({
               {description}
             </p>
           </div>
+          {headerAction ? (
+            <div className="ml-auto">
+              <Button
+                variant="secondary"
+                size="compact"
+                disabled={headerAction.disabled}
+                tooltip={headerAction.tooltip}
+                onClick={headerAction.onClick}
+              >
+                {headerAction.label}
+              </Button>
+            </div>
+          ) : null}
         </div>
         <div className="space-y-4 px-6 py-5">
           <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">

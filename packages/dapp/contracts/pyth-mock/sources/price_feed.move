@@ -1,7 +1,7 @@
-module pyth::price_feed;
+module local_mock_pyth::price_feed;
 
-use pyth::price::Price;
-use pyth::price_identifier::PriceIdentifier;
+use local_mock_pyth::price::Price;
+use local_mock_pyth::price_identifier::PriceIdentifier;
 
 // === Structs ===
 

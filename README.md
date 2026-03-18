@@ -76,6 +76,7 @@ cp packages/ui/.env.example packages/ui/.env.local
 ## Add required field details - you will find these details in the output of the two last pnpm commands. 
 NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<0x...>
 NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
+NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID=<0x..>
 
 # Run the UI
 pnpm ui dev
