@@ -412,7 +412,18 @@ fun fund_trader_account_rejects_mismatched_balance_manager() {
     scenario.next_tx(sender);
 
     let trader_account: TraderAccount = scenario.take_from_sender();
-    let mut mismatched_balance_manager: BalanceManager = scenario.take_shared();
+    let first_balance_manager: BalanceManager = scenario.take_shared();
+    let second_balance_manager: BalanceManager = scenario.take_shared();
+    let trader_account_balance_manager_id = trader_account.balance_manager_id();
+    let first_balance_manager_id = balance_manager::id(&first_balance_manager);
+
+    let mut mismatched_balance_manager: BalanceManager = if (
+        first_balance_manager_id != trader_account_balance_manager_id
+    ) {
+        first_balance_manager
+    } else {
+        second_balance_manager
+    };
 
     trader_account.fund_trader_account(
         &mut mismatched_balance_manager,
