@@ -20,6 +20,10 @@ use pyth::pyth;
 use sui::clock::Clock;
 use sui::coin::Coin;
 
+// === Constants ===
+
+const ORDER_EXPIRATION_TIME_MS: u64 = 30_000;
+
 // === Errors ===
 
 #[error(code = 0)]
@@ -189,8 +193,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
 
-    // TODO#q: put expiration time into config
-    let expire_timestamp = clock.timestamp_ms() + 30_000;
+    let expire_timestamp = clock.timestamp_ms() + ORDER_EXPIRATION_TIME_MS;
     let order_type = constants::no_restriction();
     // TODO#q: remove self matching
     let self_matching_option = constants::self_matching_allowed();
