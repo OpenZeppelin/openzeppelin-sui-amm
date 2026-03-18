@@ -1,10 +1,17 @@
 /**
- * Funds an existing trader account by depositing a selected coin object into
- * the linked DeepBook balance manager.
+ * Funds an existing trader account by depositing a selected coin into the
+ * linked DeepBook balance manager.
  */
 import yargs from "yargs"
 
 import { resolveAmmPackageId } from "@sui-amm/domain-node/amm"
+import {
+  fetchCoinBalances,
+  normalizeCoinType,
+  selectRichestCoin
+} from "@sui-amm/tooling-core/coin"
+import { parsePositiveU64 } from "@sui-amm/tooling-core/utils/utility"
+import { resolveSignerAddress } from "@sui-amm/tooling-node/account"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { logKeyValueGreen } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
@@ -18,11 +25,63 @@ import {
 type FundTraderAccountArguments = {
   ammPackageId?: string
   traderAccountId?: string
-  coinObjectId: string
+  coinType?: string
+  coinObjectId?: string
   amount: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
+}
+
+const resolveFundingCoinObjectId = async ({
+  tooling,
+  coinType,
+  coinObjectId,
+  amount
+}: {
+  tooling: {
+    loadedEd25519KeyPair: { toSuiAddress: () => string }
+    suiClient: Parameters<typeof fetchCoinBalances>[1]["suiClient"]
+  }
+  coinType?: string
+  coinObjectId?: string
+  amount: string
+}) => {
+  if (coinObjectId) {
+    return coinObjectId
+  }
+
+  if (!coinType) {
+    throw new Error(
+      "Either --coin-type or --coin-object-id must be provided to fund a trader account."
+    )
+  }
+
+  const normalizedCoinType = normalizeCoinType(coinType)
+  const signerAddress = resolveSignerAddress(tooling.loadedEd25519KeyPair)
+  const fundingAmount = parsePositiveU64(amount, "Funding amount")
+  const ownedCoins = await fetchCoinBalances(
+    {
+      owner: signerAddress,
+      coinType: normalizedCoinType
+    },
+    { suiClient: tooling.suiClient }
+  )
+  const richestOwnedCoin = selectRichestCoin(ownedCoins)
+
+  if (!richestOwnedCoin) {
+    throw new Error(
+      `No coin objects for ${normalizedCoinType} were found for signer ${signerAddress}.`
+    )
+  }
+
+  if (richestOwnedCoin.balance < fundingAmount) {
+    throw new Error(
+      `No single ${normalizedCoinType} coin can cover funding amount ${fundingAmount.toString()}. Merge coins or provide --coin-object-id.`
+    )
+  }
+
+  return richestOwnedCoin.coinObjectId
 }
 
 const logFundingResult = ({
@@ -69,12 +128,18 @@ runSuiScript(
       networkName: tooling.network.networkName,
       ammPackageId: cliArguments.ammPackageId
     })
+    const fundingCoinObjectId = await resolveFundingCoinObjectId({
+      tooling,
+      coinType: cliArguments.coinType,
+      coinObjectId: cliArguments.coinObjectId,
+      amount: cliArguments.amount
+    })
 
     const fundingResult = await fundExistingTraderAccount({
       tooling,
       ammPackageId,
       traderAccountId: cliArguments.traderAccountId,
-      coinObjectId: cliArguments.coinObjectId,
+      coinObjectId: fundingCoinObjectId,
       amount: cliArguments.amount,
       devInspect: cliArguments.devInspect,
       dryRun: cliArguments.dryRun
@@ -105,12 +170,19 @@ runSuiScript(
         "Existing trader account id; when omitted the flow uses the single trader account owned by the active signer.",
       demandOption: false
     })
+    .option("coinType", {
+      alias: ["coin-type"],
+      type: "string",
+      description:
+        "Coin type to fund with (for example 0x2::sui::SUI). The script selects a matching owned coin object automatically.",
+      demandOption: false
+    })
     .option("coinObjectId", {
       alias: ["coin-object-id"],
       type: "string",
       description:
-        "Coin object id to fund with. On localnet, inspect coin object ids with `pnpm dapp chain:describe-coin-balances --address <signer>` and mock setup artifacts when using mock assets.",
-      demandOption: true
+        "Optional explicit coin object id override for funding. When omitted, the script resolves one from --coin-type.",
+      demandOption: false
     })
     .option("amount", {
       type: "string",

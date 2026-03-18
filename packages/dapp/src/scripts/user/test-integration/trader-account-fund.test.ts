@@ -323,7 +323,7 @@ describe("trader-account-fund script", () => {
           account: trader,
           args: {
             ammPackageId: rootPublishArtifact.packageId,
-            coinObjectId: fundingCoin.coinObjectId,
+            coinType: "0x2::sui::SUI",
             amount: fundingAmount.toString(),
             json: true
           }

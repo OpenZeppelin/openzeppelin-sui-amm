@@ -90,5 +90,5 @@ pnpm ui dev
 pnpm dapp chain:describe-coin-balances
 
 # Fund an account (also possible cia UI)
-pnpm dapp user:trader-account:fund --coin-object-id <0xCOIN_OBJECT_ID> --amount 10000
+pnpm dapp user:trader-account:fund --coin-type <0x2::sui::SUI> --amount 10000
 ```
