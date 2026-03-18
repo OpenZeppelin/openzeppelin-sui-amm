@@ -6,7 +6,7 @@ use sui::package;
 
 // === Constants ===
 
-const MAX_BASIS_POINTS: u64 = 10_000;
+const HUNDRED_PERCENT_BPS: u64 = 10_000;
 const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
 // === Errors ===
@@ -28,8 +28,8 @@ public struct AMMConfig has key {
     trading_paused: bool,
     /// Base spread in basis points.
     base_spread_bps: u64,
-    /// Volatility multiplier in basis points.
-    volatility_multiplier_bps: u64,
+    /// Volatility spread in basis points.
+    volatility_spread_bps: u64,
     /// Pyth price feed identifier bytes.
     pyth_price_feed_id: vector<u8>,
     /// Whether LASER pricing is enabled.
@@ -66,7 +66,7 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 public fun create_amm_config(
     _: &AMMAdminCap,
     base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
+    volatility_spread_bps: u64,
     use_laser: bool,
     pyth_price_feed_id: vector<u8>,
     ctx: &mut TxContext,
@@ -76,7 +76,7 @@ public fun create_amm_config(
     let config = AMMConfig {
         id: object::new(ctx),
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         trading_paused: false,
         pyth_price_feed_id,
@@ -93,7 +93,7 @@ public fun create_amm_config(
 public fun create_amm_config_and_share(
     admin_cap: &AMMAdminCap,
     base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
+    volatility_spread_bps: u64,
     use_laser: bool,
     pyth_price_feed_id: vector<u8>,
     ctx: &mut TxContext,
@@ -101,7 +101,7 @@ public fun create_amm_config_and_share(
     let config = create_amm_config(
         admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         ctx,
@@ -118,7 +118,7 @@ public fun update_amm_config(
     config: &mut AMMConfig,
     _: &AMMAdminCap,
     base_spread_bps: u64,
-    volatility_multiplier_bps: u64,
+    volatility_spread_bps: u64,
     use_laser: bool,
     trading_paused: bool,
     pyth_price_feed_id: vector<u8>,
@@ -126,7 +126,7 @@ public fun update_amm_config(
     assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
 
     config.base_spread_bps = base_spread_bps;
-    config.volatility_multiplier_bps = volatility_multiplier_bps;
+    config.volatility_spread_bps = volatility_spread_bps;
     config.use_laser = use_laser;
     config.trading_paused = trading_paused;
     config.pyth_price_feed_id = pyth_price_feed_id;
@@ -141,7 +141,7 @@ macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed
     let base_spread_bps = $base_spread_bps;
     let pyth_price_feed_id = $pyth_price_feed_id;
     assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
-    assert!(base_spread_bps <= MAX_BASIS_POINTS, EBaseSpreadBpsExceedsMaxBasisPoints);
+    assert!(base_spread_bps <= HUNDRED_PERCENT_BPS, EBaseSpreadBpsExceedsMaxBasisPoints);
     assert!(
         pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
@@ -155,9 +155,19 @@ public fun base_spread_bps(config: &AMMConfig): u64 {
     config.base_spread_bps
 }
 
+/// Compute the base spread in price terms for a given mid price.
+public(package) fun base_spread(config: &AMMConfig, mid_price: u64): u64{
+    ((mid_price as u128) * (config.base_spread_bps as u128) / (HUNDRED_PERCENT_BPS as u128)) as u64
+}
+
 /// Returns the volatility multiplier in basis points.
-public fun volatility_multiplier_bps(config: &AMMConfig): u64 {
-    config.volatility_multiplier_bps
+public fun volatility_spread_bps(config: &AMMConfig): u64 {
+    config.volatility_spread_bps
+}
+
+/// Compute the volatility spread in price terms for a given mid price.
+public(package) fun volatility_spread(config: &AMMConfig, mid_price: u64): u64{
+    ((mid_price as u128) * (config.volatility_spread_bps as u128) / (HUNDRED_PERCENT_BPS as u128)) as u64
 }
 
 // TODO#q: use LASER pricing

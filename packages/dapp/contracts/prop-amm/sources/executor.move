@@ -154,25 +154,22 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 ) {
     assert!(!config.trading_paused(), ETradingPaused);
 
-    // TODO#q: consider volatility multiplier.
+    // Calculate base and volatility spread values.
     let oracle_mid_price = pyth_price_to_deepbook_price(price_info_object);
-    let base_spread_bps = config.base_spread_bps();
-    let volatility_multiplier_bps = config.volatility_multiplier_bps();
-    // TODO#q: move spread computation to the config
-    let half_base_spread = ((oracle_mid_price as u128) * (base_spread_bps as u128) / 10_000u128) as u64;
-    let half_volatility_spread = ((oracle_mid_price as u128) * (volatility_multiplier_bps as u128) / 10_000u128) as u64;
+    let base_spread = config.base_spread(oracle_mid_price);
+    let volatility_spread = config.volatility_spread(oracle_mid_price);
 
     // Calculate bids/ask order prices.
-    let bid_inner = oracle_mid_price.checked_sub(half_base_spread).destroy_or!(constants::min_price());
+    let bid_inner = oracle_mid_price.checked_sub(base_spread).destroy_or!(constants::min_price());
     let bid_outer = oracle_mid_price
-        .checked_sub(half_volatility_spread)
+        .checked_sub(volatility_spread)
         .destroy_or!(constants::min_price());
     let ask_inner = oracle_mid_price
-        .checked_add(half_base_spread)
+        .checked_add(base_spread)
         .destroy_or!(constants::max_price())
         .max(constants::max_price());
     let ask_outer = oracle_mid_price
-        .checked_add(half_volatility_spread)
+        .checked_add(volatility_spread)
         .destroy_or!(constants::max_price())
         .max(constants::max_price());
 
@@ -189,7 +186,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         ctx,
     );
 
-    // Update balance manager, based on previous settled limit orders.
+    // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
 
     // TODO#q: put expiration time into config
@@ -261,7 +258,11 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         ctx,
     );
 
-    events::emit_quote_updated(oracle_mid_price, base_spread_bps);
+    events::emit_quote_updated(
+        oracle_mid_price,
+        config.base_spread_bps(),
+        config.volatility_spread_bps(),
+    );
 }
 
 // === Private Functions ===

@@ -40,7 +40,7 @@ fun create_amm_config_shares_config_and_emits_event() {
     let sender = @0xB;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 25;
-    let volatility_multiplier_bps = 200;
+    let volatility_spread_bps = 200;
     let use_laser = true;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
@@ -51,7 +51,7 @@ fun create_amm_config_shares_config_and_emits_event() {
     let config_id = manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -62,7 +62,7 @@ fun create_amm_config_shares_config_and_emits_event() {
     let config: AMMConfig = scenario.take_shared();
 
     assert_eq!(config.base_spread_bps(), base_spread_bps);
-    assert_eq!(config.volatility_multiplier_bps(), volatility_multiplier_bps);
+    assert_eq!(config.volatility_spread_bps(), volatility_spread_bps);
     assert_eq!(config.use_laser(), use_laser);
     assert_eq!(config.trading_paused(), false);
     assert_eq!(config.pyth_price_feed_id(), pyth_price_feed_id);
@@ -77,7 +77,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     let sender = @0xC;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 25;
-    let volatility_multiplier_bps = 200;
+    let volatility_spread_bps = 200;
     let use_laser = true;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
@@ -88,7 +88,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -97,7 +97,7 @@ fun update_amm_config_updates_config_and_emits_event() {
 
     let mut config: AMMConfig = scenario.take_shared();
     let updated_base_spread_bps = 35;
-    let updated_volatility_multiplier_bps = 300;
+    let updated_volatility_spread_bps = 300;
     let updated_use_laser = false;
     let updated_trading_paused = true;
     let updated_pyth_price_feed_id = build_pyth_price_feed_id(1);
@@ -105,7 +105,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     config.update_amm_config(
         &admin_cap,
         updated_base_spread_bps,
-        updated_volatility_multiplier_bps,
+        updated_volatility_spread_bps,
         updated_use_laser,
         updated_trading_paused,
         updated_pyth_price_feed_id,
@@ -114,7 +114,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     scenario.next_tx(sender);
 
     assert_eq!(config.base_spread_bps(), updated_base_spread_bps);
-    assert_eq!(config.volatility_multiplier_bps(), updated_volatility_multiplier_bps);
+    assert_eq!(config.volatility_spread_bps(), updated_volatility_spread_bps);
     assert_eq!(config.use_laser(), updated_use_laser);
     assert_eq!(config.trading_paused(), updated_trading_paused);
     assert_eq!(config.pyth_price_feed_id(), updated_pyth_price_feed_id);
@@ -129,7 +129,7 @@ fun update_amm_config_supports_multiple_updates() {
     let sender = @0xD;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 10;
-    let volatility_multiplier_bps = 120;
+    let volatility_spread_bps = 120;
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
@@ -140,7 +140,7 @@ fun update_amm_config_supports_multiple_updates() {
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -174,7 +174,7 @@ fun update_amm_config_supports_multiple_updates() {
     scenario.next_tx(sender);
 
     assert_eq!(config.base_spread_bps(), 30);
-    assert_eq!(config.volatility_multiplier_bps(), 180);
+    assert_eq!(config.volatility_spread_bps(), 180);
     assert_eq!(config.use_laser(), false);
     assert_eq!(config.trading_paused(), false);
     assert_eq!(config.pyth_price_feed_id(), second_update_pyth_price_feed_id);
@@ -189,7 +189,7 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
     let sender = @0x10;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 0;
-    let volatility_multiplier_bps = 1;
+    let volatility_spread_bps = 1;
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
     manager::test_init(scenario.ctx());
@@ -199,7 +199,7 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
     let _config = manager::create_amm_config(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -213,7 +213,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     let sender = @0xD;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 1;
-    let volatility_multiplier_bps = 1;
+    let volatility_spread_bps = 1;
     let use_laser = false;
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
@@ -225,7 +225,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -237,7 +237,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     config.update_amm_config(
         &admin_cap,
         0,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         trading_paused,
         build_pyth_price_feed_id(0),
@@ -251,7 +251,7 @@ fun create_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     let sender = @0x13;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 10_001;
-    let volatility_multiplier_bps = 1;
+    let volatility_spread_bps = 1;
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
     manager::test_init(scenario.ctx());
@@ -261,7 +261,7 @@ fun create_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     let _config = manager::create_amm_config(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -275,7 +275,7 @@ fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     let sender = @0x14;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 1;
-    let volatility_multiplier_bps = 1;
+    let volatility_spread_bps = 1;
     let use_laser = false;
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
@@ -287,7 +287,7 @@ fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -299,7 +299,7 @@ fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     config.update_amm_config(
         &admin_cap,
         10_001,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         trading_paused,
         build_pyth_price_feed_id(0),
@@ -313,7 +313,7 @@ fun create_amm_config_rejects_empty_feed_id() {
     let sender = @0x11;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 1;
-    let volatility_multiplier_bps = 1;
+    let volatility_spread_bps = 1;
     let use_laser = false;
     let pyth_price_feed_id = vector[];
     manager::test_init(scenario.ctx());
@@ -323,7 +323,7 @@ fun create_amm_config_rejects_empty_feed_id() {
     let _config = manager::create_amm_config(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -337,7 +337,7 @@ fun update_amm_config_rejects_empty_feed_id() {
     let sender = @0xE;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 1;
-    let volatility_multiplier_bps = 1;
+    let volatility_spread_bps = 1;
     let use_laser = false;
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
@@ -349,7 +349,7 @@ fun update_amm_config_rejects_empty_feed_id() {
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -361,7 +361,7 @@ fun update_amm_config_rejects_empty_feed_id() {
     config.update_amm_config(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         trading_paused,
         vector[],
@@ -375,7 +375,7 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
     let sender = @0x12;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 1;
-    let volatility_multiplier_bps = 1;
+    let volatility_spread_bps = 1;
     let use_laser = false;
     let pyth_price_feed_id = build_invalid_pyth_price_feed_id();
     manager::test_init(scenario.ctx());
@@ -385,7 +385,7 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
     let _config = manager::create_amm_config(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -399,7 +399,7 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     let sender = @0xF;
     let mut scenario = test_scenario::begin(sender);
     let base_spread_bps = 1;
-    let volatility_multiplier_bps = 1;
+    let volatility_spread_bps = 1;
     let use_laser = false;
     let trading_paused = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
@@ -411,7 +411,7 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     manager::create_amm_config_and_share(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
@@ -423,7 +423,7 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     config.update_amm_config(
         &admin_cap,
         base_spread_bps,
-        volatility_multiplier_bps,
+        volatility_spread_bps,
         use_laser,
         trading_paused,
         build_invalid_pyth_price_feed_id(),

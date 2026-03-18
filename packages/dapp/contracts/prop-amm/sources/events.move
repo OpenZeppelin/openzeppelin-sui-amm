@@ -26,7 +26,9 @@ public struct QuoteUpdated has copy, drop {
     /// Mid price used for quote generation (DeepBook fixed-point format).
     price: u64,
     /// Effective spread in bps used for this update.
-    spread: u64,
+    base_spread_bps: u64,
+    /// Volatility spread in bps used for this update.
+    volatility_spread_bps: u64,
 }
 
 /// Emitted when an order placement immediately executes against resting liquidity.
@@ -71,14 +73,18 @@ public(package) fun trader_account_created(trader_account_id: ID): TraderAccount
 }
 
 /// Emit a `QuoteUpdated` event.
-public(package) fun emit_quote_updated(price: u64, spread: u64) {
-    event::emit(QuoteUpdated { price, spread });
+public(package) fun emit_quote_updated(price: u64, base_spread_bps: u64, volatility_spread_bps: u64) {
+    event::emit(QuoteUpdated { price, base_spread_bps, volatility_spread_bps });
 }
 
 /// Builds a `QuoteUpdated` payload.
 #[test_only]
-public(package) fun quote_updated(price: u64, spread: u64): QuoteUpdated {
-    QuoteUpdated { price, spread }
+public(package) fun quote_updated(
+    price: u64,
+    base_spread_bps: u64,
+    volatility_spread_bps: u64,
+): QuoteUpdated {
+    QuoteUpdated { price, base_spread_bps, volatility_spread_bps }
 }
 
 /// Emit an `OrderExecuted` event.
