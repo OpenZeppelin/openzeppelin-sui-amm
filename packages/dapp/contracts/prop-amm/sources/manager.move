@@ -14,8 +14,12 @@ const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 #[error(code = 0)]
 const EInvalidBaseSpreadBps: vector<u8> = b"base spread bps must be greater than zero";
 #[error(code = 1)]
-const EBaseSpreadBpsExceedsMaxBasisPoints: vector<u8> = b"base spread bps must be at most 10000";
+const EBaseSpreadBpsExceedsVolatilitySpread: vector<u8> =
+    b"volatility spread must be greater than a base spread";
 #[error(code = 2)]
+const EVolatilitySpreadBpsExceedsMaxBasisPoints: vector<u8> =
+    b"volatility spread bps must be at most 10000";
+#[error(code = 3)]
 const EInvalidPythPriceFeedIdLength: vector<u8> = b"pyth price feed id must be 32 bytes";
 
 // === Structs ===
@@ -71,7 +75,7 @@ public fun create_amm_config(
     pyth_price_feed_id: vector<u8>,
     ctx: &mut TxContext,
 ): AMMConfig {
-    assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
+    assert_valid_amm_config_inputs!(base_spread_bps, volatility_spread_bps, pyth_price_feed_id);
 
     let config = AMMConfig {
         id: object::new(ctx),
@@ -123,7 +127,7 @@ public fun update_amm_config(
     trading_paused: bool,
     pyth_price_feed_id: vector<u8>,
 ) {
-    assert_valid_amm_config_inputs!(base_spread_bps, &pyth_price_feed_id);
+    assert_valid_amm_config_inputs!(base_spread_bps, volatility_spread_bps, pyth_price_feed_id);
 
     config.base_spread_bps = base_spread_bps;
     config.volatility_spread_bps = volatility_spread_bps;
@@ -137,11 +141,20 @@ public fun update_amm_config(
 // === Private Functions ===
 
 /// Validates all inputs for a new or updated configuration.
-macro fun assert_valid_amm_config_inputs($base_spread_bps: u64, $pyth_price_feed_id: &vector<u8>) {
+macro fun assert_valid_amm_config_inputs(
+    $base_spread_bps: u64,
+    $volatility_spread_bps: u64,
+    $pyth_price_feed_id: vector<u8>,
+) {
     let base_spread_bps = $base_spread_bps;
+    let volatility_spread_bps = $volatility_spread_bps;
     let pyth_price_feed_id = $pyth_price_feed_id;
     assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
-    assert!(base_spread_bps <= HUNDRED_PERCENT_BPS, EBaseSpreadBpsExceedsMaxBasisPoints);
+    assert!(base_spread_bps <= volatility_spread_bps, EBaseSpreadBpsExceedsVolatilitySpread);
+    assert!(
+        volatility_spread_bps <= HUNDRED_PERCENT_BPS,
+        EVolatilitySpreadBpsExceedsMaxBasisPoints,
+    );
     assert!(
         pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
@@ -156,7 +169,7 @@ public fun base_spread_bps(config: &AMMConfig): u64 {
 }
 
 /// Compute the base spread in price terms for a given mid price.
-public(package) fun base_spread(config: &AMMConfig, mid_price: u64): u64{
+public(package) fun base_spread(config: &AMMConfig, mid_price: u64): u64 {
     ((mid_price as u128) * (config.base_spread_bps as u128) / (HUNDRED_PERCENT_BPS as u128)) as u64
 }
 
@@ -166,8 +179,10 @@ public fun volatility_spread_bps(config: &AMMConfig): u64 {
 }
 
 /// Compute the volatility spread in price terms for a given mid price.
-public(package) fun volatility_spread(config: &AMMConfig, mid_price: u64): u64{
-    ((mid_price as u128) * (config.volatility_spread_bps as u128) / (HUNDRED_PERCENT_BPS as u128)) as u64
+public(package) fun volatility_spread(config: &AMMConfig, mid_price: u64): u64 {
+    (
+        (mid_price as u128) * (config.volatility_spread_bps as u128) / (HUNDRED_PERCENT_BPS as u128),
+    ) as u64
 }
 
 // TODO#q: use LASER pricing

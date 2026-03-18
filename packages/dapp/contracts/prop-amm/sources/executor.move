@@ -35,8 +35,7 @@ const EInvalidPythPriceExponent: vector<u8> = b"pyth price exponent must be nega
 #[error(code = 3)]
 const EInvalidPythPriceValue: vector<u8> = b"pyth price must be positive after scaling";
 #[error(code = 4)]
-const EQuoteBalanceExceeded: vector<u8> =
-    b"quote refresh exceeds available trader account balances";
+const EUnablePlaceLimitOrder: vector<u8> = b"unable to place limit order";
 
 // === Structs ===
 
@@ -164,18 +163,22 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     let volatility_spread = config.volatility_spread(oracle_mid_price);
 
     // Calculate bids/ask order prices.
-    let bid_inner = oracle_mid_price.checked_sub(base_spread).destroy_or!(constants::min_price());
+    let bid_inner = oracle_mid_price
+        .checked_sub(base_spread)
+        .destroy_or!(constants::min_price())
+        .max(constants::min_price());
     let bid_outer = oracle_mid_price
         .checked_sub(volatility_spread)
-        .destroy_or!(constants::min_price());
+        .destroy_or!(constants::min_price())
+        .max(constants::min_price());
     let ask_inner = oracle_mid_price
         .checked_add(base_spread)
         .destroy_or!(constants::max_price())
-        .max(constants::max_price());
+        .min(constants::max_price());
     let ask_outer = oracle_mid_price
         .checked_add(volatility_spread)
         .destroy_or!(constants::max_price())
-        .max(constants::max_price());
+        .min(constants::max_price());
 
     // Generate trade proof.
     let trade_proof = trader_account
@@ -193,15 +196,21 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
 
-    // Self matching should not happen (if happens due to logic mistake abort taker order).
+    // Split bid order balance equally between inner and outer spread.
+    let base_asset_balance = trader_account.balance_manager.balance<BaseAsset>();
+    let bid_outer_quantity = base_asset_balance / 2;
+    let bid_inner_quantity = base_asset_balance - bid_outer_quantity;
+
+    // Split ask order balance equally between inner and outer spread.
+    let quote_asset_balance = trader_account.balance_manager.balance<QuoteAsset>();
+    let ask_outer_quantity = quote_asset_balance / 2;
+    let ask_inner_quantity = quote_asset_balance - ask_outer_quantity;
+
+    // Self matching should not happen (if happens due to logic error abort taker order).
     let self_matching_option = constants::cancel_taker();
     let expire_timestamp = clock.timestamp_ms() + ORDER_EXPIRATION_TIME_MS;
     let order_type = constants::no_restriction();
     let pay_with_deep = true;
-
-    // TODO#q: compute quantity
-    let inner_quantity = 1000;
-    let outer_quantity = 1000;
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
     trader_account.place_limit_order(
@@ -211,7 +220,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         order_type,
         self_matching_option,
         bid_outer,
-        outer_quantity,
+        bid_outer_quantity,
         true,
         pay_with_deep,
         expire_timestamp,
@@ -225,7 +234,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         order_type,
         self_matching_option,
         bid_inner,
-        inner_quantity,
+        bid_inner_quantity,
         true,
         pay_with_deep,
         expire_timestamp,
@@ -239,7 +248,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         order_type,
         self_matching_option,
         ask_inner,
-        inner_quantity,
+        ask_inner_quantity,
         false,
         pay_with_deep,
         expire_timestamp,
@@ -253,7 +262,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         order_type,
         self_matching_option,
         ask_outer,
-        outer_quantity,
+        ask_outer_quantity,
         false,
         pay_with_deep,
         expire_timestamp,
@@ -295,7 +304,7 @@ fun place_limit_order<BaseAsset, QuoteAsset>(
             expire_timestamp,
             clock,
         ),
-        EQuoteBalanceExceeded,
+        EUnablePlaceLimitOrder,
     );
 
     let order_info = pool.place_limit_order(
