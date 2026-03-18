@@ -134,6 +134,7 @@ runSuiScript<{
 
     if (shouldRegenesis) {
       await deleteLocalnetDeployments(tooling.suiConfig.paths.deployments)
+      await deleteLocalnetPublishConfig(tooling.suiConfig.paths.move)
       await resetLocalnetConfig({ configDir: localnetConfigDir, withFaucet })
     } else {
       await ensureLocalnetConfig({ configDir: localnetConfigDir, withFaucet })
@@ -653,6 +654,17 @@ const deleteLocalnetDeployments = async (deploymentsPath: string) => {
       }`
     )
   }
+}
+
+const deleteLocalnetPublishConfig = async (moveRootPath: string) => {
+  const packageRootPath = path.resolve(moveRootPath, "..")
+  const publishConfigPath = path.join(packageRootPath, "Pub.localnet.toml")
+  if (!(await pathExists(publishConfigPath))) return
+
+  await rm(publishConfigPath, { force: true })
+  logKeyValueYellow("Deployments")(
+    `Removed localnet artifact: ${path.basename(publishConfigPath)}`
+  )
 }
 
 const getSuiCliVersion = async (): Promise<string | undefined> => {
