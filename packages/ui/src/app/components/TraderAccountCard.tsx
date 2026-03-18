@@ -47,9 +47,10 @@ const TraderAccountCard = () => {
     resolution.status
   ])
   const handleCloseCreateModal = useCallback(() => {
+    refreshTraderAccount()
     resetTransactionState()
     setIsCreateModalOpen(false)
-  }, [resetTransactionState])
+  }, [resetTransactionState, refreshTraderAccount])
 
   useEffect(() => {
     if (shouldForceCloseFundModal) {

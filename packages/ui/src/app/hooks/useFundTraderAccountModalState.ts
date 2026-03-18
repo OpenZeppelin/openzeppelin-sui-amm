@@ -9,6 +9,7 @@ import {
   useSuiClientContext
 } from "@mysten/dapp-kit"
 import type { SuiClient, SuiTransactionBlockResponse } from "@mysten/sui/client"
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { Transaction, TransactionArgument } from "@mysten/sui/transactions"
 import { fundTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
 import {
@@ -16,6 +17,7 @@ import {
   type CoinBalanceSummary
 } from "@sui-amm/tooling-core/address"
 import { selectRichestCoin } from "@sui-amm/tooling-core/coin"
+import { DEFAULT_TX_GAS_BUDGET } from "@sui-amm/tooling-core/constants"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import {
   newTransaction,
@@ -61,10 +63,21 @@ export type WalletCoinBalanceOption = {
   coinObjectCount: number
 }
 
+type WalletCoinObjectBalance = {
+  coinObjectId: string
+  balance: bigint
+}
+
 type WalletCoinBalancesState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "success"; balances: WalletCoinBalanceOption[] }
+  | { status: "error"; error: string }
+
+type WalletCoinObjectBalancesState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; balances: WalletCoinObjectBalance[] }
   | { status: "error"; error: string }
 
 export type TraderAccountFundSummary = {
@@ -163,11 +176,8 @@ const fetchOwnedCoinBalances = async ({
   ownerAddress: string
   coinType: string
   suiClient: SuiClient
-}) => {
-  const balances: {
-    coinObjectId: string
-    balance: bigint
-  }[] = []
+}): Promise<WalletCoinObjectBalance[]> => {
+  const balances: WalletCoinObjectBalance[] = []
   let cursor: string | undefined
 
   do {
@@ -180,7 +190,7 @@ const fetchOwnedCoinBalances = async ({
 
     page.data.forEach((coin) => {
       balances.push({
-        coinObjectId: coin.coinObjectId,
+        coinObjectId: normalizeSuiObjectId(coin.coinObjectId),
         balance: BigInt(coin.balance)
       })
     })
@@ -191,12 +201,42 @@ const fetchOwnedCoinBalances = async ({
   return balances
 }
 
+const resolveLargestCoinObjectBalance = (balances: WalletCoinObjectBalance[]) =>
+  selectRichestCoin(balances)
+
+const resolveSpendableCoinBalance = ({
+  coinType,
+  coinBalance
+}: {
+  coinType: string
+  coinBalance?: WalletCoinObjectBalance
+}) => {
+  if (!coinBalance) return undefined
+  if (!isSuiCoinType(coinType)) return coinBalance.balance
+
+  const gasHeadroom = BigInt(DEFAULT_TX_GAS_BUDGET)
+  return coinBalance.balance > gasHeadroom
+    ? coinBalance.balance - gasHeadroom
+    : 0n
+}
+
+const resolveRequiredCoinBalance = ({
+  coinType,
+  fundingAmount
+}: {
+  coinType: string
+  fundingAmount: bigint
+}) =>
+  fundingAmount + (isSuiCoinType(coinType) ? BigInt(DEFAULT_TX_GAS_BUDGET) : 0n)
+
 const buildFieldErrors = ({
   formState,
-  walletCoinBalancesState
+  walletCoinBalancesState,
+  selectedCoinObjectBalancesState
 }: {
   formState: FundFormState
   walletCoinBalancesState: WalletCoinBalancesState
+  selectedCoinObjectBalancesState: WalletCoinObjectBalancesState
 }): FundFieldErrors => {
   const errors: FundFieldErrors = {}
 
@@ -229,15 +269,27 @@ const buildFieldErrors = ({
     return errors
   }
 
-  const selectedWalletCoinBalance = resolveSelectedWalletCoinBalance({
+  if (selectedCoinObjectBalancesState.status === "error") {
+    errors.amount = selectedCoinObjectBalancesState.error
+    return errors
+  }
+
+  if (selectedCoinObjectBalancesState.status !== "success") {
+    return errors
+  }
+
+  const selectedCoinObjectBalance = resolveLargestCoinObjectBalance(
+    selectedCoinObjectBalancesState.balances
+  )
+  const spendableBalance = resolveSpendableCoinBalance({
     coinType: formState.coinType,
-    walletCoinBalancesState
+    coinBalance: selectedCoinObjectBalance
   })
-  if (
-    selectedWalletCoinBalance &&
-    fundingAmount > selectedWalletCoinBalance.totalBalance
-  ) {
-    errors.amount = "Amount exceeds the wallet balance for this coin."
+
+  if (spendableBalance !== undefined && fundingAmount > spendableBalance) {
+    errors.amount = isSuiCoinType(formState.coinType)
+      ? "Amount exceeds the largest spendable SUI coin after reserving gas."
+      : "Amount exceeds the largest coin object for this coin."
   }
 
   return errors
@@ -257,28 +309,31 @@ const resolveFundingCoinArgument = async ({
   suiClient: SuiClient
 }): Promise<TransactionArgument> => {
   const normalizedCoinType = coinType.trim()
-
-  if (isSuiCoinType(normalizedCoinType)) {
-    const splitResult = transaction.splitCoins(transaction.gas, [
-      transaction.pure.u64(fundingAmount)
-    ])
-    return resolveSplitCoinResult(splitResult, 0)
-  }
-
   const walletCoins = await fetchOwnedCoinBalances({
     ownerAddress,
     coinType: normalizedCoinType,
     suiClient
   })
 
+  const requiredCoinBalance = resolveRequiredCoinBalance({
+    coinType: normalizedCoinType,
+    fundingAmount
+  })
   const eligibleCoin = selectRichestCoin(
-    walletCoins.filter((coin) => coin.balance >= fundingAmount)
+    walletCoins.filter((coin) => coin.balance >= requiredCoinBalance)
   )
 
   if (!eligibleCoin) {
     throw new Error(
       "No single coin object can cover this funding amount. Merge coin objects first, then retry."
     )
+  }
+
+  if (isSuiCoinType(normalizedCoinType)) {
+    const splitResult = transaction.splitCoins(transaction.gas, [
+      transaction.pure.u64(fundingAmount)
+    ])
+    return resolveSplitCoinResult(splitResult, 0)
   }
 
   const splitResult = transaction.splitCoins(
@@ -321,6 +376,8 @@ export const useFundTraderAccountModalState = ({
 
   const [walletCoinBalancesState, setWalletCoinBalancesState] =
     useState<WalletCoinBalancesState>({ status: "idle" })
+  const [selectedCoinObjectBalancesState, setSelectedCoinObjectBalancesState] =
+    useState<WalletCoinObjectBalancesState>({ status: "idle" })
   const [walletBalanceRefreshVersion, setWalletBalanceRefreshVersion] =
     useState(0)
   const [formState, setFormState] = useState<FundFormState>(emptyFundFormState)
@@ -400,13 +457,84 @@ export const useFundTraderAccountModalState = ({
     }
   }, [open, suiClient, walletAddress, walletBalanceRefreshVersion])
 
+  useEffect(() => {
+    let active = true
+
+    if (!open) return () => {}
+
+    if (
+      !walletAddress ||
+      walletCoinBalancesState.status !== "success" ||
+      !formState.coinType.trim()
+    ) {
+      setSelectedCoinObjectBalancesState({ status: "idle" })
+      return () => {
+        active = false
+      }
+    }
+
+    if (
+      !walletCoinBalancesState.balances.some(
+        (balance) => balance.coinType === formState.coinType.trim()
+      )
+    ) {
+      setSelectedCoinObjectBalancesState({ status: "idle" })
+      return () => {
+        active = false
+      }
+    }
+
+    setSelectedCoinObjectBalancesState({ status: "loading" })
+
+    const loadSelectedCoinBalances = async () => {
+      try {
+        const coinBalances = await fetchOwnedCoinBalances({
+          ownerAddress: walletAddress,
+          coinType: formState.coinType.trim(),
+          suiClient
+        })
+
+        if (!active) return
+
+        setSelectedCoinObjectBalancesState({
+          status: "success",
+          balances: coinBalances
+        })
+      } catch (error) {
+        if (!active) return
+
+        setSelectedCoinObjectBalancesState({
+          status: "error",
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to load selected coin object balances."
+        })
+      }
+    }
+
+    void loadSelectedCoinBalances()
+
+    return () => {
+      active = false
+    }
+  }, [
+    formState.coinType,
+    open,
+    suiClient,
+    walletAddress,
+    walletBalanceRefreshVersion,
+    walletCoinBalancesState
+  ])
+
   const fieldErrors = useMemo(
     () =>
       buildFieldErrors({
         formState,
-        walletCoinBalancesState
+        walletCoinBalancesState,
+        selectedCoinObjectBalancesState
       }),
-    [formState, walletCoinBalancesState]
+    [formState, selectedCoinObjectBalancesState, walletCoinBalancesState]
   )
   const hasFieldErrors = Object.values(fieldErrors).some(Boolean)
   const selectedWalletCoinBalance = useMemo(
@@ -416,6 +544,15 @@ export const useFundTraderAccountModalState = ({
         walletCoinBalancesState
       }),
     [formState.coinType, walletCoinBalancesState]
+  )
+  const selectedWalletCoinObjectBalance = useMemo(
+    () =>
+      selectedCoinObjectBalancesState.status === "success"
+        ? resolveLargestCoinObjectBalance(
+            selectedCoinObjectBalancesState.balances
+          )
+        : undefined,
+    [selectedCoinObjectBalancesState]
   )
 
   const { expectedChain, accountChains, chainMismatch, localnetSupported } =
@@ -464,6 +601,7 @@ export const useFundTraderAccountModalState = ({
       traderAccountId &&
       balanceManagerId &&
       walletCoinBalancesState.status === "success" &&
+      selectedCoinObjectBalancesState.status === "success" &&
       !hasFieldErrors
     ) &&
     transactionState.status !== "processing" &&
@@ -498,6 +636,8 @@ export const useFundTraderAccountModalState = ({
   )
 
   const handleFundTraderAccount = useCallback(async () => {
+    if (transactionState.status === "processing") return
+
     setHasAttemptedSubmit(true)
 
     if (!walletAddress) {
@@ -670,6 +810,7 @@ export const useFundTraderAccountModalState = ({
     traderAccountId,
     walletAddress,
     walletCoinBalancesState.status,
+    transactionState.status,
     walletContext
   ])
 
@@ -684,6 +825,7 @@ export const useFundTraderAccountModalState = ({
     fieldErrors,
     walletCoinBalancesState,
     selectedWalletCoinBalance,
+    selectedWalletCoinObjectBalance,
     transactionState,
     transactionSummary,
     isSuccessState,

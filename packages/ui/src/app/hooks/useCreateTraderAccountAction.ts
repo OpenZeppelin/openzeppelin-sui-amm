@@ -13,9 +13,12 @@ import { buildCreateTraderAccountTransaction } from "@sui-amm/domain-core/ptb/de
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useCallback, useMemo, useState } from "react"
-import { LOCALNET_DEEPBOOK_REGISTRY_ID } from "../config/network"
+import {
+  LOCALNET_DEEPBOOK_REGISTRY_ID,
+  LOCALNET_DEEPBOOK_REGISTRY_ID_UNDEFINED
+} from "../config/network"
 import { getLocalnetClient, makeLocalnetExecutor } from "../helpers/localnet"
-import { transactionUrl } from "../helpers/network"
+import { resolveConfiguredId, transactionUrl } from "../helpers/network"
 import { notification } from "../helpers/notification"
 import {
   buildTraderAccountCreateSummary,
@@ -65,7 +68,11 @@ const useCreateTraderAccountAction = ({
   const explorerUrl = useExplorerUrl()
   const ammPackageId = useResolvedPackageId()
   const deepbookRegistryId = useMemo(() => {
-    if (network === "localnet") return LOCALNET_DEEPBOOK_REGISTRY_ID
+    if (network === "localnet")
+      return resolveConfiguredId(
+        LOCALNET_DEEPBOOK_REGISTRY_ID,
+        LOCALNET_DEEPBOOK_REGISTRY_ID_UNDEFINED
+      )
     return resolveDeepbookRegistryIdForNetwork(network)
   }, [network])
   const localnetClient = useMemo(() => getLocalnetClient(), [])
@@ -160,7 +167,7 @@ const useCreateTraderAccountAction = ({
 
     try {
       const deepbookRegistry = await getSuiSharedObject(
-        { objectId: deepbookRegistryId, mutable: true },
+        { objectId: deepbookRegistryId, mutable: false },
         { suiClient }
       )
 

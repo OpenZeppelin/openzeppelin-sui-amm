@@ -347,7 +347,10 @@ const FundTraderAccountModal = ({
               : "Ready to submit funding transaction."}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleFundTraderAccount} disabled={!canSubmit}>
+            <Button
+              onClick={handleFundTraderAccount}
+              disabled={!canSubmit || transactionState.status === "processing"}
+            >
               {transactionState.status === "processing"
                 ? "Processing..."
                 : "Fund account"}

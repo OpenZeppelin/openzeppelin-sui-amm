@@ -1,6 +1,7 @@
 // We automatically create/update .env.local with the deployed package ID after deployment.
 export const CONTRACT_PACKAGE_ID_UNDEFINED = "0xUNDEFINED"
 export const AMM_CONFIG_ID_UNDEFINED = "0xUNDEFINED"
+export const LOCALNET_DEEPBOOK_REGISTRY_ID_UNDEFINED = "0xUNDEFINED"
 export const LOCALNET_CONTRACT_PACKAGE_ID =
   process.env.NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID ||
   CONTRACT_PACKAGE_ID_UNDEFINED
@@ -23,7 +24,8 @@ export const TESTNET_AMM_CONFIG_ID =
 export const MAINNET_AMM_CONFIG_ID =
   process.env.NEXT_PUBLIC_MAINNET_AMM_CONFIG_ID || AMM_CONFIG_ID_UNDEFINED
 export const LOCALNET_DEEPBOOK_REGISTRY_ID =
-  process.env.NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID
+  process.env.NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID ||
+  LOCALNET_DEEPBOOK_REGISTRY_ID_UNDEFINED
 
 export const LOCALNET_EXPLORER_URL = "http://localhost:9001"
 export const DEVNET_EXPLORER_URL = "https://devnet.suivision.xyz"
