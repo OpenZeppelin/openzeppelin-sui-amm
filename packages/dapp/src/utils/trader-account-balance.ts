@@ -11,23 +11,8 @@ import {
   resolveOwnedTraderAccountId
 } from "./trader-account.ts"
 
-const buildWithdrawCommand = ({
-  ammPackageId,
-  traderAccountId,
-  coinType,
-  amount
-}: {
-  ammPackageId: string
-  traderAccountId: string
-  coinType: string
-  amount: string
-}) =>
-  `pnpm dapp user:trader-account:withdraw --amm-package-id ${ammPackageId} --trader-account-id ${traderAccountId} --coin-type ${coinType} --amount ${amount}`
-
 const toTraderAccountBalanceAsset = ({
-  assetBalance,
-  ammPackageId,
-  traderAccountId
+  assetBalance
 }: {
   assetBalance: TraderAccountAssetBalance
   ammPackageId: string
@@ -42,13 +27,7 @@ const toTraderAccountBalanceAsset = ({
     withdrawArguments: {
       coinType: normalizedCoinType,
       amount: normalizedBalance
-    },
-    withdrawCommand: buildWithdrawCommand({
-      ammPackageId,
-      traderAccountId,
-      coinType: normalizedCoinType,
-      amount: normalizedBalance
-    })
+    }
   }
 }
 
@@ -80,7 +59,6 @@ export type TraderAccountBalanceResult = {
       coinType: string
       amount: string
     }
-    withdrawCommand: string
   }[]
 }
 

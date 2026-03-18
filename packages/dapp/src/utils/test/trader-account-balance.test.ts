@@ -30,7 +30,9 @@ vi.mock("../trader-account.ts", () => ({
 
 import { viewExistingTraderAccountBalance } from "../trader-account-balance.ts"
 
-type BalanceTooling = Parameters<typeof viewExistingTraderAccountBalance>[0]["tooling"]
+type BalanceTooling = Parameters<
+  typeof viewExistingTraderAccountBalance
+>[0]["tooling"]
 
 const createTooling = (): BalanceTooling =>
   ({
@@ -84,9 +86,7 @@ describe("viewExistingTraderAccountBalance", () => {
       withdrawArguments: {
         coinType: NORMALIZED_SUI_COIN_TYPE,
         amount: "42"
-      },
-      withdrawCommand:
-        "pnpm dapp user:trader-account:withdraw --amm-package-id 0x555 --trader-account-id 0x111 --coin-type 0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI --amount 42"
+      }
     })
   })
 

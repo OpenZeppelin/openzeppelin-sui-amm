@@ -38,7 +38,9 @@ const logTraderAccountBalance = ({
   logKeyValueGreen("Trader account")(
     balanceResult.traderAccount.traderAccountId
   )
-  logKeyValueGreen("Balance manager")(balanceResult.traderAccount.balanceManagerId)
+  logKeyValueGreen("Balance manager")(
+    balanceResult.traderAccount.balanceManagerId
+  )
   logKeyValueGreen("Asset count")(balanceResult.assets.length)
   console.log("")
 
@@ -55,8 +57,7 @@ const logTraderAccountBalance = ({
       coinType: asset.coinType,
       balance: asset.balance,
       withdrawCoinType: asset.withdrawArguments.coinType,
-      withdrawAmount: asset.withdrawArguments.amount,
-      withdrawCommand: asset.withdrawCommand
+      withdrawAmount: asset.withdrawArguments.amount
     })
     console.log("")
   })
