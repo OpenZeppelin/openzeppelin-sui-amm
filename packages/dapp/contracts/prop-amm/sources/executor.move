@@ -193,10 +193,10 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
 
+    // Self matching should not happen (if happens due to logic mistake abort taker order).
+    let self_matching_option = constants::cancel_taker();
     let expire_timestamp = clock.timestamp_ms() + ORDER_EXPIRATION_TIME_MS;
     let order_type = constants::no_restriction();
-    // TODO#q: remove self matching
-    let self_matching_option = constants::self_matching_allowed();
     let pay_with_deep = true;
 
     // TODO#q: compute quantity
