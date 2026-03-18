@@ -1,3 +1,6 @@
 [package]
 name = "local_mock_coin"
 edition = "2024"
+
+[environments]
+test-publish = "9e535c29"
