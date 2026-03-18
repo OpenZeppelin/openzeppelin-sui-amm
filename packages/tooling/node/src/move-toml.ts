@@ -31,7 +31,7 @@ const getLineStartOffsets = (contents: string) => {
   return offsets
 }
 
-const listMoveTomlFiles = async (rootPath: string): Promise<string[]> =>
+export const listMoveTomlFiles = async (rootPath: string): Promise<string[]> =>
   listFilesByNameRecursively({
     rootDir: rootPath,
     fileName: "Move.toml"

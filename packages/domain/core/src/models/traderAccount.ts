@@ -34,6 +34,22 @@ export type TraderAccountAssetBalance = {
   balance: bigint
 }
 
+type ResolvedAssetBalanceCandidate = {
+  status: "resolved"
+  assetBalance: TraderAccountAssetBalance
+}
+
+type UnresolvedAssetBalanceCandidate = {
+  status: "unresolved"
+  dynamicFieldId: string
+  coinType?: string
+  reason: string
+}
+
+type AssetBalanceCandidate =
+  | ResolvedAssetBalanceCandidate
+  | UnresolvedAssetBalanceCandidate
+
 type TraderAccountFields = {
   owner?: unknown
   balance_manager_id?: unknown
@@ -180,30 +196,67 @@ const mergeAndSortAssetBalances = (
     )
 }
 
+const buildUnresolvedAssetBalanceCandidate = ({
+  dynamicFieldId,
+  coinType,
+  reason
+}: {
+  dynamicFieldId: string
+  coinType?: string
+  reason: string
+}): UnresolvedAssetBalanceCandidate => ({
+  status: "unresolved",
+  dynamicFieldId,
+  coinType,
+  reason
+})
+
 const resolveAssetBalanceFromDynamicField = async ({
   dynamicField,
   suiClient
 }: {
   dynamicField: Awaited<ReturnType<typeof getAllDynamicFields>>[number]
   suiClient: SuiClient
-}): Promise<TraderAccountAssetBalance | undefined> => {
+}): Promise<AssetBalanceCandidate> => {
   const coinType = resolveCoinTypeFromDynamicField(dynamicField)
-  if (!coinType) return undefined
+  if (!coinType) {
+    return buildUnresolvedAssetBalanceCandidate({
+      dynamicFieldId: dynamicField.objectId,
+      reason: "Unable to resolve the coin type from the dynamic field."
+    })
+  }
 
-  const { object } = await getSuiObject(
-    {
-      objectId: dynamicField.objectId,
-      options: { showContent: true, showType: true }
-    },
-    { suiClient }
-  )
+  try {
+    const { object } = await getSuiObject(
+      {
+        objectId: dynamicField.objectId,
+        options: { showContent: true, showType: true }
+      },
+      { suiClient }
+    )
 
-  const balance = resolveBalanceAmountFromDynamicFieldObject(object)
-  if (balance === undefined) return undefined
+    const balance = resolveBalanceAmountFromDynamicFieldObject(object)
+    if (balance === undefined) {
+      return buildUnresolvedAssetBalanceCandidate({
+        dynamicFieldId: dynamicField.objectId,
+        coinType,
+        reason: "Unable to resolve the balance from the dynamic field object."
+      })
+    }
 
-  return {
-    coinType,
-    balance
+    return {
+      status: "resolved",
+      assetBalance: {
+        coinType,
+        balance
+      }
+    }
+  } catch (error) {
+    return buildUnresolvedAssetBalanceCandidate({
+      dynamicFieldId: dynamicField.objectId,
+      coinType,
+      reason: error instanceof Error ? error.message : String(error)
+    })
   }
 }
 
@@ -280,9 +333,31 @@ export const getBalanceManagerAssetBalances = async (
     )
   )
 
+  const unresolvedAssetBalanceCandidates = assetBalanceCandidates.filter(
+    (candidate): candidate is UnresolvedAssetBalanceCandidate =>
+      candidate.status === "unresolved"
+  )
+  if (unresolvedAssetBalanceCandidates.length > 0)
+    throw new Error(
+      `Unable to resolve ${unresolvedAssetBalanceCandidates.length} balance manager asset balance${
+        unresolvedAssetBalanceCandidates.length === 1 ? "" : "s"
+      }: ${unresolvedAssetBalanceCandidates
+        .map(
+          (candidate) =>
+            `${candidate.coinType ?? "unknown coin type"} @ ${
+              candidate.dynamicFieldId
+            } (${candidate.reason})`
+        )
+        .join("; ")}`
+    )
+
   return mergeAndSortAssetBalances(
-    assetBalanceCandidates.flatMap((assetBalance) =>
-      assetBalance ? [assetBalance] : []
+    assetBalanceCandidates.reduce<TraderAccountAssetBalance[]>(
+      (resolvedAssetBalances, candidate) =>
+        candidate.status === "resolved"
+          ? [...resolvedAssetBalances, candidate.assetBalance]
+          : resolvedAssetBalances,
+      []
     )
   )
 }

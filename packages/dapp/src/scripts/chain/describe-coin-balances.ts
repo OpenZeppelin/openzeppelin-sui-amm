@@ -3,9 +3,11 @@
  * On Sui, a "balance" is the sum of many Coin objects.
  * Helpful for spotting fragmentation before building a PTB.
  */
+import { setTimeout as delay } from "node:timers/promises"
 import yargs from "yargs"
 
 import type { SuiClient } from "@mysten/sui/client"
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { CoinBalanceSummary } from "@sui-amm/tooling-core/address"
 import { fetchCoinBalances } from "@sui-amm/tooling-core/coin"
 import { resolveOwnerAddress } from "@sui-amm/tooling-node/account"
@@ -13,7 +15,8 @@ import {
   logEachGreen,
   logKeyValueBlue,
   logKeyValueGreen,
-  logKeyValueYellow
+  logKeyValueYellow,
+  logWarning
 } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
 
@@ -73,20 +76,78 @@ const resolveCoinBalanceDetails = async ({
 }): Promise<CoinBalanceDetails[]> =>
   Promise.all(
     balances.map(async (balance): Promise<CoinBalanceDetails> => {
-      const ownedCoins = await fetchCoinBalances(
+      const coinObjectIds = await resolveCoinObjectIds({
+        address,
+        coinType: balance.coinType,
+        suiClient
+      })
+
+      return {
+        ...balance,
+        coinObjectIds
+      }
+    })
+  )
+
+const resolveCoinObjectIds = async ({
+  address,
+  coinType,
+  suiClient
+}: {
+  address: string
+  coinType: string
+  suiClient: SuiClient
+}): Promise<string[]> => {
+  try {
+    return await fetchSampledCoinObjectIds({
+      address,
+      coinType,
+      suiClient
+    })
+  } catch {
+    logWarning(
+      `Coin object sampling failed for ${coinType}; retrying with a full fetch.`
+    )
+    await delay(250)
+
+    try {
+      const fullCoinObjectIds = await fetchCoinBalances(
         {
           owner: address,
-          coinType: balance.coinType
+          coinType
         },
         { suiClient }
       )
 
-      return {
-        ...balance,
-        coinObjectIds: ownedCoins.map((coin) => coin.coinObjectId)
-      }
-    })
-  )
+      return fullCoinObjectIds
+        .map((coin) => coin.coinObjectId)
+        .slice(0, MAX_LOGGED_COIN_OBJECT_IDS)
+    } catch {
+      logWarning(
+        `Coin object fallback fetch failed for ${coinType}; continuing without object ids.`
+      )
+      return []
+    }
+  }
+}
+
+const fetchSampledCoinObjectIds = async ({
+  address,
+  coinType,
+  suiClient
+}: {
+  address: string
+  coinType: string
+  suiClient: SuiClient
+}) => {
+  const coinPage = await suiClient.getCoins({
+    owner: address,
+    coinType,
+    limit: MAX_LOGGED_COIN_OBJECT_IDS
+  })
+
+  return coinPage.data.map((coin) => normalizeSuiObjectId(coin.coinObjectId))
+}
 
 const logCoinBalances = (balances: CoinBalanceDetails[]) => {
   const sortedBalances = [...balances].sort((left, right) =>
@@ -107,7 +168,10 @@ const logCoinBalances = (balances: CoinBalanceDetails[]) => {
       objects: balance.coinObjectCount,
       total: formatBigInt(balance.totalBalance),
       locked: formatBigInt(balance.lockedBalanceTotal),
-      coinObjectIds: formatCoinObjectIds(balance.coinObjectIds),
+      coinObjectIds: formatCoinObjectIds({
+        coinObjectIds: balance.coinObjectIds,
+        coinObjectCount: balance.coinObjectCount
+      }),
       "": ""
     })
   )
@@ -130,17 +194,25 @@ const logInspectionContext = ({
 
 const formatBigInt = (value: bigint) => value.toString()
 
-const formatCoinObjectIds = (coinObjectIds: string[]) => {
-  if (coinObjectIds.length === 0) return "none"
-  if (coinObjectIds.length <= MAX_LOGGED_COIN_OBJECT_IDS) {
+const formatCoinObjectIds = ({
+  coinObjectIds,
+  coinObjectCount
+}: {
+  coinObjectIds: string[]
+  coinObjectCount: number
+}) => {
+  if (coinObjectCount === 0 || coinObjectIds.length === 0) return "none"
+  if (coinObjectCount <= MAX_LOGGED_COIN_OBJECT_IDS) {
     return coinObjectIds.join(", ")
   }
 
   const visibleCoinObjectIds = coinObjectIds
     .slice(0, MAX_LOGGED_COIN_OBJECT_IDS)
     .join(", ")
-  const hiddenCoinObjectCount =
-    coinObjectIds.length - MAX_LOGGED_COIN_OBJECT_IDS
+  const hiddenCoinObjectCount = Math.max(
+    coinObjectCount - coinObjectIds.length,
+    0
+  )
 
   return `${visibleCoinObjectIds} (+${hiddenCoinObjectCount} more)`
 }
