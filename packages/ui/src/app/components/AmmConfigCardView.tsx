@@ -54,9 +54,9 @@ const renderContent = (content: TAmmConfigCardContent) => {
               {details.baseSpreadBps}
             </span>
           </ConfigTile>
-          <ConfigTile label="Volatility multiplier (bps)">
+          <ConfigTile label="Volatility spread (bps)">
             <span className="text-lg font-semibold text-sds-dark dark:text-sds-light">
-              {details.volatilityMultiplierBps}
+              {details.volatilitySpreadBps}
             </span>
           </ConfigTile>
           <ConfigTile label="Laser">

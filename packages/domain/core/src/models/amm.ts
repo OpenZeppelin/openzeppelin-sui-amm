@@ -23,7 +23,7 @@ export const MAX_BASE_SPREAD_BPS = "10000"
 export type AmmConfigOverview = {
   configId: string
   baseSpreadBps: string
-  volatilityMultiplierBps: string
+  volatilitySpreadBps: string
   useLaser: boolean
   tradingPaused: boolean
   pythPriceFeedIdHex: string
@@ -31,7 +31,7 @@ export type AmmConfigOverview = {
 
 type AmmConfigFields = {
   base_spread_bps?: unknown
-  volatility_multiplier_bps?: unknown
+  volatility_spread_bps?: unknown
   use_laser?: unknown
   trading_paused?: unknown
   pyth_price_feed_id?: unknown
@@ -65,16 +65,15 @@ const buildAmmConfigOverviewFromObject = ({
   object: SuiObjectData
 }): AmmConfigOverview => {
   const fields = unwrapMoveObjectFields<AmmConfigFields>(object)
-
   return {
     configId,
     baseSpreadBps: requireNumericField(
       fields.base_spread_bps,
       "Base spread bps"
     ),
-    volatilityMultiplierBps: requireNumericField(
-      fields.volatility_multiplier_bps,
-      "Volatility multiplier bps"
+    volatilitySpreadBps: requireNumericField(
+      fields.volatility_spread_bps,
+      "Volatility spread bps"
     ),
     useLaser: requireBooleanField(fields.use_laser, "Use laser flag"),
     tradingPaused: requireBooleanField(fields.trading_paused, "Trading paused"),
@@ -95,7 +94,7 @@ export const getAmmConfigOverview = async (
 }
 
 export const DEFAULT_BASE_SPREAD_BPS = "25"
-export const DEFAULT_VOLATILITY_MULTIPLIER_BPS = "200"
+export const DEFAULT_VOLATILITY_SPREAD_BPS = "200"
 
 const resolveBaseSpreadBps = (rawValue?: string): bigint => {
   const baseSpreadBps = parsePositiveU64(
@@ -110,35 +109,33 @@ const resolveBaseSpreadBps = (rawValue?: string): bigint => {
   return baseSpreadBps
 }
 
-const resolveVolatilityMultiplierBps = (rawValue?: string): bigint =>
+const resolvevolatilitySpreadBps = (rawValue?: string): bigint =>
   parseNonNegativeU64(
-    rawValue ?? DEFAULT_VOLATILITY_MULTIPLIER_BPS,
-    "Volatility multiplier bps"
+    rawValue ?? DEFAULT_VOLATILITY_SPREAD_BPS,
+    "Volatility spread bps"
   )
 
 const resolveUseLaserFlag = (rawValue?: boolean): boolean => rawValue ?? false
 
 export const resolveAmmConfigInputs = ({
-  volatilityMultiplierBps,
+  volatilitySpreadBps,
   baseSpreadBps,
   useLaser,
   pythPriceFeedIdHex
 }: {
-  volatilityMultiplierBps?: string
+  volatilitySpreadBps?: string
   baseSpreadBps?: string
   useLaser?: boolean
   pythPriceFeedIdHex: string
 }): {
   baseSpreadBps: bigint
-  volatilityMultiplierBps: bigint
+  volatilitySpreadBps: bigint
   useLaser: boolean
   pythPriceFeedIdHex: string
   pythPriceFeedIdBytes: number[]
 } => ({
   baseSpreadBps: resolveBaseSpreadBps(baseSpreadBps),
-  volatilityMultiplierBps: resolveVolatilityMultiplierBps(
-    volatilityMultiplierBps
-  ),
+  volatilitySpreadBps: resolvevolatilitySpreadBps(volatilitySpreadBps),
   useLaser: resolveUseLaserFlag(useLaser),
   pythPriceFeedIdHex,
   pythPriceFeedIdBytes: parsePythPriceFeedIdBytes(pythPriceFeedIdHex)

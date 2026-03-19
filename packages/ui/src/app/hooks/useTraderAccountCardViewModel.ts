@@ -30,8 +30,7 @@ const buildTraderAccountDetails = (
   balanceManagerId: traderAccount.balanceManagerId,
   tradeCapId: traderAccount.tradeCapId,
   depositCapId: traderAccount.depositCapId,
-  withdrawCapId: traderAccount.withdrawCapId,
-  activeOrdersTableId: traderAccount.activeOrdersTableId
+  withdrawCapId: traderAccount.withdrawCapId
 })
 
 const resolveTraderAccountContent = ({

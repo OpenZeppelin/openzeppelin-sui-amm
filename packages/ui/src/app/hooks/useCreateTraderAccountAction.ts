@@ -13,8 +13,9 @@ import { resolveDeepbookRegistryIdForNetwork } from "@sui-amm/domain-core/models
 import { buildCreateTraderAccountTransaction } from "@sui-amm/domain-core/ptb/deepbook"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { LOCALNET_DEEPBOOK_REGISTRY_ID } from "../config/network"
+import { resolveAmmAdminCapId } from "../helpers/ammAdminCap"
 import {
   getLocalnetClient,
   makeLocalnetExecutor,
@@ -37,8 +38,67 @@ type CreateTraderAccountTransactionState =
   | { status: "success"; digest: string }
   | { status: "error"; error: string; details?: string }
 
+type AdminCapResolutionState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; adminCapId?: string }
+  | { status: "error"; error: string }
+
 const networkUnsupportedMessage =
   "Trader account creation is not configured for the active network."
+const missingAdminCapMessage =
+  "Connected wallet does not own the AMM admin capability required to create trader accounts."
+
+const resolveAdminCapErrorMessage = (error: unknown) =>
+  error instanceof Error
+    ? error.message
+    : "Unable to resolve the AMM admin capability."
+
+const resolveDisabledReason = ({
+  walletAddress,
+  ammPackageId,
+  deepbookRegistryId,
+  chainMismatch,
+  network,
+  adminCapResolution
+}: {
+  walletAddress?: string
+  ammPackageId?: string
+  deepbookRegistryId?: string
+  chainMismatch: boolean
+  network: string
+  adminCapResolution: AdminCapResolutionState
+}) => {
+  if (!walletAddress) {
+    return "Connect a wallet to create a trader account."
+  }
+
+  if (!ammPackageId) {
+    return "Contract package id is not configured for this network."
+  }
+
+  if (!deepbookRegistryId) {
+    return networkUnsupportedMessage
+  }
+
+  if (chainMismatch) {
+    return `Switch your wallet to ${network} before creating a trader account.`
+  }
+
+  if (adminCapResolution.status === "loading") {
+    return "Checking AMM admin capability."
+  }
+
+  if (adminCapResolution.status === "error") {
+    return adminCapResolution.error
+  }
+
+  if (adminCapResolution.status === "ready" && !adminCapResolution.adminCapId) {
+    return missingAdminCapMessage
+  }
+
+  return undefined
+}
 
 const useCreateTraderAccountAction = ({
   onCreated
@@ -74,6 +134,8 @@ const useCreateTraderAccountAction = ({
   )
   const [transactionState, setTransactionState] =
     useState<CreateTraderAccountTransactionState>({ status: "idle" })
+  const [adminCapResolution, setAdminCapResolution] =
+    useState<AdminCapResolutionState>({ status: "idle" })
 
   const walletAddress = currentAccount?.address
   const expectedChain = `sui:${network}` as IdentifierString
@@ -94,15 +156,60 @@ const useCreateTraderAccountAction = ({
     [currentAccount, currentWallet, expectedChain]
   )
 
-  const disabledReason = !walletAddress
-    ? "Connect a wallet to create a trader account."
-    : !ammPackageId
-      ? "Contract package id is not configured for this network."
-      : !deepbookRegistryId
-        ? networkUnsupportedMessage
-        : chainMismatch
-          ? `Switch your wallet to ${network} before creating a trader account.`
-          : undefined
+  useEffect(() => {
+    let active = true
+
+    if (!walletAddress || !ammPackageId) {
+      setAdminCapResolution({ status: "idle" })
+      return () => {
+        active = false
+      }
+    }
+
+    setAdminCapResolution({ status: "loading" })
+
+    const load = async () => {
+      try {
+        const adminCapId = await resolveAmmAdminCapId({
+          ownerAddress: walletAddress,
+          packageId: ammPackageId,
+          suiClient
+        })
+
+        if (!active) return
+        setAdminCapResolution({
+          status: "ready",
+          adminCapId
+        })
+      } catch (error) {
+        if (!active) return
+
+        setAdminCapResolution({
+          status: "error",
+          error: resolveAdminCapErrorMessage(error)
+        })
+      }
+    }
+
+    void load()
+
+    return () => {
+      active = false
+    }
+  }, [ammPackageId, suiClient, walletAddress])
+
+  const adminCapId =
+    adminCapResolution.status === "ready"
+      ? adminCapResolution.adminCapId
+      : undefined
+  const disabledReason = resolveDisabledReason({
+    walletAddress,
+    ammPackageId,
+    deepbookRegistryId,
+    chainMismatch,
+    network,
+    adminCapResolution
+  })
 
   const canCreate =
     !disabledReason &&
@@ -152,17 +259,29 @@ const useCreateTraderAccountAction = ({
       return
     }
 
+    if (!adminCapId) {
+      setTransactionState({
+        status: "error",
+        error:
+          adminCapResolution.status === "error"
+            ? adminCapResolution.error
+            : missingAdminCapMessage
+      })
+      return
+    }
+
     const toastId = notification.txLoading()
     setTransactionState({ status: "processing" })
 
     try {
       const deepbookRegistry = await getSuiSharedObject(
-        { objectId: deepbookRegistryId, mutable: true },
+        { objectId: deepbookRegistryId, mutable: false },
         { suiClient }
       )
 
       const transaction = buildCreateTraderAccountTransaction({
         ammPackageId,
+        adminCapId,
         deepbookRegistry,
         ownerAddress: walletAddress
       })
@@ -227,6 +346,8 @@ const useCreateTraderAccountAction = ({
     }
   }, [
     accountChains,
+    adminCapId,
+    adminCapResolution,
     ammPackageId,
     chainMismatch,
     currentWallet,

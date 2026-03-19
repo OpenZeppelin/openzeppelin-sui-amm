@@ -108,18 +108,6 @@ const renderContent = ({
               "Unknown"
             )}
           </InfoTile>
-          <InfoTile label="Active orders table">
-            {details.activeOrdersTableId ? (
-              <CopyableId
-                value={details.activeOrdersTableId}
-                label="Orders"
-                explorerUrl={explorerUrl}
-                className="w-full"
-              />
-            ) : (
-              "Unknown"
-            )}
-          </InfoTile>
         </div>
       )
     }

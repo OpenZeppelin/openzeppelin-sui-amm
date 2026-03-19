@@ -4,10 +4,7 @@ import {
   resolveTraderAccountType,
   type TraderAccountOverview
 } from "@sui-amm/domain-core/models/traderAccount"
-import {
-  buildCreateTraderAccountTransaction,
-  buildRegisterBalanceManagerTransaction
-} from "@sui-amm/domain-core/ptb/deepbook"
+import { buildCreateTraderAccountTransaction } from "@sui-amm/domain-core/ptb/deepbook"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { ensureCreatedObject } from "@sui-amm/tooling-node/transactions"
 import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
@@ -20,15 +17,18 @@ const buildSummaryLabel = (label: string): TransactionSummary => ({
   balanceChanges: []
 })
 
-export type RegisterBalanceManagerResult = {
-  status: "registered" | "dry-run-create-only"
+export type ResolveOrCreateTraderAccountResult = {
+  status: "existing" | "created" | "dry-run-created"
   traderAccount?: TraderAccountOverview
   note?: string
   transactionSummaries: {
     createTraderAccount?: TransactionSummary
-    registerBalanceManager?: TransactionSummary
   }
 }
+
+type ResolveCreateDependencies = () => Promise<{
+  adminCapId: string
+}>
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message
@@ -54,9 +54,45 @@ const buildModelError = ({
     )}). Cause: ${getErrorMessage(error)}`
   )
 
+const loadTraderAccountOverview = async ({
+  tooling,
+  traderAccountId,
+  ownerAddress,
+  ammPackageId
+}: {
+  tooling: Pick<Tooling, "suiClient">
+  traderAccountId: string
+  ownerAddress: string
+  ammPackageId: string
+}): Promise<TraderAccountOverview> => {
+  let traderAccount: TraderAccountOverview
+  try {
+    traderAccount = await getTraderAccountOverview(
+      traderAccountId,
+      tooling.suiClient
+    )
+  } catch (error) {
+    throw buildModelError({
+      operation: "Trader account lookup",
+      traderAccountId,
+      expectedOwner: ownerAddress,
+      expectedPackageId: ammPackageId,
+      error
+    })
+  }
+
+  if (traderAccount.ownerAddress !== ownerAddress)
+    throw new Error(
+      `Trader account owner mismatch for traderAccountId ${traderAccountId}. Expected owner ${ownerAddress}, found ${traderAccount.ownerAddress}, expected package ${ammPackageId}.`
+    )
+
+  return traderAccount
+}
+
 const createTraderAccount = async ({
   tooling,
   ammPackageId,
+  resolveCreateDependencies,
   deepbookRegistryId,
   ownerAddress,
   devInspect,
@@ -69,6 +105,7 @@ const createTraderAccount = async ({
     | "loadedEd25519KeyPair"
   >
   ammPackageId: string
+  resolveCreateDependencies: ResolveCreateDependencies
   deepbookRegistryId: string
   ownerAddress: string
   devInspect?: boolean
@@ -80,8 +117,10 @@ const createTraderAccount = async ({
   const deepbookRegistry = await tooling.getImmutableSharedObject({
     objectId: deepbookRegistryId
   })
+  const { adminCapId } = await resolveCreateDependencies()
   const createTransaction = buildCreateTraderAccountTransaction({
     ammPackageId,
+    adminCapId,
     deepbookRegistry,
     ownerAddress
   })
@@ -93,11 +132,11 @@ const createTraderAccount = async ({
     dryRun
   })
 
+  const summary =
+    createResult.summary ?? buildSummaryLabel(CREATE_TRADER_ACCOUNT_LABEL)
+
   if (dryRun) {
-    return {
-      summary:
-        createResult.summary ?? buildSummaryLabel(CREATE_TRADER_ACCOUNT_LABEL)
-    }
+    return { summary }
   }
 
   const createExecution = createResult.execution?.transactionResult
@@ -109,12 +148,11 @@ const createTraderAccount = async ({
       "::executor::TraderAccount",
       createExecution
     ).objectId,
-    summary:
-      createResult.summary ?? buildSummaryLabel(CREATE_TRADER_ACCOUNT_LABEL)
+    summary
   }
 }
 
-const resolveTraderAccountForRegistration = async ({
+const resolveExistingTraderAccountId = async ({
   tooling,
   traderAccountId,
   ownerAddress,
@@ -141,12 +179,13 @@ const resolveTraderAccountForRegistration = async ({
   return ownedTraderAccountIds[0]
 }
 
-const maybeCreateTraderAccount = async ({
+export const resolveOrCreateTraderAccount = async ({
   tooling,
-  resolvedTraderAccountId,
   ammPackageId,
+  resolveCreateDependencies,
   deepbookRegistryId,
   ownerAddress,
+  traderAccountId,
   devInspect,
   dryRun
 }: {
@@ -155,46 +194,55 @@ const maybeCreateTraderAccount = async ({
     | "executeTransactionWithSummary"
     | "getImmutableSharedObject"
     | "loadedEd25519KeyPair"
+    | "suiClient"
   >
-  resolvedTraderAccountId?: string
   ammPackageId: string
+  resolveCreateDependencies: ResolveCreateDependencies
   deepbookRegistryId: string
   ownerAddress: string
+  traderAccountId?: string
   devInspect?: boolean
   dryRun?: boolean
-}): Promise<
-  | {
-      status: "ready"
-      traderAccountId: string
-      createTraderAccountSummary?: TransactionSummary
-    }
-  | {
-      status: "dry-run-create-only"
-      createTraderAccountSummary: TransactionSummary
-      note: string
-    }
-> => {
-  if (resolvedTraderAccountId)
+}): Promise<ResolveOrCreateTraderAccountResult> => {
+  const resolvedTraderAccountId = await resolveExistingTraderAccountId({
+    tooling,
+    traderAccountId,
+    ownerAddress,
+    ammPackageId
+  })
+
+  if (resolvedTraderAccountId) {
     return {
-      status: "ready",
-      traderAccountId: resolvedTraderAccountId
+      status: "existing",
+      traderAccount: await loadTraderAccountOverview({
+        tooling,
+        traderAccountId: resolvedTraderAccountId,
+        ownerAddress,
+        ammPackageId
+      }),
+      transactionSummaries: {}
     }
+  }
 
   const createResult = await createTraderAccount({
     tooling,
     ammPackageId,
+    resolveCreateDependencies,
     deepbookRegistryId,
     ownerAddress,
     devInspect,
     dryRun
   })
 
-  if (dryRun)
+  if (dryRun) {
     return {
-      status: "dry-run-create-only",
-      createTraderAccountSummary: createResult.summary,
-      note: "Dry-run created a trader account simulation only. Created object IDs are unavailable without execution, so registration could not be simulated in the same run. Re-run without --dry-run or provide --trader-account-id to inspect registration only."
+      status: "dry-run-created",
+      note: "Dry-run simulated trader account creation. Created object IDs are unavailable without execution.",
+      transactionSummaries: {
+        createTraderAccount: createResult.summary
+      }
     }
+  }
 
   if (!createResult.traderAccountId)
     throw new Error(
@@ -202,161 +250,15 @@ const maybeCreateTraderAccount = async ({
     )
 
   return {
-    status: "ready",
-    traderAccountId: createResult.traderAccountId,
-    createTraderAccountSummary: createResult.summary
-  }
-}
-
-const registerBalanceManagerForTraderAccount = async ({
-  tooling,
-  traderAccountId,
-  ammPackageId,
-  deepbookRegistryId,
-  ownerAddress,
-  summaryLabel,
-  devInspect,
-  dryRun
-}: {
-  tooling: Pick<
-    Tooling,
-    | "executeTransactionWithSummary"
-    | "getImmutableSharedObject"
-    | "getMutableSharedObject"
-    | "loadedEd25519KeyPair"
-    | "suiClient"
-  >
-  traderAccountId: string
-  ammPackageId: string
-  deepbookRegistryId: string
-  ownerAddress: string
-  summaryLabel: string
-  devInspect?: boolean
-  dryRun?: boolean
-}): Promise<{
-  traderAccount: TraderAccountOverview
-  registerBalanceManagerSummary: TransactionSummary
-}> => {
-  let traderAccount: TraderAccountOverview
-  try {
-    traderAccount = await getTraderAccountOverview(
-      traderAccountId,
-      tooling.suiClient
-    )
-  } catch (error) {
-    throw buildModelError({
-      operation: "Trader account lookup",
-      traderAccountId,
-      expectedOwner: ownerAddress,
-      expectedPackageId: ammPackageId,
-      error
-    })
-  }
-
-  if (traderAccount.ownerAddress !== ownerAddress)
-    throw new Error(
-      `Trader account owner mismatch for traderAccountId ${traderAccountId}. Expected owner ${ownerAddress}, found ${traderAccount.ownerAddress}, expected package ${ammPackageId}.`
-    )
-
-  const [balanceManager, deepbookRegistry] = await Promise.all([
-    tooling.getImmutableSharedObject({
-      objectId: traderAccount.balanceManagerId
+    status: "created",
+    traderAccount: await loadTraderAccountOverview({
+      tooling,
+      traderAccountId: createResult.traderAccountId,
+      ownerAddress,
+      ammPackageId
     }),
-    tooling.getMutableSharedObject({ objectId: deepbookRegistryId })
-  ])
-
-  const registerTransaction = buildRegisterBalanceManagerTransaction({
-    ammPackageId,
-    traderAccountId: traderAccount.traderAccountId,
-    balanceManager,
-    deepbookRegistry
-  })
-
-  const registerResult = await tooling.executeTransactionWithSummary({
-    transaction: registerTransaction,
-    signer: tooling.loadedEd25519KeyPair,
-    summaryLabel,
-    devInspect,
-    dryRun
-  })
-
-  return {
-    traderAccount,
-    registerBalanceManagerSummary:
-      registerResult.summary ?? buildSummaryLabel(summaryLabel)
-  }
-}
-
-export const createTraderAccountAndRegisterBalanceManager = async ({
-  tooling,
-  ammPackageId,
-  deepbookRegistryId,
-  ownerAddress,
-  traderAccountId,
-  devInspect,
-  dryRun,
-  summaryLabel = "register-balance-manager"
-}: {
-  tooling: Pick<
-    Tooling,
-    | "executeTransactionWithSummary"
-    | "getImmutableSharedObject"
-    | "getMutableSharedObject"
-    | "loadedEd25519KeyPair"
-    | "suiClient"
-  >
-  ammPackageId: string
-  deepbookRegistryId: string
-  ownerAddress: string
-  traderAccountId?: string
-  devInspect?: boolean
-  dryRun?: boolean
-  summaryLabel?: string
-}): Promise<RegisterBalanceManagerResult> => {
-  const resolvedTraderAccountId = await resolveTraderAccountForRegistration({
-    tooling,
-    traderAccountId,
-    ownerAddress,
-    ammPackageId
-  })
-
-  const createDecision = await maybeCreateTraderAccount({
-    tooling,
-    resolvedTraderAccountId,
-    ammPackageId,
-    deepbookRegistryId,
-    ownerAddress,
-    devInspect,
-    dryRun
-  })
-
-  if (createDecision.status === "dry-run-create-only") {
-    return {
-      status: "dry-run-create-only",
-      note: createDecision.note,
-      transactionSummaries: {
-        createTraderAccount: createDecision.createTraderAccountSummary
-      }
-    }
-  }
-
-  const registerDecision = await registerBalanceManagerForTraderAccount({
-    tooling,
-    traderAccountId: createDecision.traderAccountId,
-    ammPackageId,
-    deepbookRegistryId,
-    ownerAddress,
-    summaryLabel,
-    devInspect,
-    dryRun
-  })
-
-  return {
-    status: "registered",
-    traderAccount: registerDecision.traderAccount,
     transactionSummaries: {
-      createTraderAccount: createDecision.createTraderAccountSummary,
-      registerBalanceManager: registerDecision.registerBalanceManagerSummary
+      createTraderAccount: createResult.summary
     }
   }
 }

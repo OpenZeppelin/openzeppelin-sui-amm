@@ -8,7 +8,9 @@ import {
 } from "@sui-amm/domain-core/models/amm"
 import {
   AMM_DEEPBOOK_DEPENDENCY_NAME,
-  AMM_PACKAGE_FOLDER_NAME
+  AMM_PACKAGE_FOLDER_NAME,
+  resolveAmmAdminCapId as resolveExplicitAmmAdminCapId,
+  resolveOwnedAmmAdminCapId
 } from "@sui-amm/domain-node/amm"
 import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
 import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
@@ -154,6 +156,48 @@ const createAdminCapResolutionError = () =>
     "Unable to resolve the AMM admin cap from the latest publish transaction or object artifacts; provide --admin-cap-id or re-run publish to refresh deployments."
   )
 
+const buildMissingSignerAdminCapError = ({
+  signerAddress,
+  ammPackageId
+}: {
+  signerAddress: string
+  ammPackageId: string
+}) =>
+  new Error(
+    `No AMM admin capability found for signer ${signerAddress}. Provide --admin-cap-id or use a signer that owns ${normalizeSuiObjectId(ammPackageId)}${AMM_ADMIN_CAP_TYPE_SUFFIX}.`
+  )
+
+export const resolveSignerAmmAdminCapId = async ({
+  tooling,
+  ammPackageId,
+  signerAddress,
+  adminCapId
+}: {
+  tooling: Pick<Tooling, "network" | "suiClient">
+  ammPackageId: string
+  signerAddress: string
+  adminCapId?: string
+}): Promise<string> => {
+  const trimmedAdminCapId = adminCapId?.trim()
+  if (trimmedAdminCapId) {
+    return resolveExplicitAmmAdminCapId({
+      networkName: tooling.network.networkName,
+      adminCapId: trimmedAdminCapId
+    })
+  }
+
+  const ownedAdminCapId = await resolveOwnedAmmAdminCapId({
+    ammPackageId,
+    ownerAddress: signerAddress,
+    suiClient: tooling.suiClient
+  })
+  if (ownedAdminCapId) {
+    return ownedAdminCapId
+  }
+
+  throw buildMissingSignerAdminCapError({ signerAddress, ammPackageId })
+}
+
 export const resolveAmmAdminCapIdFromPublishDigest = async ({
   publishDigest,
   suiClient
@@ -287,7 +331,7 @@ export const logAmmConfigOverview = (
 ) => {
   logKeyValueGreen("Config")(overview.configId)
   logKeyValueGreen("Spread-bps")(overview.baseSpreadBps)
-  logKeyValueGreen("Vol-bps")(overview.volatilityMultiplierBps)
+  logKeyValueGreen("Vol-bps")(overview.volatilitySpreadBps)
   logKeyValueGreen("Use-laser")(overview.useLaser ? "Yes" : "No")
   logKeyValueGreen("Paused")(overview.tradingPaused ? "Yes" : "No")
   logKeyValueGreen("Feed-id")(overview.pythPriceFeedIdHex)

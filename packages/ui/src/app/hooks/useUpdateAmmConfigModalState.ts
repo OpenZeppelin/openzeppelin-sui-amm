@@ -13,7 +13,7 @@ import type { IdentifierString } from "@mysten/wallet-standard"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
   DEFAULT_BASE_SPREAD_BPS,
-  DEFAULT_VOLATILITY_MULTIPLIER_BPS,
+  DEFAULT_VOLATILITY_SPREAD_BPS,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
@@ -49,7 +49,7 @@ const PYTH_PRICE_FEED_ID_BYTES = 32
 
 type AmmUpdateFormState = {
   baseSpreadBps: string
-  volatilityMultiplierBps: string
+  volatilitySpreadBps: string
   useLaser: boolean
   tradingPaused: boolean
   pythPriceFeedIdHex: string
@@ -73,8 +73,8 @@ type TransactionState =
 
 const buildFormState = (ammConfig?: AmmConfigOverview): AmmUpdateFormState => ({
   baseSpreadBps: ammConfig?.baseSpreadBps ?? DEFAULT_BASE_SPREAD_BPS,
-  volatilityMultiplierBps:
-    ammConfig?.volatilityMultiplierBps ?? DEFAULT_VOLATILITY_MULTIPLIER_BPS,
+  volatilitySpreadBps:
+    ammConfig?.volatilitySpreadBps ?? DEFAULT_VOLATILITY_SPREAD_BPS,
   useLaser: ammConfig?.useLaser ?? false,
   tradingPaused: ammConfig?.tradingPaused ?? false,
   pythPriceFeedIdHex: ammConfig?.pythPriceFeedIdHex ?? ""
@@ -85,7 +85,7 @@ const buildFieldErrors = (
 ): AmmUpdateFieldErrors => {
   const errors: AmmUpdateFieldErrors = {}
   const baseSpreadBps = formState.baseSpreadBps.trim()
-  const volatilityMultiplierBps = formState.volatilityMultiplierBps.trim()
+  const volatilitySpreadBps = formState.volatilitySpreadBps.trim()
 
   if (!baseSpreadBps) {
     errors.baseSpreadBps = "Base spread is required."
@@ -100,15 +100,15 @@ const buildFieldErrors = (
     }
   }
 
-  if (!volatilityMultiplierBps) {
-    errors.volatilityMultiplierBps = "Volatility multiplier is required."
+  if (!volatilitySpreadBps) {
+    errors.volatilitySpreadBps = "Volatility spread is required."
   } else {
     try {
-      parseNonNegativeU64(volatilityMultiplierBps, "Volatility multiplier bps")
+      parseNonNegativeU64(volatilitySpreadBps, "Volatility spread bps")
     } catch (error) {
-      errors.volatilityMultiplierBps = resolveValidationMessage(
+      errors.volatilitySpreadBps = resolveValidationMessage(
         error,
-        "Volatility multiplier must be a valid u64."
+        "Volatility spread must be a valid u64."
       )
     }
   }
@@ -127,18 +127,18 @@ const buildFallbackOverview = ({
   configId,
   formState,
   baseSpreadBps,
-  volatilityMultiplierBps,
+  volatilitySpreadBps,
   pythPriceFeedIdHex
 }: {
   configId: string
   formState: AmmUpdateFormState
   baseSpreadBps: bigint
-  volatilityMultiplierBps: bigint
+  volatilitySpreadBps: bigint
   pythPriceFeedIdHex: string
 }): AmmConfigOverview => ({
   configId,
   baseSpreadBps: baseSpreadBps.toString(),
-  volatilityMultiplierBps: volatilityMultiplierBps.toString(),
+  volatilitySpreadBps: volatilitySpreadBps.toString(),
   useLaser: formState.useLaser,
   tradingPaused: formState.tradingPaused,
   pythPriceFeedIdHex
@@ -149,7 +149,7 @@ const ammConfigMatches = (
   second: AmmConfigOverview
 ) =>
   first.baseSpreadBps === second.baseSpreadBps &&
-  first.volatilityMultiplierBps === second.volatilityMultiplierBps &&
+  first.volatilitySpreadBps === second.volatilitySpreadBps &&
   first.useLaser === second.useLaser &&
   first.tradingPaused === second.tradingPaused &&
   first.pythPriceFeedIdHex === second.pythPriceFeedIdHex
@@ -334,7 +334,7 @@ export const useUpdateAmmConfigModalState = ({
     try {
       const updateInputs = resolveAmmConfigInputs({
         baseSpreadBps: formState.baseSpreadBps.trim(),
-        volatilityMultiplierBps: formState.volatilityMultiplierBps.trim(),
+        volatilitySpreadBps: formState.volatilitySpreadBps.trim(),
         useLaser: formState.useLaser,
         pythPriceFeedIdHex: formState.pythPriceFeedIdHex.trim()
       })
@@ -361,7 +361,7 @@ export const useUpdateAmmConfigModalState = ({
         adminCapId,
         config: configShared,
         baseSpreadBps: updateInputs.baseSpreadBps,
-        volatilityMultiplierBps: updateInputs.volatilityMultiplierBps,
+        volatilitySpreadBps: updateInputs.volatilitySpreadBps,
         useLaser: updateInputs.useLaser,
         tradingPaused: formState.tradingPaused,
         pythPriceFeedIdBytes: updateInputs.pythPriceFeedIdBytes
@@ -394,7 +394,7 @@ export const useUpdateAmmConfigModalState = ({
         configId,
         formState,
         baseSpreadBps: updateInputs.baseSpreadBps,
-        volatilityMultiplierBps: updateInputs.volatilityMultiplierBps,
+        volatilitySpreadBps: updateInputs.volatilitySpreadBps,
         pythPriceFeedIdHex: updateInputs.pythPriceFeedIdHex
       })
 

@@ -174,7 +174,7 @@ public(package) fun base_spread(config: &AMMConfig, mid_price: u64): u64 {
     ((mid_price as u128) * (config.base_spread_bps as u128) / HUNDRED_PERCENT_BPS_U128) as u64
 }
 
-/// Returns the volatility multiplier in basis points.
+/// Returns the volatility spread in basis points.
 public fun volatility_spread_bps(config: &AMMConfig): u64 {
     config.volatility_spread_bps
 }

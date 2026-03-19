@@ -53,7 +53,7 @@ import {
   readKeystoreEntries
 } from "../keypair.ts"
 import { probeRpcHealth } from "../localnet.ts"
-import { resolveChainIdentifier } from "../move-toml.ts"
+import { listMoveTomlFiles, resolveChainIdentifier } from "../move-toml.ts"
 import {
   buildMoveEnvironmentFlags,
   buildMovePackage,
@@ -64,6 +64,7 @@ import { pickRootNonDependencyArtifact } from "../package.ts"
 import { publishPackageWithLog } from "../publish.ts"
 import { createSuiClient } from "../sui-client.ts"
 import { signAndExecute } from "../transactions.ts"
+import { listFilesByNameRecursively } from "../utils/fs-walk.ts"
 import { getErrnoCode } from "../utils/fs.ts"
 import { parseBooleanEnv } from "./booleans.ts"
 import { parseNonNegativeInteger, parsePositiveInteger } from "./numbers.ts"
@@ -131,6 +132,15 @@ export type TestContext = {
     transaction: Transaction,
     account: TestAccount,
     options?: { requestType?: "WaitForEffectsCert" | "WaitForLocalExecution" }
+  ) => Promise<SuiTransactionBlockResponse>
+  signAndExecuteTransactionAndWait: (
+    transaction: Transaction,
+    account: TestAccount,
+    options?: {
+      requestType?: "WaitForEffectsCert" | "WaitForLocalExecution"
+      timeoutMs?: number
+      intervalMs?: number
+    }
   ) => Promise<SuiTransactionBlockResponse>
   waitForFinality: (
     digest: string,
@@ -1226,26 +1236,15 @@ const copyMoveSources = async (
   const resolvedSourceRoot = await resolveMoveSourceRootPath(sourceRoot)
   await cp(resolvedSourceRoot, destinationRoot, { recursive: true })
   await removeMoveBuildArtifacts(destinationRoot)
+  await removeMoveLockFiles(destinationRoot)
   return resolvedSourceRoot
 }
 
-const listMoveTomlFiles = async (rootDir: string): Promise<string[]> => {
-  const entries = await readdir(rootDir, { withFileTypes: true })
-  const files: string[] = []
-
-  await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = path.join(rootDir, entry.name)
-      if (entry.isDirectory()) {
-        files.push(...(await listMoveTomlFiles(fullPath)))
-      } else if (entry.isFile() && entry.name === "Move.toml") {
-        files.push(fullPath)
-      }
-    })
-  )
-
-  return files
-}
+const listMoveLockFiles = async (rootDir: string): Promise<string[]> =>
+  listFilesByNameRecursively({
+    rootDir,
+    fileName: "Move.lock"
+  })
 
 const normalizeTomlPath = (value: string) => value.replace(/\\/g, "/")
 
@@ -1876,6 +1875,13 @@ const removeMoveBuildArtifacts = async (rootDir: string) => {
   )
 }
 
+const removeMoveLockFiles = async (rootDir: string) => {
+  const moveLockPaths = await listMoveLockFiles(rootDir)
+  await Promise.all(
+    moveLockPaths.map((moveLockPath) => rm(moveLockPath, { force: true }))
+  )
+}
+
 const clearPublishedMetadataForNetwork = async (
   rootDir: string,
   networkName: string
@@ -2449,6 +2455,34 @@ export const createTestContext = async (
       return result.transactionResult
     })
 
+  const signAndExecuteTransactionAndWait = async (
+    transaction: Transaction,
+    account: TestAccount,
+    options?: {
+      requestType?: "WaitForEffectsCert" | "WaitForLocalExecution"
+      timeoutMs?: number
+      intervalMs?: number
+    }
+  ) => {
+    const transactionResult = await signAndExecuteTransaction(
+      transaction,
+      account,
+      {
+        requestType: options?.requestType
+      }
+    )
+
+    const finalizedTransactionResult = await waitForFinality(
+      transactionResult.digest,
+      {
+        timeoutMs: options?.timeoutMs,
+        intervalMs: options?.intervalMs
+      }
+    )
+
+    return finalizedTransactionResult
+  }
+
   const waitForFinality = async (
     digest: string,
     options?: { timeoutMs?: number; intervalMs?: number }
@@ -2491,6 +2525,7 @@ export const createTestContext = async (
     buildMovePackage: buildPackage,
     publishPackage,
     signAndExecuteTransaction,
+    signAndExecuteTransactionAndWait,
     waitForFinality,
     queryEventsByTransaction,
     queryEventsByType,

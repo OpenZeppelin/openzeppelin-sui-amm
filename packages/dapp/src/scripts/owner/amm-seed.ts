@@ -44,7 +44,7 @@ type AmmSeedArguments = {
   adminCapId?: string
   ammPackageId?: string
   baseSpreadBps?: string
-  volatilityMultiplierBps?: string
+  volatilitySpreadBps?: string
   useLaser?: boolean
   pythPriceFeedId?: string
   pythPriceFeedLabel?: string
@@ -356,19 +356,19 @@ const resolveExpectedExistingAmmConfigInputs = async ({
   networkName: string
   cliArguments: AmmSeedArguments
   existingOverview: AmmConfigOverview
-}) =>
-  resolveAmmConfigInputs({
+}) => {
+  return resolveAmmConfigInputs({
     pythPriceFeedIdHex: await resolveExpectedPythPriceFeedIdHex({
       networkName,
       cliArguments,
       existingOverview
     }),
-    volatilityMultiplierBps:
-      cliArguments.volatilityMultiplierBps ??
-      existingOverview.volatilityMultiplierBps,
+    volatilitySpreadBps:
+      cliArguments.volatilitySpreadBps ?? existingOverview.volatilitySpreadBps,
     baseSpreadBps: cliArguments.baseSpreadBps ?? existingOverview.baseSpreadBps,
     useLaser: cliArguments.useLaser ?? existingOverview.useLaser
   })
+}
 
 const collectAmmConfigInputMismatches = ({
   existingOverview,
@@ -379,8 +379,8 @@ const collectAmmConfigInputMismatches = ({
 }) => {
   const mismatches: string[] = []
   const expectedBaseSpreadBps = expectedInputs.baseSpreadBps.toString()
-  const expectedVolatilityMultiplierBps =
-    expectedInputs.volatilityMultiplierBps.toString()
+  const expectedvolatilitySpreadBps =
+    expectedInputs.volatilitySpreadBps.toString()
 
   if (
     normalizeHex(existingOverview.pythPriceFeedIdHex) !==
@@ -397,11 +397,9 @@ const collectAmmConfigInputMismatches = ({
     )
   }
 
-  if (
-    existingOverview.volatilityMultiplierBps !== expectedVolatilityMultiplierBps
-  ) {
+  if (existingOverview.volatilitySpreadBps !== expectedvolatilitySpreadBps) {
     mismatches.push(
-      `volatilityMultiplierBps expected ${expectedVolatilityMultiplierBps} but got ${existingOverview.volatilityMultiplierBps}`
+      `volatilitySpreadBps expected ${expectedvolatilitySpreadBps} but got ${existingOverview.volatilitySpreadBps}`
     )
   }
 
@@ -531,7 +529,7 @@ const resolveOrCreateAmmConfig = async ({
     ammPackageId,
     adminCapId,
     pythPriceFeedIdHex,
-    volatilityMultiplierBps: cliArguments.volatilityMultiplierBps,
+    volatilitySpreadBps: cliArguments.volatilitySpreadBps,
     baseSpreadBps: cliArguments.baseSpreadBps,
     useLaser: cliArguments.useLaser
   })
@@ -638,11 +636,11 @@ runSuiScript(
         "Base spread in basis points (u64); defaults to the current config value when reusing, otherwise the AMM default.",
       demandOption: false
     })
-    .option("volatilityMultiplierBps", {
-      alias: ["volatility-multiplier-bps"],
+    .option("volatilitySpreadBps", {
+      alias: ["volatility-spread-bps"],
       type: "string",
       description:
-        "Volatility multiplier in basis points (u64); defaults to the current config value when reusing, otherwise the AMM default.",
+        "Volatility spread in basis points (u64); defaults to the current config value when reusing, otherwise the AMM default.",
       demandOption: false
     })
     .option("useLaser", {
