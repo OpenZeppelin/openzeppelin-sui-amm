@@ -1,4 +1,8 @@
 packages:
-  - "packages/*"
-  - "packages/*/*"
+  - packages/*
+  - packages/*/*
 
+overrides:
+  flatted@<=3.4.1: '>=3.4.2'
+  next@>=16.0.0-beta.0 <16.1.7: '>=16.1.7'
+  next@>=16.0.1 <16.1.7: '>=16.1.7'
