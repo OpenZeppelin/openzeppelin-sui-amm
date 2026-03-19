@@ -306,7 +306,7 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
         return
     };
 
-    // Place a limit order
+    // Place a limit order.
     pool.place_limit_order(
         &mut trader_account.balance_manager,
         trade_proof,
@@ -336,7 +336,7 @@ fun deepbook_price(price_info_object: &PriceInfoObject, clock: &Clock): u64 {
     let price_i64 = price.get_price();
     assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
     let mantissa_u128 = price_i64.get_magnitude_if_positive() as u128;
-    assert!(mantissa_u128 == 0, EPythPriceNonPositive);
+    assert!(mantissa_u128 != 0, EPythPriceNonPositive);
 
     // Retrieve negative exponent.
     let expo_i64 = price.get_expo();

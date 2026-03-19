@@ -165,6 +165,7 @@ fun create_trader_account_and_transfer_supports_multiple_accounts_for_owner() {
     test_scenario::return_to_sender(&scenario, admin_cap);
 
     scenario.next_tx(owner);
+    
     let trader_account_a: TraderAccount = scenario.take_from_sender();
     let trader_account_b: TraderAccount = scenario.take_from_sender();
 
