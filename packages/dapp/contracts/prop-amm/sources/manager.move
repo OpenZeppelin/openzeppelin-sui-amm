@@ -2,6 +2,7 @@
 module openzeppelin_market_maker::manager;
 
 use openzeppelin_market_maker::events;
+use pyth::price_info::PriceInfoObject;
 use sui::package;
 
 // === Constants ===
@@ -197,6 +198,13 @@ public fun trading_paused(config: &AMMConfig): bool {
 /// Returns the Pyth price feed ID bytes.
 public fun pyth_price_feed_id(config: &AMMConfig): vector<u8> {
     config.pyth_price_feed_id
+}
+
+/// Checks whether the price info object contains a valid Pyth price feed ID matching the config.
+public fun has_valid_pyth_feed_id(config: &AMMConfig, price_info_object: &PriceInfoObject): bool {
+    let price_info = price_info_object.get_price_info_from_price_info_object();
+    let actual_price_feed_id = price_info.get_price_identifier().get_bytes();
+    actual_price_feed_id == config.pyth_price_feed_id
 }
 
 /// Returns the configuration object ID as an address.

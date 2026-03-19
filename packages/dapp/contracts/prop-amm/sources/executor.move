@@ -37,6 +37,8 @@ const EPythExponentNonNegative: vector<u8> = b"pyth price exponent_u128 must be 
 const EPythExponentTooLarge: vector<u8> = b"pyth price exponent_u128 should fit in u8";
 #[error(code = 4)]
 const EPythInvalidPriceValue: vector<u8> = b"pyth price must be of valid size";
+#[error(code = 5)]
+const EFeedIdentifierMismatch: vector<u8> = b"feed identifier mismatch";
 
 // === Structs ===
 
@@ -146,7 +148,6 @@ public fun withdraw<T>(
         .withdraw_with_cap(&trader_account.caps.withdraw_cap, withdraw_amount, ctx)
 }
 
-// TODO#q: anyone at the moment can call `refresh_quotes` and pass fake pyth `PriceInfoObject`
 /// Public quote refresh entrypoint for bot-driven PTBs.
 ///
 /// Flow:
@@ -165,7 +166,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     assert!(!config.trading_paused(), ETradingPaused);
 
     // Calculate base and volatility spread values.
-    let oracle_mid_price = deepbook_price(price_info_object, clock);
+    let oracle_mid_price = deepbook_price(price_info_object, config, clock);
     let base_spread = config.base_spread(oracle_mid_price);
     let volatility_spread = config.volatility_spread(oracle_mid_price);
 
@@ -205,16 +206,16 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // Split bid order balance equally between inner and outer spread,
     // and compute quantity in base asset (for deepbook limit order).
-    let base_asset_balance = trader_account.balance_manager.balance<QuoteAsset>();
-    let bid_outer_quantity_quote = base_asset_balance / 2;
-    let bid_inner_quantity_quote = base_asset_balance - bid_outer_quantity_quote;
+    let asset_balance_quote = trader_account.balance_manager.balance<QuoteAsset>();
+    let bid_outer_quantity_quote = asset_balance_quote / 2;
+    let bid_inner_quantity_quote = asset_balance_quote - bid_outer_quantity_quote;
     let bid_outer_quantity = bid_outer_quantity_quote / bid_outer;
     let bid_inner_quantity = bid_inner_quantity_quote / bid_inner;
 
     // Split ask order balance equally between inner and outer spread.
-    let quote_asset_balance = trader_account.balance_manager.balance<BaseAsset>();
-    let ask_outer_quantity = quote_asset_balance / 2;
-    let ask_inner_quantity = quote_asset_balance - ask_outer_quantity;
+    let asset_balance_base = trader_account.balance_manager.balance<BaseAsset>();
+    let ask_outer_quantity = asset_balance_base / 2;
+    let ask_inner_quantity = asset_balance_base - ask_outer_quantity;
 
     // Self matching should not happen (if happens due to logic error abort taker order).
     let self_matching_option = constants::cancel_taker();
@@ -328,7 +329,9 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
 }
 
 /// Helper function to convert pyth price into DeepBook price format, while checking for validity and freshness.
-fun deepbook_price(price_info_object: &PriceInfoObject, clock: &Clock): u64 {
+fun deepbook_price(price_info_object: &PriceInfoObject, config: &AMMConfig, clock: &Clock): u64 {
+    assert!(config.has_valid_pyth_feed_id(price_info_object), EFeedIdentifierMismatch);
+
     // Get pyth price object not older than `MAX_PRICE_AGE_SECS`.
     let price = pyth::get_price_no_older_than(
         price_info_object,
@@ -352,7 +355,8 @@ fun deepbook_price(price_info_object: &PriceInfoObject, clock: &Clock): u64 {
     assert!(exponent_u8 <= MAX_DECIMAL_POWER, EPythExponentTooLarge);
 
     // Compute deepbook price based on deepbook float scaling.
-    // NOTE: mantissa (converted from u64) and float scaling multiplication should not overflow.
+    // NOTE: mantissa (converted from u64) and float scaling multiplication
+    // (can be represented in u64) should not overflow.
     let deepbook_price_u128 =
         mantissa_u128 * constants::float_scaling_u128() / 10u128.pow(exponent_u8);
     let deepbook_price = deepbook_price_u128.try_as_u64().destroy_or!(abort EPythInvalidPriceValue);
