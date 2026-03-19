@@ -128,23 +128,23 @@ export const withdrawTraderAccount = ({
   transaction,
   ammPackageId,
   traderAccountId,
-  balanceManager,
+  ammAdminCapId,
   withdrawAmount,
   coinAssetType
 }: {
   transaction: Transaction
   ammPackageId: string
   traderAccountId: string
-  balanceManager: WrappedSuiSharedObject
+  ammAdminCapId: string
   withdrawAmount: bigint
   coinAssetType: string
 }) =>
   transaction.moveCall({
-    target: `${ammPackageId}::executor::withdraw_trader_account`,
+    target: `${ammPackageId}::executor::withdraw`,
     typeArguments: [coinAssetType],
     arguments: [
       transaction.object(traderAccountId),
-      transaction.sharedObjectRef(balanceManager.sharedRef),
+      transaction.object(ammAdminCapId),
       transaction.pure.u64(withdrawAmount)
     ]
   })

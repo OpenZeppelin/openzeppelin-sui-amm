@@ -5,7 +5,6 @@ import {
   depositTraderAccount,
   withdrawTraderAccount
 } from "@sui-amm/domain-core/ptb/deepbook"
-import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 
 const expectMoveCall = (
   command: ReturnType<Transaction["getData"]>["commands"][number]
@@ -61,26 +60,14 @@ describe("deepbook PTB builders", () => {
     })
   })
 
-  it("builds withdraw_trader_account against the executor module", () => {
+  it("builds withdraw against the executor module", () => {
     const transaction = new Transaction()
-    const balanceManager = {
-      object: {
-        objectId: "0xb0",
-        version: "7",
-        digest: "digest"
-      },
-      sharedRef: {
-        objectId: "0xb0",
-        initialSharedVersion: "5",
-        mutable: true
-      }
-    } as WrappedSuiSharedObject
 
     withdrawTraderAccount({
       transaction,
       ammPackageId: "0x123",
       traderAccountId: "0xa11",
-      balanceManager,
+      ammAdminCapId: "0xa22",
       withdrawAmount: 125n,
       coinAssetType:
         "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI"
@@ -94,7 +81,7 @@ describe("deepbook PTB builders", () => {
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
       module: "executor",
-      function: "withdraw_trader_account",
+      function: "withdraw",
       typeArguments: [
         "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI"
       ]

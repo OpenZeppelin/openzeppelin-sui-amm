@@ -8,7 +8,7 @@ const traderAccountMocks = vi.hoisted(() => ({
 }))
 
 const domainTraderAccountMocks = vi.hoisted(() => ({
-  getBalanceManagerAssetBalances: vi.fn()
+  getBalanceManagerAssetBalancesByBagId: vi.fn()
 }))
 
 vi.mock("@sui-amm/domain-core/models/traderAccount", async () => {
@@ -18,8 +18,8 @@ vi.mock("@sui-amm/domain-core/models/traderAccount", async () => {
 
   return {
     ...actual,
-    getBalanceManagerAssetBalances:
-      domainTraderAccountMocks.getBalanceManagerAssetBalances
+    getBalanceManagerAssetBalancesByBagId:
+      domainTraderAccountMocks.getBalanceManagerAssetBalancesByBagId
   }
 })
 
@@ -38,7 +38,6 @@ type WithdrawalTooling = Parameters<
 const createTooling = (): WithdrawalTooling =>
   ({
     executeTransactionWithSummary: vi.fn(),
-    getMutableSharedObject: vi.fn(),
     loadedEd25519KeyPair: { toSuiAddress: () => "0xabc" },
     suiClient: {}
   }) as unknown as WithdrawalTooling
@@ -46,12 +45,14 @@ const createTooling = (): WithdrawalTooling =>
 const SUI_COIN_TYPE = normalizeSuiObjectId("0x2") + "::sui::SUI"
 
 const mockBalanceManagerBalance = (balance: bigint) => {
-  domainTraderAccountMocks.getBalanceManagerAssetBalances.mockResolvedValue([
-    {
-      coinType: SUI_COIN_TYPE,
-      balance
-    }
-  ])
+  domainTraderAccountMocks.getBalanceManagerAssetBalancesByBagId.mockResolvedValue(
+    [
+      {
+        coinType: SUI_COIN_TYPE,
+        balance
+      }
+    ]
+  )
 }
 
 const expectMoveCall = (
@@ -69,7 +70,7 @@ describe("withdrawFromExistingTraderAccount", () => {
   beforeEach(() => {
     traderAccountMocks.resolveOwnedTraderAccountId.mockReset()
     traderAccountMocks.getOwnedTraderAccountOverview.mockReset()
-    domainTraderAccountMocks.getBalanceManagerAssetBalances.mockReset()
+    domainTraderAccountMocks.getBalanceManagerAssetBalancesByBagId.mockReset()
   })
 
   it("withdraws funds and transfers the withdrawn coin to the recipient", async () => {
@@ -77,22 +78,15 @@ describe("withdrawFromExistingTraderAccount", () => {
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
     )
-    const getMutableSharedObject = vi.mocked(tooling.getMutableSharedObject)
 
     traderAccountMocks.resolveOwnedTraderAccountId.mockResolvedValue("0x111")
     traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue({
       traderAccountId: "0x111",
       ownerAddress: normalizeSuiAddress("0xabc"),
-      balanceManagerId: "0x222"
+      balanceManagerId: "0x222",
+      balanceManagerBalancesBagId: "0x333"
     })
     mockBalanceManagerBalance(100n)
-    getMutableSharedObject.mockResolvedValue({
-      sharedRef: {
-        objectId: "0x222",
-        initialSharedVersion: "1",
-        mutable: true
-      }
-    } as never)
     executeTransactionWithSummary.mockResolvedValue({
       summary: { label: "withdraw-trader-account" } as never
     })
@@ -100,6 +94,7 @@ describe("withdrawFromExistingTraderAccount", () => {
     const result = await withdrawFromExistingTraderAccount({
       tooling,
       ammPackageId: "0x555",
+      ammAdminCapId: "0xa11",
       coinType: "0x2::sui::SUI",
       amount: "25",
       recipientAddress: "0xdef"
@@ -119,7 +114,7 @@ describe("withdrawFromExistingTraderAccount", () => {
     expect(transactionCommands).toHaveLength(2)
     expect(withdrawalMoveCall).toMatchObject({
       module: "executor",
-      function: "withdraw_trader_account",
+      function: "withdraw",
       typeArguments: [normalizeSuiObjectId("0x2") + "::sui::SUI"]
     })
     expect(transactionCommands[1]).toMatchObject({
@@ -133,16 +128,10 @@ describe("withdrawFromExistingTraderAccount", () => {
     traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue({
       traderAccountId: "0x111",
       ownerAddress: normalizeSuiAddress("0xabc"),
-      balanceManagerId: "0x222"
+      balanceManagerId: "0x222",
+      balanceManagerBalancesBagId: "0x333"
     })
     mockBalanceManagerBalance(100n)
-    vi.mocked(tooling.getMutableSharedObject).mockResolvedValue({
-      sharedRef: {
-        objectId: "0x222",
-        initialSharedVersion: "1",
-        mutable: true
-      }
-    } as never)
     vi.mocked(tooling.executeTransactionWithSummary).mockResolvedValue({
       summary: { label: "withdraw-trader-account" } as never
     })
@@ -150,6 +139,7 @@ describe("withdrawFromExistingTraderAccount", () => {
     const result = await withdrawFromExistingTraderAccount({
       tooling,
       ammPackageId: "0x555",
+      ammAdminCapId: "0xa11",
       coinType:
         "0x2::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI>",
       amount: "25"
@@ -168,7 +158,8 @@ describe("withdrawFromExistingTraderAccount", () => {
     traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue({
       traderAccountId: "0x111",
       ownerAddress: normalizeSuiAddress("0xabc"),
-      balanceManagerId: "0x222"
+      balanceManagerId: "0x222",
+      balanceManagerBalancesBagId: "0x333"
     })
     mockBalanceManagerBalance(10n)
 
@@ -176,6 +167,7 @@ describe("withdrawFromExistingTraderAccount", () => {
       withdrawFromExistingTraderAccount({
         tooling,
         ammPackageId: "0x555",
+        ammAdminCapId: "0xa11",
         coinType: SUI_COIN_TYPE,
         amount: "25"
       })
@@ -193,6 +185,7 @@ describe("withdrawFromExistingTraderAccount", () => {
       withdrawFromExistingTraderAccount({
         tooling,
         ammPackageId: "0x555",
+        ammAdminCapId: "0xa11",
         coinType: "0x2::coin::Coin<0x2::sui::SUI",
         amount: "25"
       })
@@ -209,6 +202,7 @@ describe("withdrawFromExistingTraderAccount", () => {
       withdrawFromExistingTraderAccount({
         tooling,
         ammPackageId: "0x555",
+        ammAdminCapId: "0xa11",
         coinType: "0x2::coin::Coin<0x2::sui::SUI> ::extra",
         amount: "25"
       })
@@ -225,6 +219,7 @@ describe("withdrawFromExistingTraderAccount", () => {
       withdrawFromExistingTraderAccount({
         tooling,
         ammPackageId: "0x555",
+        ammAdminCapId: "0xa11",
         coinType: "0x2::sui::SUI",
         amount: "25"
       })
@@ -241,21 +236,16 @@ describe("withdrawFromExistingTraderAccount", () => {
     traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue({
       traderAccountId: "0x111",
       ownerAddress: normalizeSuiAddress("0xabc"),
-      balanceManagerId: "0x222"
+      balanceManagerId: "0x222",
+      balanceManagerBalancesBagId: "0x333"
     })
     mockBalanceManagerBalance(100n)
-    vi.mocked(tooling.getMutableSharedObject).mockResolvedValue({
-      sharedRef: {
-        objectId: "0x222",
-        initialSharedVersion: "1",
-        mutable: true
-      }
-    } as never)
     executeTransactionWithSummary.mockResolvedValue({})
 
     const result = await withdrawFromExistingTraderAccount({
       tooling,
       ammPackageId: "0x555",
+      ammAdminCapId: "0xa11",
       coinType: "0x2::sui::SUI",
       amount: "25",
       dryRun: true

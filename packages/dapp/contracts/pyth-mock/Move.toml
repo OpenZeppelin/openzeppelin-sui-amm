@@ -3,4 +3,4 @@ name = "local_mock_pyth"
 edition = "2024"
 
 [environments]
-test-publish = "63910b79"
+test-publish = "7f4d4373"

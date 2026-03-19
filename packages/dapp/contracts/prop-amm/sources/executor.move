@@ -135,37 +135,19 @@ public fun register_balance_manager(
     trader_account.balance_manager.register_balance_manager(registry, ctx);
 }
 
-/// Withdraws funds from the trader account's linked balance manager to the sender.
-public fun withdraw_trader_account<T>(
-    trader_account: &TraderAccount,
-    balance_manager: &mut BalanceManager,
+/// Withdraw funds from a balance manager.
+public fun withdraw<T>(
+    trader_account: &mut TraderAccount,
+    _: &AMMAdminCap,
     withdraw_amount: u64,
     ctx: &mut TxContext,
 ): Coin<T> {
-    assert_sender_can_manage_balance_manager(
-        trader_account,
-        balance_manager,
-        ctx,
-    );
-    assert!(withdraw_amount > 0, EInvalidWithdrawAmount);
-
-    balance_manager.withdraw<T>(
-        withdraw_amount,
-        ctx,
-    )
+    trader_account
+        .balance_manager
+        .withdraw_with_cap(&trader_account.caps.withdraw_cap, withdraw_amount, ctx)
 }
 
 // === Private Functions ===
-
-/// Ensures the sender owns the trader account and provided the linked balance manager.
-fun assert_sender_can_manage_balance_manager(
-    trader_account: &TraderAccount,
-    balance_manager: &BalanceManager,
-    ctx: &TxContext,
-) {
-    assert!(ctx.sender() == trader_account.owner, ENotTraderAccountOwner);
-    assert!(trader_account.balance_manager.id() == balance_manager.id(), EBalanceManagerMismatch);
-}
 
 // === View helpers ===
 

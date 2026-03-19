@@ -4,9 +4,11 @@
 import yargs from "yargs"
 
 import { resolveAmmPackageId } from "@sui-amm/domain-node/amm"
+import { resolveSignerAddress } from "@sui-amm/tooling-node/account"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { logKeyValueGreen } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
+import { resolveAmmAdminCapIdForSigner } from "../../utils/amm.ts"
 import { withAmmPackageIdOption } from "../../utils/register-script-options.ts"
 import {
   withdrawFromExistingTraderAccount,
@@ -16,6 +18,7 @@ import {
 
 type WithdrawTraderAccountArguments = {
   ammPackageId?: string
+  ammAdminCapId?: string
   traderAccountId?: string
   coinType: string
   amount: string
@@ -27,13 +30,16 @@ type WithdrawTraderAccountArguments = {
 
 const logWithdrawalResult = ({
   ammPackageId,
+  ammAdminCapId,
   withdrawalResult
 }: {
   ammPackageId: string
+  ammAdminCapId: string
   withdrawalResult: WithdrawTraderAccountResult
 }) => {
   logKeyValueGreen("Status")(withdrawalResult.status)
   logKeyValueGreen("AMM package")(ammPackageId)
+  logKeyValueGreen("AMM admin cap")(ammAdminCapId)
   logKeyValueGreen("Trader account")(
     withdrawalResult.traderAccount.traderAccountId
   )
@@ -53,14 +59,22 @@ const logWithdrawalResult = ({
 
 runSuiScript(
   async (tooling, cliArguments: WithdrawTraderAccountArguments) => {
+    const signerAddress = resolveSignerAddress(tooling.loadedEd25519KeyPair)
     const ammPackageId = await resolveAmmPackageId({
       networkName: tooling.network.networkName,
       ammPackageId: cliArguments.ammPackageId
+    })
+    const ammAdminCapId = await resolveAmmAdminCapIdForSigner({
+      tooling,
+      ammPackageId,
+      signerAddress,
+      ammAdminCapId: cliArguments.ammAdminCapId
     })
 
     const withdrawalResult = await withdrawFromExistingTraderAccount({
       tooling,
       ammPackageId,
+      ammAdminCapId,
       traderAccountId: cliArguments.traderAccountId,
       coinType: cliArguments.coinType,
       amount: cliArguments.amount,
@@ -73,6 +87,7 @@ runSuiScript(
       emitJsonOutput(
         {
           ammPackageId,
+          ammAdminCapId,
           ...toWithdrawTraderAccountResultView(withdrawalResult)
         },
         cliArguments.json
@@ -83,10 +98,18 @@ runSuiScript(
 
     logWithdrawalResult({
       ammPackageId,
+      ammAdminCapId,
       withdrawalResult
     })
   },
   withAmmPackageIdOption(yargs())
+    .option("ammAdminCapId", {
+      alias: ["amm-admin-cap-id", "admin-cap-id"],
+      type: "string",
+      description:
+        "AMM admin cap id; defaults to the signer-owned admin cap for the selected package when omitted.",
+      demandOption: false
+    })
     .option("traderAccountId", {
       alias: ["trader-account-id"],
       type: "string",

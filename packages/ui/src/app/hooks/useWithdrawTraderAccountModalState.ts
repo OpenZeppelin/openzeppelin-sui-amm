@@ -9,13 +9,16 @@ import {
   useSuiClientContext
 } from "@mysten/dapp-kit"
 import type { SuiTransactionBlockResponse } from "@mysten/sui/client"
-import { getBalanceManagerAssetBalances } from "@sui-amm/domain-core/models/traderAccount"
+import {
+  getBalanceManagerAssetBalancesByBagId,
+  type TraderAccountAssetBalance
+} from "@sui-amm/domain-core/models/traderAccount"
 import { withdrawTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
-import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { newTransaction } from "@sui-amm/tooling-core/transactions"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { parsePositiveU64 } from "@sui-amm/tooling-core/utils/utility"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { resolveRequiredAmmAdminCapId } from "../helpers/ammAdminCap"
 import { resolveValidationMessage } from "../helpers/inputValidation"
 import { getLocalnetClient, makeLocalnetExecutor } from "../helpers/localnet"
 import { transactionUrl } from "../helpers/network"
@@ -79,7 +82,7 @@ const emptyWithdrawFormState = (): WithdrawFormState => ({
 })
 
 const normalizeTraderAccountCoinBalances = (
-  assetBalances: Awaited<ReturnType<typeof getBalanceManagerAssetBalances>>
+  assetBalances: TraderAccountAssetBalance[]
 ): TraderAccountCoinBalanceOption[] =>
   assetBalances
     .map((assetBalance) => ({
@@ -186,11 +189,13 @@ const buildFieldErrors = ({
 export const useWithdrawTraderAccountModalState = ({
   open,
   traderAccountId,
-  balanceManagerId
+  balanceManagerId,
+  balanceManagerBalancesBagId
 }: {
   open: boolean
   traderAccountId?: string
   balanceManagerId?: string
+  balanceManagerBalancesBagId?: string
 }) => {
   const currentAccount = useCurrentAccount()
   const { currentWallet } = useCurrentWallet()
@@ -248,7 +253,7 @@ export const useWithdrawTraderAccountModalState = ({
 
     if (!open) return () => {}
 
-    if (!balanceManagerId) {
+    if (!balanceManagerBalancesBagId) {
       setTraderAccountCoinBalancesState({ status: "idle" })
       return () => {
         active = false
@@ -260,7 +265,10 @@ export const useWithdrawTraderAccountModalState = ({
     const loadTraderAccountBalances = async () => {
       try {
         const balances = normalizeTraderAccountCoinBalances(
-          await getBalanceManagerAssetBalances(balanceManagerId, suiClient)
+          await getBalanceManagerAssetBalancesByBagId(
+            balanceManagerBalancesBagId,
+            suiClient
+          )
         )
         if (!active) return
 
@@ -293,7 +301,7 @@ export const useWithdrawTraderAccountModalState = ({
     return () => {
       active = false
     }
-  }, [balanceManagerId, open, balanceRefreshVersion, suiClient])
+  }, [balanceManagerBalancesBagId, open, balanceRefreshVersion, suiClient])
 
   const fieldErrors = useMemo(
     () =>
@@ -465,20 +473,18 @@ export const useWithdrawTraderAccountModalState = ({
     try {
       const normalizedCoinType = formState.coinType.trim()
       const withdrawalAmount = resolveWithdrawalAmount(formState.amount)
-      const balanceManager = await getSuiSharedObject(
-        {
-          objectId: balanceManagerId,
-          mutable: true
-        },
-        { suiClient }
-      )
+      const ammAdminCapId = await resolveRequiredAmmAdminCapId({
+        ownerAddress: walletAddress,
+        packageId: ammPackageId,
+        suiClient
+      })
 
       const transaction = newTransaction()
       const withdrawnCoin = withdrawTraderAccount({
         transaction,
         ammPackageId,
         traderAccountId,
-        balanceManager,
+        ammAdminCapId,
         withdrawAmount: withdrawalAmount,
         coinAssetType: normalizedCoinType
       })

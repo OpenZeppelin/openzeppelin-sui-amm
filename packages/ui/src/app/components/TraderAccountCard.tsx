@@ -94,6 +94,9 @@ const TraderAccountCard = () => {
         open={isWithdrawModalOpen}
         traderAccountId={overview.traderAccount?.traderAccountId}
         balanceManagerId={overview.traderAccount?.balanceManagerId}
+        balanceManagerBalancesBagId={
+          overview.traderAccount?.balanceManagerBalancesBagId
+        }
         explorerUrl={viewModel.explorerUrl}
         onClose={() => setIsWithdrawModalOpen(false)}
         onWithdrawn={refreshTraderAccount}

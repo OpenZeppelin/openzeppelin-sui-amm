@@ -150,6 +150,7 @@ const WithdrawTraderAccountModal = ({
   open,
   traderAccountId,
   balanceManagerId,
+  balanceManagerBalancesBagId,
   explorerUrl,
   onClose,
   onWithdrawn
@@ -157,6 +158,7 @@ const WithdrawTraderAccountModal = ({
   open: boolean
   traderAccountId?: string
   balanceManagerId?: string
+  balanceManagerBalancesBagId?: string
   explorerUrl?: string
   onClose: () => void
   onWithdrawn?: () => void
@@ -178,7 +180,8 @@ const WithdrawTraderAccountModal = ({
   } = useWithdrawTraderAccountModalState({
     open,
     traderAccountId,
-    balanceManagerId
+    balanceManagerId,
+    balanceManagerBalancesBagId
   })
 
   const handleClose = useCallback(() => {

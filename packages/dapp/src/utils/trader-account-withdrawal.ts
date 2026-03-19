@@ -1,12 +1,11 @@
 import { normalizeSuiAddress } from "@mysten/sui/utils"
 import {
-  getBalanceManagerAssetBalances,
+  getBalanceManagerAssetBalancesByBagId,
   type TraderAccountAssetBalance,
   type TraderAccountOverview
 } from "@sui-amm/domain-core/models/traderAccount"
 import { withdrawTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
 import { normalizeCoinType } from "@sui-amm/tooling-core/coin"
-import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { newTransaction } from "@sui-amm/tooling-core/transactions"
 import { parsePositiveU64 } from "@sui-amm/tooling-core/utils/utility"
 import { resolveSignerAddress } from "@sui-amm/tooling-node/account"
@@ -66,8 +65,8 @@ const assertSufficientTraderAccountBalance = async ({
   withdrawalCoinType: string
   withdrawalAmount: bigint
 }) => {
-  const assetBalances = await getBalanceManagerAssetBalances(
-    traderAccount.balanceManagerId,
+  const assetBalances = await getBalanceManagerAssetBalancesByBagId(
+    traderAccount.balanceManagerBalancesBagId,
     tooling.suiClient
   )
   const availableBalance = resolveBalanceForCoinType({
@@ -84,14 +83,14 @@ const assertSufficientTraderAccountBalance = async ({
 const buildWithdrawTraderAccountTransaction = ({
   ammPackageId,
   traderAccount,
-  balanceManager,
+  ammAdminCapId,
   withdrawalAmount,
   withdrawalCoinType,
   recipientAddress
 }: {
   ammPackageId: string
   traderAccount: TraderAccountOverview
-  balanceManager: WrappedSuiSharedObject
+  ammAdminCapId: string
   withdrawalAmount: bigint
   withdrawalCoinType: string
   recipientAddress: string
@@ -101,7 +100,7 @@ const buildWithdrawTraderAccountTransaction = ({
     transaction,
     ammPackageId,
     traderAccountId: traderAccount.traderAccountId,
-    balanceManager,
+    ammAdminCapId,
     withdrawAmount: withdrawalAmount,
     coinAssetType: withdrawalCoinType
   })
@@ -148,6 +147,7 @@ export const toWithdrawTraderAccountResultView = (
 export const withdrawFromExistingTraderAccount = async ({
   tooling,
   ammPackageId,
+  ammAdminCapId,
   traderAccountId,
   coinType,
   amount,
@@ -157,12 +157,10 @@ export const withdrawFromExistingTraderAccount = async ({
 }: {
   tooling: Pick<
     Tooling,
-    | "executeTransactionWithSummary"
-    | "getMutableSharedObject"
-    | "loadedEd25519KeyPair"
-    | "suiClient"
+    "executeTransactionWithSummary" | "loadedEd25519KeyPair" | "suiClient"
   >
   ammPackageId: string
+  ammAdminCapId: string
   traderAccountId?: string
   coinType: string
   amount: string
@@ -204,14 +202,11 @@ export const withdrawFromExistingTraderAccount = async ({
     withdrawalCoinType,
     withdrawalAmount
   })
-  const balanceManager = await tooling.getMutableSharedObject({
-    objectId: traderAccount.balanceManagerId
-  })
 
   const withdrawalTransaction = buildWithdrawTraderAccountTransaction({
     ammPackageId,
     traderAccount,
-    balanceManager,
+    ammAdminCapId,
     withdrawalAmount,
     withdrawalCoinType,
     recipientAddress: resolvedRecipientAddress
