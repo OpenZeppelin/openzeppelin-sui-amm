@@ -23,6 +23,7 @@ use sui::coin::Coin;
 
 const ORDER_EXPIRATION_TIME_MS: u64 = 30_000;
 const MAX_PRICE_AGE_SECS: u64 = 30;
+const MAX_DECIMAL_POWER: u8 = 38;
 
 // === Errors ===
 
@@ -31,9 +32,11 @@ const ETradingPaused: vector<u8> = b"trading is paused";
 #[error(code = 1)]
 const EPythPriceNonPositive: vector<u8> = b"pyth price must be positive";
 #[error(code = 2)]
-const EPythInvalidPriceExponent: vector<u8> = b"pyth price exponent must be negative";
+const EPythExponentNonNegative: vector<u8> = b"pyth price exponent_u128 must be negative";
 #[error(code = 3)]
-const EPythInvalidPriceValue: vector<u8> = b"pyth price must be positive after scaling";
+const EPythExponentTooLarge: vector<u8> = b"pyth price exponent_u128 should fit in u8";
+#[error(code = 4)]
+const EPythInvalidPriceValue: vector<u8> = b"pyth price must be of valid size";
 
 // === Structs ===
 
@@ -156,7 +159,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     assert!(!config.trading_paused(), ETradingPaused);
 
     // Calculate base and volatility spread values.
-    let oracle_mid_price = pyth_price_to_deepbook_price(price_info_object, clock);
+    let oracle_mid_price = deepbook_price(price_info_object, clock);
     let base_spread = config.base_spread(oracle_mid_price);
     let volatility_spread = config.volatility_spread(oracle_mid_price);
 
@@ -277,6 +280,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
 // === Private Functions ===
 
+/// Helper function to place a limit order if quantity is non-zero.
 fun try_place_limit_order<BaseAsset, QuoteAsset>(
     trader_account: &mut TraderAccount,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
@@ -314,21 +318,35 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
     );
 }
 
-fun pyth_price_to_deepbook_price(price_info_object: &PriceInfoObject, clock: &Clock): u64 {
+/// Helper function to convert pyth price into DeepBook price format, while checking for validity and freshness.
+fun deepbook_price(price_info_object: &PriceInfoObject, clock: &Clock): u64 {
+    // Get pyth price object not older than `MAX_PRICE_AGE_SECS`.
     let price = pyth::get_price_no_older_than(
         price_info_object,
         clock,
         MAX_PRICE_AGE_SECS,
     );
+
+    // Retrieve positive mantissa.
     let price_i64 = price.get_price();
     assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
-    let deepbook_price = price_i64.get_magnitude_if_positive();
+    let mantissa_u128 = price_i64.get_magnitude_if_positive() as u128;
+    assert!(mantissa_u128 == 0, EPythPriceNonPositive);
 
-    /* TODO#q: how conversion with deepbook price works?
+    // Retrieve negative exponent.
     let expo_i64 = price.get_expo();
-    assert!(expo_i64.get_is_negative(), EPythInvalidPriceExponent);
-    let expo = expo_i64.get_magnitude_if_negative();
-     */
+    assert!(expo_i64.get_is_negative(), EPythExponentNonNegative);
+    let exponent_u8 = expo_i64
+        .get_magnitude_if_negative()
+        .try_as_u8()
+        .destroy_or!(abort EPythExponentTooLarge);
+    assert!(exponent_u8 <= MAX_DECIMAL_POWER, EPythExponentTooLarge);
+
+    // Compute deepbook price based on deepbook float scaling.
+    // NOTE: mantissa (converted from u64) and float scaling multiplication should not overflow.
+    let deepbook_price_u128 =
+        mantissa_u128 * constants::float_scaling_u128() / 10u128.pow(exponent_u8);
+    let deepbook_price = deepbook_price_u128.try_as_u64().destroy_or!(abort EPythInvalidPriceValue);
 
     assert!(deepbook_price >= constants::min_price(), EPythInvalidPriceValue);
     assert!(deepbook_price <= constants::max_price(), EPythInvalidPriceValue);
