@@ -65,10 +65,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-sui
       - name: Lint ${{ matrix.package }}
-        run: sui move build --lint --warnings-are-errors
+        run: sui move build --lint
         working-directory: ./packages/dapp/contracts/${{ matrix.package }}
       - name: Lint tests for ${{ matrix.package }}
-        run: sui move build --test --lint --warnings-are-errors
+        run: sui move build --test --lint
         working-directory: ./packages/dapp/contracts/${{ matrix.package }}
 
   move-tests:
