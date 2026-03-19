@@ -6,7 +6,7 @@ use sui::package;
 
 // === Constants ===
 
-const HUNDRED_PERCENT_BPS: u64 = 10_000;
+const HUNDRED_PERCENT_BPS: u128 = 10_000;
 const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
 // === Errors ===
@@ -152,7 +152,7 @@ macro fun assert_valid_amm_config_inputs(
     assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
     assert!(base_spread_bps <= volatility_spread_bps, EBaseSpreadBpsExceedsVolatilitySpread);
     assert!(
-        volatility_spread_bps <= HUNDRED_PERCENT_BPS,
+        (volatility_spread_bps as u128) <= HUNDRED_PERCENT_BPS,
         EVolatilitySpreadBpsExceedsMaxBasisPoints,
     );
     assert!(
@@ -170,7 +170,7 @@ public fun base_spread_bps(config: &AMMConfig): u64 {
 
 /// Compute the base spread in price terms for a given mid price.
 public(package) fun base_spread(config: &AMMConfig, mid_price: u64): u64 {
-    ((mid_price as u128) * (config.base_spread_bps as u128) / (HUNDRED_PERCENT_BPS as u128)) as u64
+    ((mid_price as u128) * (config.base_spread_bps as u128) / HUNDRED_PERCENT_BPS) as u64
 }
 
 /// Returns the volatility multiplier in basis points.
@@ -180,9 +180,7 @@ public fun volatility_spread_bps(config: &AMMConfig): u64 {
 
 /// Compute the volatility spread in price terms for a given mid price.
 public(package) fun volatility_spread(config: &AMMConfig, mid_price: u64): u64 {
-    (
-        (mid_price as u128) * (config.volatility_spread_bps as u128) / (HUNDRED_PERCENT_BPS as u128),
-    ) as u64
+    ((mid_price as u128) * (config.volatility_spread_bps as u128) / HUNDRED_PERCENT_BPS) as u64
 }
 
 // TODO#q: use LASER pricing
