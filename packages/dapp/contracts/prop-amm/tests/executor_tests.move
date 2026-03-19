@@ -52,9 +52,6 @@ fun create_trader_account_sets_owner_and_emits_created_event() {
     assert_eq!(trader_account.owner(), owner);
     assert_eq!(trader_account.trader_account_id(), object::id(&trader_account));
 
-    let balance_manager = trader_account.balance_manager();
-    assert_eq!(balance_manager::id(balance_manager), balance_manager::id(balance_manager));
-
     test_scenario::return_shared(deepbook_registry);
     test_scenario::return_to_sender(&scenario, admin_cap);
     transfer::public_transfer(trader_account, owner);
@@ -127,7 +124,7 @@ fun create_trader_account_creates_distinct_accounts_for_same_owner() {
 
     let balance_manager_a = trader_account_a.balance_manager();
     let balance_manager_b = trader_account_b.balance_manager();
-    assert!(balance_manager::id(balance_manager_a) != balance_manager::id(balance_manager_b));
+    assert!(balance_manager_a.id() != balance_manager_b.id());
 
     test_scenario::return_shared(deepbook_registry);
     test_scenario::return_to_sender(&scenario, admin_cap);
