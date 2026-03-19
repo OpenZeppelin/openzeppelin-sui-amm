@@ -120,7 +120,7 @@ public fun deposit<T>(
     trader_account: &mut TraderAccount,
     _: &AMMAdminCap,
     coin: Coin<T>,
-    ctx: &TxContext,
+    ctx: &mut TxContext,
 ) {
     trader_account.balance_manager.deposit_with_cap(&trader_account.caps.deposit_cap, coin, ctx)
 }
@@ -150,7 +150,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     config: &AMMConfig,
     price_info_object: &PriceInfoObject,
     clock: &Clock,
-    ctx: &TxContext,
+    ctx: &mut TxContext,
 ) {
     assert!(!config.trading_paused(), ETradingPaused);
 
