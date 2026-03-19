@@ -10,7 +10,6 @@ use deepbook::balance_manager::{
     TradeProof
 };
 use deepbook::constants;
-use deepbook::math;
 use deepbook::pool::Pool;
 use deepbook::registry::Registry;
 use openzeppelin_market_maker::events;
@@ -34,8 +33,6 @@ const EInvalidPythPriceSign: vector<u8> = b"pyth price must be positive";
 const EInvalidPythPriceExponent: vector<u8> = b"pyth price exponent must be negative";
 #[error(code = 3)]
 const EInvalidPythPriceValue: vector<u8> = b"pyth price must be positive after scaling";
-#[error(code = 4)]
-const EUnablePlaceLimitOrder: vector<u8> = b"unable to place limit order";
 
 // === Structs ===
 
@@ -213,7 +210,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     let pay_with_deep = true;
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
-    trader_account.place_limit_order(
+    trader_account.try_place_limit_order(
         pool,
         &trade_proof,
         1,
@@ -227,7 +224,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-    trader_account.place_limit_order(
+    trader_account.try_place_limit_order(
         pool,
         &trade_proof,
         2,
@@ -241,7 +238,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-    trader_account.place_limit_order(
+    trader_account.try_place_limit_order(
         pool,
         &trade_proof,
         3,
@@ -255,7 +252,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-    trader_account.place_limit_order(
+    trader_account.try_place_limit_order(
         pool,
         &trade_proof,
         4,
@@ -279,7 +276,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
 // === Private Functions ===
 
-fun place_limit_order<BaseAsset, QuoteAsset>(
+fun try_place_limit_order<BaseAsset, QuoteAsset>(
     trader_account: &mut TraderAccount,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     trade_proof: &TradeProof,
@@ -294,20 +291,13 @@ fun place_limit_order<BaseAsset, QuoteAsset>(
     clock: &Clock,
     ctx: &TxContext,
 ) {
-    assert!(
-        pool.can_place_limit_order(
-            &trader_account.balance_manager,
-            price,
-            quantity,
-            is_bid,
-            pay_with_deep,
-            expire_timestamp,
-            clock,
-        ),
-        EUnablePlaceLimitOrder,
-    );
-
-    let order_info = pool.place_limit_order(
+    // Don't place an order if quantity is zero.
+    if (quantity == 0){
+        return
+    };
+    
+    // Place a limit order
+    pool.place_limit_order(
         &mut trader_account.balance_manager,
         trade_proof,
         client_order_id,
@@ -321,15 +311,6 @@ fun place_limit_order<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-
-    if (order_info.executed_quantity() > 0) {
-        let fill_price = math::div(
-            order_info.cumulative_quote_quantity(),
-            order_info.executed_quantity(),
-        );
-        // TODO#q: should we emit here? Deepbook emits order execution already. We don't emit when order wasn't instantly executed
-        events::emit_order_executed(order_info.order_id(), fill_price);
-    };
 }
 
 fun pyth_price_to_deepbook_price(price_info_object: &PriceInfoObject): u64 {

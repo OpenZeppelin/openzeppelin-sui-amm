@@ -31,14 +31,6 @@ public struct QuoteUpdated has copy, drop {
     volatility_spread_bps: u64,
 }
 
-/// Emitted when an order placement immediately executes against resting liquidity.
-public struct OrderExecuted has copy, drop {
-    /// DeepBook order identifier.
-    order_id: u128,
-    /// Fill price reported in DeepBook fixed-point format.
-    fill_price: u64,
-}
-
 /// Emit an `AMMConfigCreated` event.
 public(package) fun emit_amm_config_created(config_id: ID) {
     event::emit(AMMConfigCreated { config_id });
@@ -85,15 +77,4 @@ public(package) fun quote_updated(
     volatility_spread_bps: u64,
 ): QuoteUpdated {
     QuoteUpdated { price, base_spread_bps, volatility_spread_bps }
-}
-
-/// Emit an `OrderExecuted` event.
-public(package) fun emit_order_executed(order_id: u128, fill_price: u64) {
-    event::emit(OrderExecuted { order_id, fill_price });
-}
-
-/// Builds an `OrderExecuted` payload.
-#[test_only]
-public(package) fun order_executed(order_id: u128, fill_price: u64): OrderExecuted {
-    OrderExecuted { order_id, fill_price }
 }

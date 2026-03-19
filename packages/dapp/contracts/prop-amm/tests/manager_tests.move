@@ -246,7 +246,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     abort
 }
 
-#[test, expected_failure(abort_code = manager::EBaseSpreadBpsExceedsMaxBasisPoints)]
+#[test, expected_failure(abort_code = manager::EBaseSpreadBpsExceedsVolatilitySpread)]
 fun create_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     let sender = @0x13;
     let mut scenario = test_scenario::begin(sender);
@@ -270,7 +270,7 @@ fun create_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     abort
 }
 
-#[test, expected_failure(abort_code = manager::EBaseSpreadBpsExceedsMaxBasisPoints)]
+#[test, expected_failure(abort_code = manager::EBaseSpreadBpsExceedsVolatilitySpread)]
 fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     let sender = @0x14;
     let mut scenario = test_scenario::begin(sender);
