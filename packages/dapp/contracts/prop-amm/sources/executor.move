@@ -292,7 +292,7 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
     ctx: &TxContext,
 ) {
     // Don't place an order if quantity is zero.
-    if (quantity == 0){
+    if (quantity == 0) {
         return
     };
 
