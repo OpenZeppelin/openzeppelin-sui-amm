@@ -22,17 +22,18 @@ use sui::coin::Coin;
 // === Constants ===
 
 const ORDER_EXPIRATION_TIME_MS: u64 = 30_000;
+const MAX_PRICE_AGE_SECS: u64 = 30;
 
 // === Errors ===
 
 #[error(code = 0)]
 const ETradingPaused: vector<u8> = b"trading is paused";
 #[error(code = 1)]
-const EInvalidPythPriceSign: vector<u8> = b"pyth price must be positive";
+const EPythPriceNonPositive: vector<u8> = b"pyth price must be positive";
 #[error(code = 2)]
-const EInvalidPythPriceExponent: vector<u8> = b"pyth price exponent must be negative";
+const EPythInvalidPriceExponent: vector<u8> = b"pyth price exponent must be negative";
 #[error(code = 3)]
-const EInvalidPythPriceValue: vector<u8> = b"pyth price must be positive after scaling";
+const EPythInvalidPriceValue: vector<u8> = b"pyth price must be positive after scaling";
 
 // === Structs ===
 
@@ -155,7 +156,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     assert!(!config.trading_paused(), ETradingPaused);
 
     // Calculate base and volatility spread values.
-    let oracle_mid_price = pyth_price_to_deepbook_price(price_info_object);
+    let oracle_mid_price = pyth_price_to_deepbook_price(price_info_object, clock);
     let base_spread = config.base_spread(oracle_mid_price);
     let volatility_spread = config.volatility_spread(oracle_mid_price);
 
@@ -313,29 +314,26 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
     );
 }
 
-fun pyth_price_to_deepbook_price(price_info_object: &PriceInfoObject): u64 {
-    // TODO#q: use price with expiration?
-    let pyth_price = pyth::get_price_unsafe(price_info_object);
-    let pyth_price_i64 = pyth_price.get_price();
-    assert!(!pyth_price_i64.get_is_negative(), EInvalidPythPriceSign);
+fun pyth_price_to_deepbook_price(price_info_object: &PriceInfoObject, clock: &Clock): u64 {
+    let price = pyth::get_price_no_older_than(
+        price_info_object,
+        clock,
+        MAX_PRICE_AGE_SECS,
+    );
+    let price_i64 = price.get_price();
+    assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
+    let deepbook_price = price_i64.get_magnitude_if_positive();
 
-    let pyth_expo_i64 = pyth_price.get_expo();
-    assert!(pyth_expo_i64.get_is_negative(), EInvalidPythPriceExponent);
+    /* TODO#q: how conversion with deepbook price works?
+    let expo_i64 = price.get_expo();
+    assert!(expo_i64.get_is_negative(), EPythInvalidPriceExponent);
+    let expo = expo_i64.get_magnitude_if_negative();
+     */
 
-    let price_magnitude = pyth_price_i64.get_magnitude_if_positive() as u128;
-    let decimals = pyth_expo_i64.get_magnitude_if_negative();
+    assert!(deepbook_price >= constants::min_price(), EPythInvalidPriceValue);
+    assert!(deepbook_price <= constants::max_price(), EPythInvalidPriceValue);
 
-    // TODO#q: use oz math
-    let scaled_price = if (decimals <= 9) {
-        price_magnitude * 10u128.pow((9 - decimals) as u8)
-    } else {
-        price_magnitude / 10u128.pow((decimals - 9) as u8)
-    };
-
-    assert!(scaled_price > 0, EInvalidPythPriceValue);
-    assert!(scaled_price <= constants::max_price() as u128, EInvalidPythPriceValue);
-
-    scaled_price as u64
+    deepbook_price
 }
 
 // === View helpers ===

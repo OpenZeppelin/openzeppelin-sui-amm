@@ -2,7 +2,6 @@
 #[test_only]
 module openzeppelin_market_maker::executor_tests;
 
-use deepbook::balance_manager;
 use deepbook::registry::{Self, Registry};
 use openzeppelin_market_maker::events::trader_account_created;
 use openzeppelin_market_maker::executor::{Self, TraderAccount};

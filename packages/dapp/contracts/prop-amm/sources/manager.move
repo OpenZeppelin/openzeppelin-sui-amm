@@ -183,7 +183,6 @@ public(package) fun volatility_spread(config: &AMMConfig, mid_price: u64): u64 {
     ((mid_price as u128) * (config.volatility_spread_bps as u128) / HUNDRED_PERCENT_BPS) as u64
 }
 
-// TODO#q: use LASER pricing
 /// Returns whether LASER pricing is enabled.
 public fun use_laser(config: &AMMConfig): bool {
     config.use_laser
@@ -194,7 +193,6 @@ public fun trading_paused(config: &AMMConfig): bool {
     config.trading_paused
 }
 
-// TODO#q: use pyth_price_feed_id
 /// Returns the Pyth price feed ID bytes.
 public fun pyth_price_feed_id(config: &AMMConfig): vector<u8> {
     config.pyth_price_feed_id
