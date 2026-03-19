@@ -22,20 +22,20 @@ use_environment = "test-publish"
 manifest_digest = "4CE7EBF2D294B2073FAC96555A5584741C6DEAA89256AA4FD4FED535D3C79C54"
 deps = { std = "MoveStdlib", sui = "Sui", token = "token" }
 
-[pinned.test-publish.openzeppelin_market_maker]
-source = { root = true }
-use_environment = "test-publish"
-manifest_digest = "73FC0627A29BC5998C0E1FF257AAC08497FBBC9E106A19ADACCE78C6DE118D14"
-deps = { deepbook = "deepbook", pyth = "pyth", std = "MoveStdlib", sui = "Sui" }
-
-[pinned.test-publish.pyth]
+[pinned.test-publish.local_mock_pyth]
 source = { local = "../pyth-mock" }
 use_environment = "test-publish"
 manifest_digest = "2963D6B4689ED068546E86F8453FBCA51DCDF68A1C96D681328D2CDACE14B5CF"
 deps = { std = "MoveStdlib", sui = "Sui" }
 
+[pinned.test-publish.openzeppelin_market_maker]
+source = { root = true }
+use_environment = "test-publish"
+manifest_digest = "2589013F3D7A2F8C95A36DBC01E2FAD0F8371F2AC0D7BFD23347CEA3A1262E48"
+deps = { deepbook = "deepbook", pyth = "local_mock_pyth", std = "MoveStdlib", sui = "Sui" }
+
 [pinned.test-publish.token]
-source = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/token", rev = "b7b65c95bd61e51f3f2cafda83e2224fe8e75e2a" }
+source = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/token", rev = "f1c079d10a992307c5834a1c46f7ccac69734a00" }
 use_environment = "test-publish"
 manifest_digest = "2963D6B4689ED068546E86F8453FBCA51DCDF68A1C96D681328D2CDACE14B5CF"
 deps = { std = "MoveStdlib", sui = "Sui" }

@@ -65,7 +65,11 @@ public(package) fun trader_account_created(trader_account_id: ID): TraderAccount
 }
 
 /// Emit a `QuoteUpdated` event.
-public(package) fun emit_quote_updated(price: u64, base_spread_bps: u64, volatility_spread_bps: u64) {
+public(package) fun emit_quote_updated(
+    price: u64,
+    base_spread_bps: u64,
+    volatility_spread_bps: u64,
+) {
     event::emit(QuoteUpdated { price, base_spread_bps, volatility_spread_bps });
 }
 

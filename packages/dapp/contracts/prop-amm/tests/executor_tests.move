@@ -2,7 +2,7 @@
 #[test_only]
 module openzeppelin_market_maker::executor_tests;
 
-use deepbook::balance_manager::{Self};
+use deepbook::balance_manager;
 use deepbook::registry::{Self, Registry};
 use openzeppelin_market_maker::events::trader_account_created;
 use openzeppelin_market_maker::executor::{Self, TraderAccount};
@@ -174,12 +174,13 @@ fun create_trader_account_and_transfer_supports_multiple_accounts_for_owner() {
 
     let id_a = trader_account_a.trader_account_id();
     let id_b = trader_account_b.trader_account_id();
-    assert!((id_a == trader_account_id_a && id_b == trader_account_id_b)
-        || (id_a == trader_account_id_b && id_b == trader_account_id_a));
+    assert!(
+        (id_a == trader_account_id_a && id_b == trader_account_id_b)
+        || (id_a == trader_account_id_b && id_b == trader_account_id_a),
+    );
 
     test_scenario::return_to_sender(&scenario, trader_account_a);
     test_scenario::return_to_sender(&scenario, trader_account_b);
 
     scenario.end();
 }
-
