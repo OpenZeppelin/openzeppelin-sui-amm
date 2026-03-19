@@ -11,33 +11,7 @@ This repo is a pnpm workspace containing:
 
 - a Move packages,
 - a CLI/script layer for localnet + seeding + amm flows,
-- a Next.js UI,
-
-## Quickstart (localnet)
-
-```bash
-# Clone and install
-git clone git@github.com:OpenZeppelin/openzeppelin-sui-amm.git && cd openzeppelin-sui-amm
-# (pnpm workspace install from the repo root)
-pnpm install
-
-# Initialize submodules (DeepBook)
-git submodule update --init --recursive
-
-# Create or reuse an address (this will be your publisher address) (note the recovery phrase to import it later in your browser wallet)
-sui client new-address ed25519
-
-# Configure this address in Sui config file or export
-export SUI_ACCOUNT_ADDRESS=<0x...>
-export SUI_ACCOUNT_PRIVATE_KEY=<base64 or hex>
-
-# Start localnet (new terminal) (--with-faucet is recommended as some script auto fund address if fund is missing)
-pnpm script chain:localnet:start --with-faucet
-
-# Run the UI
-pnpm ui dev
-
-```
+- a Next.js UI
 
 ## DeepBook submodule
 
@@ -58,4 +32,53 @@ git checkout <commit-or-tag>
 cd ../..
 git add vendor/deepbookv3 .gitmodules
 git commit -m "chore: update deepbook submodule"
+```
+
+## Quickstart (localnet)
+
+```bash
+# Clone and install
+git clone git@github.com:OpenZeppelin/openzeppelin-sui-amm.git && cd openzeppelin-sui-amm
+# (pnpm workspace install from the repo root)
+pnpm install
+
+# Initialize submodules (DeepBook)
+git submodule update --init --recursive
+
+# Create or reuse an address (this will be your publisher address) (note the recovery phrase to import it later in your browser wallet)
+sui client new-address ed25519
+
+# Configure this address in Sui config file or export
+export SUI_ACCOUNT_ADDRESS=<0x...>
+export SUI_ACCOUNT_PRIVATE_KEY=<base64 or hex>
+export SUI_NETWORK=localnet
+
+# Start localnet (new terminal) (--with-faucet is recommended as some script auto fund address if fund is missing)
+pnpm script chain:localnet:start --with-faucet
+
+# Publish mocks and contracts
+pnpm dapp mock:setup 
+pnpm dapp move:publish --packagePath contracts/prop-amm/
+
+# Register mocks
+pnpm dapp mock:register
+
+# Create and register the AMM
+# Note: --deepbook-package-id and --deepbook-registry-id can be found in the output of the previous command.
+
+# Create an amm config
+pnpm dapp owner:amm:create
+
+# Create the packages/ui/.env.local file
+## Copy the sample .env file
+cp packages/ui/.env.example packages/ui/.env.local
+
+## Add required field details - you will find these details in the output of the two last pnpm commands. 
+NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<0x...>
+NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
+NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID=<0x..>
+
+# Run the UI
+pnpm ui dev
+
 ```

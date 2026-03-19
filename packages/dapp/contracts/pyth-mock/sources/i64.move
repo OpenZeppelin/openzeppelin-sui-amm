@@ -1,4 +1,14 @@
-module pyth::i64;
+module local_mock_pyth::i64;
+
+// === Errors ===
+#[error(code = 0)]
+const EMagnitudeTooLarge: vector<u8> = b"Magnitude exceeds maximum allowed value";
+
+#[error(code = 1)]
+const ENotPositive: vector<u8> = b"Expected a positive I64 value";
+
+#[error(code = 2)]
+const ENotNegative: vector<u8> = b"Expected a negative I64 value";
 
 // === Constants ===
 
@@ -24,7 +34,7 @@ public fun new(magnitude: u64, negative: bool): I64 {
     } else {
         MAX_POSITIVE_MAGNITUDE
     };
-    assert!(magnitude <= max_magnitude, 0);
+    assert!(magnitude <= max_magnitude, EMagnitudeTooLarge);
 
     let normalized_negative = if (magnitude == 0) { false } else { negative };
 
@@ -39,12 +49,12 @@ public fun get_is_negative(i: &I64): bool {
 }
 
 public fun get_magnitude_if_positive(input: &I64): u64 {
-    assert!(!input.negative, 0);
+    assert!(!input.negative, ENotPositive);
     input.magnitude
 }
 
 public fun get_magnitude_if_negative(input: &I64): u64 {
-    assert!(input.negative, 0);
+    assert!(input.negative, ENotNegative);
     input.magnitude
 }
 

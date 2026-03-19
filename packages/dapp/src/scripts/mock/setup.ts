@@ -75,7 +75,7 @@ import {
 process.env.SUI_NETWORK = "localnet"
 
 type SetupLocalCliArgs = {
-  buyerAddress?: string
+  traderAddress?: string
   coinPackageId?: string
   coinContractPath: string
   deepbookPackageId?: string
@@ -131,8 +131,8 @@ const normalizeSetupInputs = (
   cliArguments: SetupLocalCliArgs
 ): SetupLocalCliArgs => ({
   ...cliArguments,
-  buyerAddress: cliArguments.buyerAddress
-    ? normalizeSuiAddress(cliArguments.buyerAddress)
+  traderAddress: cliArguments.traderAddress
+    ? normalizeSuiAddress(cliArguments.traderAddress)
     : undefined
 })
 
@@ -230,17 +230,17 @@ runSuiScript(
       .filter((seeded) => seeded.wasCreated)
       .map((seeded) => seeded.coin)
 
-    if (inputs.buyerAddress)
-      await transferQuarterTreasuryToBuyer(
+    if (inputs.traderAddress)
+      await transferQuarterTreasuryToTrader(
         {
           coins: createdCoins,
-          buyerAddress: inputs.buyerAddress,
+          traderAddress: inputs.traderAddress,
           signer: tooling.loadedEd25519KeyPair,
           signerAddress: tooling.loadedEd25519KeyPair.toSuiAddress()
         },
         tooling
       )
-    else logWarning("--buyer-address not supplied skipping fund transfer")
+    else logWarning("--trader-address not supplied skipping fund transfer")
 
     // Ensure mock price feeds exist with fresh timestamps; reuse if valid objects already present.
     const desiredExistingPriceFeeds = filterPriceFeedsToDefaults(
@@ -285,10 +285,10 @@ runSuiScript(
     logKeyValueGreen("Coins")(JSON.stringify(coins))
   },
   yargs()
-    .option("buyerAddress", {
-      alias: ["buyer-address", "buyer"],
+    .option("traderAddress", {
+      alias: ["trader-address", "trader"],
       type: "string",
-      description: "Buyer address to receive quarter of each minted mock coin"
+      description: "Trader address to receive quarter of each minted mock coin"
     })
     .option("coinPackageId", {
       alias: "coin-package-id",
@@ -871,15 +871,15 @@ const ensureCoin = async (
   }
 }
 
-const transferQuarterTreasuryToBuyer = async (
+const transferQuarterTreasuryToTrader = async (
   {
     coins,
-    buyerAddress,
+    traderAddress,
     signer,
     signerAddress
   }: {
     coins: CoinArtifact[]
-    buyerAddress: string
+    traderAddress: string
     signer: Ed25519Keypair
     signerAddress: string
   },
@@ -891,7 +891,7 @@ const transferQuarterTreasuryToBuyer = async (
     await transferQuarterTreasuryForCoin(
       {
         coin,
-        buyerAddress,
+        traderAddress,
         signer,
         signerAddress
       },
@@ -903,12 +903,12 @@ const transferQuarterTreasuryToBuyer = async (
 const transferQuarterTreasuryForCoin = async (
   {
     coin,
-    buyerAddress,
+    traderAddress,
     signer,
     signerAddress
   }: {
     coin: CoinArtifact
-    buyerAddress: string
+    traderAddress: string
     signer: Ed25519Keypair
     signerAddress: string
   },
@@ -923,7 +923,7 @@ const transferQuarterTreasuryForCoin = async (
 
   if (!treasurySnapshot) {
     logWarning(
-      `No coin objects found for ${coin.label} (${coin.coinType}); skipping buyer transfer.`
+      `No coin objects found for ${coin.label} (${coin.coinType}); skipping trader transfer.`
     )
     return
   }
@@ -931,7 +931,7 @@ const transferQuarterTreasuryForCoin = async (
   const transferAmount = calculateQuarterBalance(treasurySnapshot.balance)
   if (transferAmount <= 0n) {
     logWarning(
-      `Balance too small to split for ${coin.label} (${coin.coinType}); skipping buyer transfer.`
+      `Balance too small to split for ${coin.label} (${coin.coinType}); skipping trader transfer.`
     )
     return
   }
@@ -949,7 +949,7 @@ const transferQuarterTreasuryForCoin = async (
   const transferTransaction = buildCoinTransferTransaction({
     coinObjectId: treasurySnapshot.coinObjectId,
     amount: transferAmount,
-    recipientAddress: buyerAddress
+    recipientAddress: traderAddress
   })
 
   const { transactionResult } = await tooling.signAndExecute({
@@ -957,10 +957,10 @@ const transferQuarterTreasuryForCoin = async (
     signer
   })
 
-  logKeyValueGreen("Buyer transfer")(`${coin.label} ${coin.coinType}`)
+  logKeyValueGreen("Trader transfer")(`${coin.label} ${coin.coinType}`)
   logKeyValueGreen("amount")(transferAmount.toString())
   logKeyValueGreen("from")(signerAddress)
-  logKeyValueGreen("to")(buyerAddress)
+  logKeyValueGreen("to")(traderAddress)
   if (transactionResult.digest)
     logKeyValueGreen("digest")(transactionResult.digest)
 }

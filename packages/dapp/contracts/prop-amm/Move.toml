@@ -21,4 +21,4 @@ rev = "sui-contract-testnet"
 pyth = { local = "../pyth-mock", override = true, addr_substitutions = { pyth = "0x2" } }
 
 [environments]
-test-publish = "8051a268"
+test-publish = "33fcc910"

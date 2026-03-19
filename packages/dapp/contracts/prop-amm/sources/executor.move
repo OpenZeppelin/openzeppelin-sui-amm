@@ -295,7 +295,7 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
     if (quantity == 0){
         return
     };
-    
+
     // Place a limit order
     pool.place_limit_order(
         &mut trader_account.balance_manager,
