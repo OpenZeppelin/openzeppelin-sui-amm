@@ -117,7 +117,7 @@ describe("amm-view script", () => {
       })
 
       const scriptRunner = createSuiScriptRunner(context)
-      const result = await scriptRunner.runUserScript("amm-view", {
+      const result = await scriptRunner.runOwnerScript("amm-view", {
         account: publisher,
         args: { json: true }
       })
