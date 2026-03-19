@@ -40,7 +40,7 @@ fun create_trader_account_sets_owner_and_emits_created_event() {
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let deepbook_registry: Registry = scenario.take_shared();
-    let trader_account = executor::create_trader_account(
+    let trader_account = executor::create_trader_account_for_owner(
         &admin_cap,
         &deepbook_registry,
         owner,
@@ -69,7 +69,7 @@ fun create_trader_account_and_transfer_moves_account_to_owner() {
     scenario.next_tx(sender);
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let deepbook_registry: Registry = scenario.take_shared();
-    let trader_account_id = executor::create_trader_account_and_transfer(
+    let trader_account_id = executor::create_trader_account_for_owner_and_transfer(
         &admin_cap,
         &deepbook_registry,
         owner,
@@ -103,13 +103,13 @@ fun create_trader_account_creates_distinct_accounts_for_same_owner() {
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let deepbook_registry: Registry = scenario.take_shared();
 
-    let trader_account_a = executor::create_trader_account(
+    let trader_account_a = executor::create_trader_account_for_owner(
         &admin_cap,
         &deepbook_registry,
         owner,
         scenario.ctx(),
     );
-    let trader_account_b = executor::create_trader_account(
+    let trader_account_b = executor::create_trader_account_for_owner(
         &admin_cap,
         &deepbook_registry,
         owner,
@@ -146,13 +146,13 @@ fun create_trader_account_and_transfer_supports_multiple_accounts_for_owner() {
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let deepbook_registry: Registry = scenario.take_shared();
-    let trader_account_id_a = executor::create_trader_account_and_transfer(
+    let trader_account_id_a = executor::create_trader_account_for_owner_and_transfer(
         &admin_cap,
         &deepbook_registry,
         owner,
         scenario.ctx(),
     );
-    let trader_account_id_b = executor::create_trader_account_and_transfer(
+    let trader_account_id_b = executor::create_trader_account_for_owner_and_transfer(
         &admin_cap,
         &deepbook_registry,
         owner,

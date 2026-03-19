@@ -49,9 +49,6 @@ public struct PropAmmApp has drop {}
 public struct TraderAccount has key, store {
     /// Unique ID for the account object.
     id: UID,
-    // TODO#q: this field is already stored inside BalanceManager (possible to reference balance manager to contract's owner and store the real one)
-    /// Account owner.
-    owner: address,
     /// Deepbook capabilities retained by the owner.
     caps: Caps,
     /// Balance manager linked to the trader account.
@@ -70,11 +67,20 @@ public struct Caps has store {
 
 // === Public Functions ===
 
-/// Creates a trader account.
+/// Creates a trader account for sender.
 public fun create_trader_account(
+    admin_cap: &AMMAdminCap,
+    deepbook_registry: &Registry,
+    ctx: &mut TxContext,
+): TraderAccount {
+    create_trader_account_for_owner(admin_cap, deepbook_registry, ctx.sender(), ctx)
+}
+
+/// Creates a trader account for `owner`.
+public fun create_trader_account_for_owner(
     _: &AMMAdminCap,
     deepbook_registry: &Registry,
-    owner: address, // TODO#q: take owner address from the sender
+    owner: address,
     ctx: &mut TxContext,
 ): TraderAccount {
     let (
@@ -95,7 +101,6 @@ public fun create_trader_account(
     };
     let trader_account = TraderAccount {
         id: object::new(ctx),
-        owner,
         caps,
         balance_manager: balance_manager,
     };
@@ -105,14 +110,14 @@ public fun create_trader_account(
     trader_account
 }
 
-/// Creates a trader account and transfers to owner.
-public fun create_trader_account_and_transfer(
+/// Creates a trader account and transfers to `owner`.
+public fun create_trader_account_for_owner_and_transfer(
     admin_cap: &AMMAdminCap,
     deepbook_registry: &Registry,
     owner: address,
     ctx: &mut TxContext,
 ): ID {
-    let trader_account = create_trader_account(admin_cap, deepbook_registry, owner, ctx);
+    let trader_account = create_trader_account_for_owner(admin_cap, deepbook_registry, owner, ctx);
 
     let trader_account_id = object::id(&trader_account);
     transfer::transfer(trader_account, owner);
@@ -358,7 +363,7 @@ fun deepbook_price(price_info_object: &PriceInfoObject, clock: &Clock): u64 {
 
 /// Returns the trader account owner.
 public fun owner(trader_account: &TraderAccount): address {
-    trader_account.owner
+    trader_account.balance_manager.owner()
 }
 
 /// Returns the trader account object ID.
