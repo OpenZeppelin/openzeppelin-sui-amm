@@ -36,11 +36,19 @@ const MOCK_ASSET_TYPE =
 const MOCK_COIN_OBJECT_TYPE = `${normalizeSuiObjectId(
   "0x2"
 )}::coin::Coin<${MOCK_ASSET_TYPE}>`
+const TRADER_ACCOUNT_OVERVIEW = {
+  traderAccountId: "0x111",
+  ownerAddress: "0xabc",
+  balanceManagerId: "0x222",
+  balanceManagerBalancesBagId: "0xbag",
+  tradeCapId: "0xtrade",
+  depositCapId: "0xdeposit",
+  withdrawCapId: "0xwithdraw"
+}
 
 const createTooling = (): FundingTooling =>
   ({
     executeTransactionWithSummary: vi.fn(),
-    getMutableSharedObject: vi.fn(),
     loadedEd25519KeyPair: { toSuiAddress: () => "0xabc" },
     resolveCoinOwnership: vi.fn(),
     suiClient: {
@@ -76,26 +84,16 @@ describe("fundExistingTraderAccount", () => {
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
     )
-    const getMutableSharedObject = vi.mocked(tooling.getMutableSharedObject)
     const resolveCoinOwnership = vi.mocked(tooling.resolveCoinOwnership)
 
     traderAccountMocks.resolveOwnedTraderAccountId.mockResolvedValue("0x111")
-    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue({
-      traderAccountId: "0x111",
-      ownerAddress: "0xabc",
-      balanceManagerId: "0x222"
-    })
+    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue(
+      TRADER_ACCOUNT_OVERVIEW
+    )
     resolveCoinOwnership.mockResolvedValue({
       coinType: MOCK_COIN_OBJECT_TYPE,
       ownerAddress: normalizeSuiObjectId("0xabc")
     })
-    getMutableSharedObject.mockResolvedValue({
-      sharedRef: {
-        objectId: "0x222",
-        initialSharedVersion: "1",
-        mutable: true
-      }
-    } as never)
     executeTransactionWithSummary.mockResolvedValue({
       summary: { label: "fund-trader-account" } as never
     })
@@ -103,6 +101,7 @@ describe("fundExistingTraderAccount", () => {
     const result = await fundExistingTraderAccount({
       tooling,
       ammPackageId: "0x555",
+      ammAdminCapId: "0x999",
       coinObjectId: "0x333",
       amount: "25"
     })
@@ -124,7 +123,7 @@ describe("fundExistingTraderAccount", () => {
     expect(fundingTransaction.getData().commands).toHaveLength(2)
     expect(fundingMoveCall).toMatchObject({
       module: "executor",
-      function: "fund_trader_account",
+      function: "deposit",
       typeArguments: [MOCK_ASSET_TYPE]
     })
   })
@@ -134,11 +133,9 @@ describe("fundExistingTraderAccount", () => {
     const resolveCoinOwnership = vi.mocked(tooling.resolveCoinOwnership)
 
     traderAccountMocks.resolveOwnedTraderAccountId.mockResolvedValue("0x111")
-    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue({
-      traderAccountId: "0x111",
-      ownerAddress: "0xabc",
-      balanceManagerId: "0x222"
-    })
+    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue(
+      TRADER_ACCOUNT_OVERVIEW
+    )
     resolveCoinOwnership.mockResolvedValue({
       coinType: MOCK_COIN_OBJECT_TYPE,
       ownerAddress: "0xdef"
@@ -148,6 +145,7 @@ describe("fundExistingTraderAccount", () => {
       fundExistingTraderAccount({
         tooling,
         ammPackageId: "0x555",
+        ammAdminCapId: "0x999",
         coinObjectId: "0x333",
         amount: "25"
       })
@@ -162,25 +160,15 @@ describe("fundExistingTraderAccount", () => {
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
     )
-    const getMutableSharedObject = vi.mocked(tooling.getMutableSharedObject)
 
     traderAccountMocks.resolveOwnedTraderAccountId.mockResolvedValue("0x111")
-    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue({
-      traderAccountId: "0x111",
-      ownerAddress: "0xabc",
-      balanceManagerId: "0x222"
-    })
+    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue(
+      TRADER_ACCOUNT_OVERVIEW
+    )
     resolveCoinOwnership.mockResolvedValue({
       coinType: NORMALIZED_SUI_COIN_OBJECT_TYPE,
       ownerAddress: normalizeSuiObjectId("0xabc")
     })
-    getMutableSharedObject.mockResolvedValue({
-      sharedRef: {
-        objectId: "0x222",
-        initialSharedVersion: "1",
-        mutable: true
-      }
-    } as never)
     coinPlanningMocks.planSuiPaymentSplitTransaction.mockResolvedValue({
       needsSplit: true,
       paymentCoinObjectId: normalizeSuiObjectId("0x333"),
@@ -190,6 +178,7 @@ describe("fundExistingTraderAccount", () => {
     const result = await fundExistingTraderAccount({
       tooling,
       ammPackageId: "0x555",
+      ammAdminCapId: "0x999",
       coinObjectId: "0x333",
       amount: "25",
       dryRun: true
@@ -210,25 +199,15 @@ describe("fundExistingTraderAccount", () => {
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
     )
-    const getMutableSharedObject = vi.mocked(tooling.getMutableSharedObject)
 
     traderAccountMocks.resolveOwnedTraderAccountId.mockResolvedValue("0x111")
-    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue({
-      traderAccountId: "0x111",
-      ownerAddress: "0xabc",
-      balanceManagerId: "0x222"
-    })
+    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue(
+      TRADER_ACCOUNT_OVERVIEW
+    )
     resolveCoinOwnership.mockResolvedValue({
       coinType: NORMALIZED_SUI_COIN_OBJECT_TYPE,
       ownerAddress: normalizeSuiObjectId("0xabc")
     })
-    getMutableSharedObject.mockResolvedValue({
-      sharedRef: {
-        objectId: "0x222",
-        initialSharedVersion: "1",
-        mutable: true
-      }
-    } as never)
     coinPlanningMocks.planSuiPaymentSplitTransaction.mockResolvedValue({
       needsSplit: true,
       paymentCoinObjectId: normalizeSuiObjectId("0x333"),
@@ -257,6 +236,7 @@ describe("fundExistingTraderAccount", () => {
     const result = await fundExistingTraderAccount({
       tooling,
       ammPackageId: "0x555",
+      ammAdminCapId: "0x999",
       coinObjectId: "0x333",
       amount: "25"
     })
@@ -272,7 +252,7 @@ describe("fundExistingTraderAccount", () => {
 
     expect(fundingMoveCall).toMatchObject({
       module: "executor",
-      function: "fund_trader_account",
+      function: "deposit",
       typeArguments: [NORMALIZED_SUI_COIN_TYPE]
     })
     expect(fundingTransaction.getData().gasData.payment).toEqual([

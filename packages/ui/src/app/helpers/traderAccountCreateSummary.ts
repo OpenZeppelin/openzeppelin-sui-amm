@@ -1,14 +1,7 @@
 import type { SuiTransactionBlockResponse } from "@mysten/sui/client"
+import type { TraderAccountOverview } from "@sui-amm/domain-core/models/traderAccount"
 import { TRADER_ACCOUNT_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
-import {
-  ensureCreatedObject,
-  findCreatedObjectIds
-} from "@sui-amm/tooling-core/transactions"
-
-const BALANCE_MANAGER_TYPE_SUFFIX = "::balance_manager::BalanceManager"
-const TRADE_CAP_TYPE_SUFFIX = "::balance_manager::TradeCap"
-const DEPOSIT_CAP_TYPE_SUFFIX = "::balance_manager::DepositCap"
-const WITHDRAW_CAP_TYPE_SUFFIX = "::balance_manager::WithdrawCap"
+import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
 
 export type TraderAccountCreateSummary = {
   digest: string
@@ -25,38 +18,42 @@ const resolveCreatedTraderAccountId = (
   transactionBlock: SuiTransactionBlockResponse
 ) => ensureCreatedObject(TRADER_ACCOUNT_TYPE_SUFFIX, transactionBlock).objectId
 
-const resolveOptionalCreatedObjectId = (
-  transactionBlock: SuiTransactionBlockResponse,
-  typeSuffix: string
-) => findCreatedObjectIds(transactionBlock, typeSuffix)[0]
+const resolveTraderAccountId = ({
+  transactionBlock,
+  traderAccountOverview,
+  fallbackTraderAccountId
+}: {
+  transactionBlock: SuiTransactionBlockResponse
+  traderAccountOverview?: TraderAccountOverview
+  fallbackTraderAccountId?: string
+}) =>
+  traderAccountOverview?.traderAccountId ??
+  fallbackTraderAccountId ??
+  resolveCreatedTraderAccountId(transactionBlock)
 
 export const buildTraderAccountCreateSummary = ({
   digest,
   transactionBlock,
-  ownerAddress
+  ownerAddress,
+  traderAccountOverview,
+  fallbackTraderAccountId
 }: {
   digest: string
   transactionBlock: SuiTransactionBlockResponse
   ownerAddress: string
+  traderAccountOverview?: TraderAccountOverview
+  fallbackTraderAccountId?: string
 }): TraderAccountCreateSummary => ({
   digest,
   transactionBlock,
   ownerAddress,
-  traderAccountId: resolveCreatedTraderAccountId(transactionBlock),
-  balanceManagerId: resolveOptionalCreatedObjectId(
+  traderAccountId: resolveTraderAccountId({
     transactionBlock,
-    BALANCE_MANAGER_TYPE_SUFFIX
-  ),
-  tradeCapId: resolveOptionalCreatedObjectId(
-    transactionBlock,
-    TRADE_CAP_TYPE_SUFFIX
-  ),
-  depositCapId: resolveOptionalCreatedObjectId(
-    transactionBlock,
-    DEPOSIT_CAP_TYPE_SUFFIX
-  ),
-  withdrawCapId: resolveOptionalCreatedObjectId(
-    transactionBlock,
-    WITHDRAW_CAP_TYPE_SUFFIX
-  )
+    traderAccountOverview,
+    fallbackTraderAccountId
+  }),
+  balanceManagerId: traderAccountOverview?.balanceManagerId,
+  tradeCapId: traderAccountOverview?.tradeCapId,
+  depositCapId: traderAccountOverview?.depositCapId,
+  withdrawCapId: traderAccountOverview?.withdrawCapId
 })

@@ -24,6 +24,7 @@ import {
   parseJsonFromScriptOutput
 } from "@sui-amm/tooling-node/testing/scripts"
 import { ensureCreatedObject } from "@sui-amm/tooling-node/transactions"
+import { resolveAmmAdminCapIdFromPublishDigest } from "../../../utils/amm.ts"
 import {
   resolveDeepbookPublishObjectsFromDigest,
   type DeepbookPublishObjects
@@ -32,6 +33,7 @@ import type { FundTraderAccountResultView } from "../../../utils/trader-account-
 
 type FundTraderAccountScriptOutput = FundTraderAccountResultView & {
   ammPackageId: string
+  ammAdminCapId: string
 }
 
 const resolveMutableDeepbookRegistry = async ({
@@ -122,11 +124,13 @@ const createAndRegisterTraderAccount = async ({
   context,
   account,
   ammPackageId,
+  ammAdminCapId,
   deepbookRegistryId
 }: {
   context: TestContext
   account: TestAccount
   ammPackageId: string
+  ammAdminCapId: string
   deepbookRegistryId: string
 }): Promise<TraderAccountOverview> => {
   const immutableDeepbookRegistry = await getSuiSharedObject(
@@ -140,7 +144,8 @@ const createAndRegisterTraderAccount = async ({
   const createTraderAccountTransaction = buildCreateTraderAccountTransaction({
     ammPackageId,
     deepbookRegistry: immutableDeepbookRegistry,
-    ownerAddress: account.address
+    ownerAddress: account.address,
+    ammAdminCapId
   })
 
   const createTraderAccountResult =
@@ -163,13 +168,6 @@ const createAndRegisterTraderAccount = async ({
     )
   }
 
-  const balanceManager = await getSuiSharedObject(
-    {
-      objectId: traderAccount.balanceManagerId,
-      mutable: false
-    },
-    { suiClient: context.suiClient }
-  )
   const mutableDeepbookRegistry = await resolveMutableDeepbookRegistry({
     context,
     deepbookRegistryId
@@ -179,8 +177,8 @@ const createAndRegisterTraderAccount = async ({
     buildRegisterBalanceManagerTransaction({
       ammPackageId,
       traderAccountId,
-      balanceManager,
-      deepbookRegistry: mutableDeepbookRegistry
+      deepbookRegistry: mutableDeepbookRegistry,
+      ammAdminCapId
     })
 
   await context.signAndExecuteTransactionAndWait(
@@ -291,6 +289,10 @@ describe("trader-account-fund script", () => {
           publishDigest: rootPublishArtifact.digest,
           suiClient: context.suiClient
         })
+        const ammAdminCapId = await resolveAmmAdminCapIdFromPublishDigest({
+          publishDigest: rootPublishArtifact.digest,
+          suiClient: context.suiClient
+        })
 
         await authorizePropAmmInDeepbook({
           context,
@@ -308,6 +310,7 @@ describe("trader-account-fund script", () => {
           context,
           account: trader,
           ammPackageId: rootPublishArtifact.packageId,
+          ammAdminCapId,
           deepbookRegistryId: deepbook.deepbookRegistryId
         })
         const fundingCoin = await resolveOwnedFundingCoin({
@@ -319,15 +322,19 @@ describe("trader-account-fund script", () => {
         expect(fundingCoin.balance > fundingAmount).toBe(true)
 
         const scriptRunner = createSuiScriptRunner(context)
-        const result = await scriptRunner.runUserScript("trader-account-fund", {
-          account: trader,
-          args: {
-            ammPackageId: rootPublishArtifact.packageId,
-            coinObjectId: fundingCoin.coinObjectId,
-            amount: fundingAmount.toString(),
-            json: true
+        const result = await scriptRunner.runOwnerScript(
+          "trader-account-fund",
+          {
+            account: trader,
+            args: {
+              ammPackageId: rootPublishArtifact.packageId,
+              ammAdminCapId,
+              coinObjectId: fundingCoin.coinObjectId,
+              amount: fundingAmount.toString(),
+              json: true
+            }
           }
-        })
+        )
 
         expect(result.exitCode).toBe(0)
 
@@ -338,6 +345,7 @@ describe("trader-account-fund script", () => {
 
         expect(parsed.status).toBe("funded")
         expect(parsed.ammPackageId).toBe(rootPublishArtifact.packageId)
+        expect(parsed.ammAdminCapId).toBe(ammAdminCapId)
         expect(parsed.traderAccount.traderAccountId).toBe(
           traderAccount.traderAccountId
         )

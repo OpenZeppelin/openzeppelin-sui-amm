@@ -18,18 +18,15 @@ import {
 } from "@sui-amm/domain-core/ptb/deepbook"
 import { resolveAmmPackageId } from "@sui-amm/domain-node/amm"
 import { assertLocalnetNetwork } from "@sui-amm/tooling-core/network"
-import {
-  resolveOwnerAddress,
-  resolveSignerAddress
-} from "@sui-amm/tooling-node/account"
+import { resolveSignerAddress } from "@sui-amm/tooling-node/account"
 import { readArtifact } from "@sui-amm/tooling-node/artifacts"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { logWarning } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
 import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
+import { resolveAmmAdminCapIdForSigner } from "../../utils/amm.ts"
 import {
-  assertOwnerMatchesSigner,
   logRegistrationResult,
   toRegistrationResultView
 } from "../../utils/deepbook-registration-script.ts"
@@ -43,11 +40,10 @@ import { toTransactionSummaryView } from "../../utils/transaction-summary.ts"
 
 type RegisterLocalnetCliArgs = {
   ammPackageId?: string
+  ammAdminCapId?: string
   deepbookPackageId?: string
   deepbookRegistryId?: string
   deepbookAdminCapId?: string
-  ownerAddress?: string
-  traderAccountId?: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
@@ -210,15 +206,17 @@ runSuiScript(
       signer: tooling.loadedEd25519KeyPair
     })
 
-    const ownerAddress = await resolveOwnerAddress(
-      cliArguments.ownerAddress,
-      tooling.suiConfig.network
-    )
-    assertOwnerMatchesSigner({ ownerAddress, signerAddress })
+    const ownerAddress = signerAddress
 
     const ammPackageId = await resolveAmmPackageId({
       networkName: tooling.network.networkName,
       ammPackageId: cliArguments.ammPackageId
+    })
+    const ammAdminCapId = await resolveAmmAdminCapIdForSigner({
+      tooling,
+      ammPackageId,
+      signerAddress,
+      ammAdminCapId: cliArguments.ammAdminCapId
     })
     const deepbookArtifacts = await resolveDeepbookArtifacts(cliArguments)
 
@@ -238,7 +236,7 @@ runSuiScript(
         ammPackageId,
         deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
         ownerAddress,
-        traderAccountId: cliArguments.traderAccountId,
+        ammAdminCapId,
         devInspect: cliArguments.devInspect,
         dryRun: cliArguments.dryRun
       })
@@ -250,6 +248,7 @@ runSuiScript(
         {
           ownerAddress,
           ammPackageId,
+          ammAdminCapId,
           deepbookPackageId: deepbookArtifacts.deepbookPackageId,
           deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
           deepbookAdminCapId: deepbookArtifacts.deepbookAdminCapId,
@@ -274,6 +273,12 @@ runSuiScript(
     })
   },
   withCommonRegistrationOptions(withAmmPackageIdOption(yargs()))
+    .option("ammAdminCapId", {
+      alias: ["amm-admin-cap-id", "admin-cap-id"],
+      type: "string",
+      description:
+        "AMM admin cap id; defaults to the signer-owned admin cap for the selected package when omitted."
+    })
     .option("deepbookPackageId", {
       alias: ["deepbook-package-id"],
       type: "string",

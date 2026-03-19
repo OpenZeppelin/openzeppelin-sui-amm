@@ -1,12 +1,11 @@
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
-import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import {
   resolveSplitCoinResult,
   newTransaction
 } from "@sui-amm/tooling-core/transactions"
 import { parsePositiveU64 } from "@sui-amm/tooling-core/utils/utility"
-import { fundTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
+import { depositTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import {
   DEFAULT_TX_GAS_BUDGET,
@@ -145,7 +144,7 @@ const resolveDistinctSuiGasPaymentReference = async ({
 const buildFundTraderAccountTransaction = ({
   ammPackageId,
   traderAccountId,
-  balanceManager,
+  ammAdminCapId,
   fundingCoinObjectId,
   fundingAmount,
   coinAssetType,
@@ -154,7 +153,7 @@ const buildFundTraderAccountTransaction = ({
 }: {
   ammPackageId: string
   traderAccountId: string
-  balanceManager: WrappedSuiSharedObject
+  ammAdminCapId: string
   fundingCoinObjectId: string
   fundingAmount: bigint
   coinAssetType: string
@@ -168,11 +167,11 @@ const buildFundTraderAccountTransaction = ({
   ])
   const fundingCoinArgument = resolveSplitCoinResult(splitFundingCoinResult, 0)
 
-  fundTraderAccount({
+  depositTraderAccount({
     transaction,
     ammPackageId,
     traderAccountId,
-    balanceManager,
+    ammAdminCapId,
     fundingCoin: fundingCoinArgument,
     coinAssetType
   })
@@ -314,7 +313,7 @@ export const toFundTraderAccountResultView = (
 export const fundExistingTraderAccount = async ({
   tooling,
   ammPackageId,
-  traderAccountId,
+  ammAdminCapId,
   coinObjectId,
   amount,
   devInspect,
@@ -323,14 +322,13 @@ export const fundExistingTraderAccount = async ({
   tooling: Pick<
     Tooling,
     | "executeTransactionWithSummary"
-    | "getMutableSharedObject"
     | "loadedEd25519KeyPair"
     | "resolveCoinOwnership"
     | "suiClient"
     | "suiConfig"
   >
   ammPackageId: string
-  traderAccountId?: string
+  ammAdminCapId: string
   coinObjectId: string
   amount: string
   devInspect?: boolean
@@ -341,14 +339,13 @@ export const fundExistingTraderAccount = async ({
   const normalizedCoinObjectId = normalizeSuiObjectId(coinObjectId)
   const resolvedTraderAccountId = await resolveOwnedTraderAccountId({
     tooling,
-    traderAccountId,
     ownerAddress: signerAddress,
     ammPackageId
   })
 
   if (!resolvedTraderAccountId) {
     throw new Error(
-      "No owned trader account was found for the active signer. Create one or provide --trader-account-id."
+      "No owned trader account was found for the active signer. Create one first."
     )
   }
 
@@ -367,10 +364,6 @@ export const fundExistingTraderAccount = async ({
     coinObjectId: normalizedCoinObjectId,
     signerAddress,
     coinOwnerAddress: coinOwnership.ownerAddress
-  })
-
-  const balanceManager = await tooling.getMutableSharedObject({
-    objectId: traderAccount.balanceManagerId
   })
 
   let prepareSuiGasSummary: TransactionSummary | undefined
@@ -406,7 +399,7 @@ export const fundExistingTraderAccount = async ({
   const fundTraderAccountTransaction = buildFundTraderAccountTransaction({
     ammPackageId,
     traderAccountId: traderAccount.traderAccountId,
-    balanceManager,
+    ammAdminCapId,
     fundingCoinObjectId: normalizedCoinObjectId,
     fundingAmount,
     coinAssetType: resolveCoinAssetType(coinOwnership.coinType),

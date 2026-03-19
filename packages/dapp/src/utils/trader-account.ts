@@ -121,7 +121,7 @@ export const resolveOwnedTraderAccountId = async ({
 
   if (ownedTraderAccountIds.length > 1)
     throw new Error(
-      `Multiple owned trader accounts were found for the active owner (${ownedTraderAccountIds.length}). Provide --trader-account-id to choose one explicitly.`
+      `Multiple owned trader accounts were found for the active owner (${ownedTraderAccountIds.length}). This flow requires a single trader account.`
     )
 
   const ownedTraderAccountId = ownedTraderAccountIds[0]

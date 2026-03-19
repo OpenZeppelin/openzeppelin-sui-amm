@@ -24,7 +24,14 @@ const emptyResolutionState = (): TraderAccountIdResolutionState => ({
   status: "idle"
 })
 
-const pickTraderAccountId = (traderAccountIds: string[]) => traderAccountIds[0]
+const resolveSingleTraderAccountId = (traderAccountIds: string[]) => {
+  if (traderAccountIds.length === 0) return undefined
+  if (traderAccountIds.length === 1) return traderAccountIds[0]
+
+  throw new Error(
+    `Multiple trader accounts were found for this wallet (${traderAccountIds.length}). This app expects exactly one trader account.`
+  )
+}
 
 const resolveUnexpectedErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Unable to resolve trader account."
@@ -67,7 +74,7 @@ const useResolvedTraderAccountId = (
         })
         if (!active) return
 
-        const traderAccountId = pickTraderAccountId(traderAccountIds)
+        const traderAccountId = resolveSingleTraderAccountId(traderAccountIds)
         if (!traderAccountId) {
           setState({ status: "not-found" })
           return

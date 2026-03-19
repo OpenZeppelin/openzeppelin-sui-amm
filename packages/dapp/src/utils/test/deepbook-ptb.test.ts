@@ -1,8 +1,7 @@
 import { Transaction } from "@mysten/sui/transactions"
 import { describe, expect, it } from "vitest"
 
-import { fundTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
-import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
+import { depositTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
 
 const expectMoveCall = (
   command: ReturnType<Transaction["getData"]>["commands"][number]
@@ -16,27 +15,15 @@ const expectMoveCall = (
 }
 
 describe("deepbook PTB builders", () => {
-  it("builds fund_trader_account against the executor module", () => {
+  it("builds deposit against the executor module", () => {
     const transaction = new Transaction()
-    const balanceManager = {
-      object: {
-        objectId: "0xb0",
-        version: "7",
-        digest: "digest"
-      },
-      sharedRef: {
-        objectId: "0xb0",
-        initialSharedVersion: "5",
-        mutable: true
-      }
-    } as WrappedSuiSharedObject
     const fundingCoin = transaction.object("0xc01")
 
-    fundTraderAccount({
+    depositTraderAccount({
       transaction,
       ammPackageId: "0x123",
       traderAccountId: "0xa11",
-      balanceManager,
+      ammAdminCapId: "0xa22",
       fundingCoin,
       coinAssetType:
         "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI"
@@ -50,7 +37,7 @@ describe("deepbook PTB builders", () => {
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
       module: "executor",
-      function: "fund_trader_account",
+      function: "deposit",
       typeArguments: [
         "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI"
       ]

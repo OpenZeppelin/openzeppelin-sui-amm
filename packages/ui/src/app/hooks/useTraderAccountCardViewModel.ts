@@ -148,7 +148,7 @@ const useTraderAccountCardViewModel = (): TTraderAccountCardState => {
     refreshVersion
   } = useTraderAccountContext()
   const traderAccountBalances = useTraderAccountAssetBalances(
-    overview.traderAccount?.balanceManagerId,
+    overview.traderAccount?.balanceManagerBalancesBagId,
     refreshVersion
   )
   const traderAccountId = traderAccountResolution.traderAccountId

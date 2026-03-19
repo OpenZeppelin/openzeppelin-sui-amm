@@ -23,6 +23,7 @@ export type TraderAccountOverview = {
   traderAccountId: string
   ownerAddress: string
   balanceManagerId: string
+  balanceManagerBalancesBagId: string
   tradeCapId: string
   depositCapId: string
   withdrawCapId: string
@@ -52,15 +53,15 @@ type AssetBalanceCandidate =
 
 type TraderAccountFields = {
   owner?: unknown
-  balance_manager_id?: unknown
-  cap_ids?: unknown
+  balance_manager?: unknown
+  caps?: unknown
   active_orders?: unknown
 }
 
 type TraderAccountCapFields = {
-  trade_cap_id?: unknown
-  deposit_cap_id?: unknown
-  withdraw_cap_id?: unknown
+  trade_cap?: unknown
+  deposit_cap?: unknown
+  withdraw_cap?: unknown
 }
 
 type BalanceManagerFields = {
@@ -86,17 +87,17 @@ const resolveCapId = (value: unknown, label: string) => {
   return normalized
 }
 
-const resolveCapIds = (capIdsValue: unknown) => {
-  const capIdsFields = unwrapMoveFields(capIdsValue)
+const resolveCapIds = (capsValue: unknown) => {
+  const capIdsFields = unwrapMoveFields(capsValue)
   if (!capIdsFields) {
     throw new Error("Trader account cap IDs are required.")
   }
 
   const capIds = capIdsFields as TraderAccountCapFields
   return {
-    tradeCapId: resolveCapId(capIds.trade_cap_id, "Trade cap id"),
-    depositCapId: resolveCapId(capIds.deposit_cap_id, "Deposit cap id"),
-    withdrawCapId: resolveCapId(capIds.withdraw_cap_id, "Withdraw cap id")
+    tradeCapId: resolveCapId(capIds.trade_cap, "Trade cap id"),
+    depositCapId: resolveCapId(capIds.deposit_cap, "Deposit cap id"),
+    withdrawCapId: resolveCapId(capIds.withdraw_cap, "Withdraw cap id")
   }
 }
 
@@ -128,6 +129,17 @@ const extractGenericTypeArgument = (
 const resolveBalanceManagerBagId = (balanceManagerObject: SuiObjectData) => {
   const fields =
     unwrapMoveObjectFields<BalanceManagerFields>(balanceManagerObject)
+  return requireIdField(fields.balances, "Balance manager balances bag id")
+}
+
+const resolveBalanceManagerBagIdFromValue = (balanceManagerValue: unknown) => {
+  const fields = unwrapMoveFields(balanceManagerValue) as
+    | BalanceManagerFields
+    | undefined
+  if (!fields) {
+    throw new Error("Balance manager fields are required.")
+  }
+
   return requireIdField(fields.balances, "Balance manager balances bag id")
 }
 
@@ -268,15 +280,15 @@ const buildTraderAccountOverviewFromObject = ({
   object: SuiObjectData
 }): TraderAccountOverview => {
   const fields = unwrapMoveObjectFields<TraderAccountFields>(object)
-  const capIds = resolveCapIds(fields.cap_ids)
+  const balanceManagerValue = fields.balance_manager
+  const capIds = resolveCapIds(fields.caps)
 
   return {
     traderAccountId: normalizeSuiObjectId(traderAccountId),
     ownerAddress: requireAddressField(fields.owner, "Trader account owner"),
-    balanceManagerId: requireIdField(
-      fields.balance_manager_id,
-      "Balance manager id"
-    ),
+    balanceManagerId: requireIdField(balanceManagerValue, "Balance manager id"),
+    balanceManagerBalancesBagId:
+      resolveBalanceManagerBagIdFromValue(balanceManagerValue),
     tradeCapId: capIds.tradeCapId,
     depositCapId: capIds.depositCapId,
     withdrawCapId: capIds.withdrawCapId,
@@ -302,22 +314,16 @@ export const getTraderAccountOverview = async (
   })
 }
 
-export const getBalanceManagerAssetBalances = async (
-  balanceManagerId: string,
+const resolveAssetBalancesFromBagId = async ({
+  balanceManagerBalancesBagId,
+  suiClient
+}: {
+  balanceManagerBalancesBagId: string
   suiClient: SuiClient
-): Promise<TraderAccountAssetBalance[]> => {
-  const { object: balanceManagerObject } = await getSuiObject(
-    {
-      objectId: balanceManagerId,
-      options: { showContent: true, showType: true }
-    },
-    { suiClient }
-  )
-
-  const balancesBagId = resolveBalanceManagerBagId(balanceManagerObject)
+}): Promise<TraderAccountAssetBalance[]> => {
   const dynamicFields = await getAllDynamicFields(
     {
-      parentObjectId: balancesBagId
+      parentObjectId: balanceManagerBalancesBagId
     },
     { suiClient }
   )
@@ -361,6 +367,34 @@ export const getBalanceManagerAssetBalances = async (
     )
   )
 }
+
+export const getBalanceManagerAssetBalances = async (
+  balanceManagerId: string,
+  suiClient: SuiClient
+): Promise<TraderAccountAssetBalance[]> => {
+  const { object: balanceManagerObject } = await getSuiObject(
+    {
+      objectId: balanceManagerId,
+      options: { showContent: true, showType: true }
+    },
+    { suiClient }
+  )
+
+  const balancesBagId = resolveBalanceManagerBagId(balanceManagerObject)
+  return resolveAssetBalancesFromBagId({
+    balanceManagerBalancesBagId: balancesBagId,
+    suiClient
+  })
+}
+
+export const getBalanceManagerAssetBalancesByBagId = async (
+  balanceManagerBalancesBagId: string,
+  suiClient: SuiClient
+): Promise<TraderAccountAssetBalance[]> =>
+  resolveAssetBalancesFromBagId({
+    balanceManagerBalancesBagId,
+    suiClient
+  })
 
 export const findOwnedTraderAccountIds = async ({
   ownerAddress,

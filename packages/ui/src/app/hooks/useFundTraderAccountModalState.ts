@@ -11,14 +11,13 @@ import {
 import type { SuiClient, SuiTransactionBlockResponse } from "@mysten/sui/client"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { Transaction, TransactionArgument } from "@mysten/sui/transactions"
-import { fundTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
+import { depositTraderAccount } from "@sui-amm/domain-core/ptb/deepbook"
 import {
   getCoinBalances,
   type CoinBalanceSummary
 } from "@sui-amm/tooling-core/address"
 import { selectRichestCoin } from "@sui-amm/tooling-core/coin"
 import { DEFAULT_TX_GAS_BUDGET } from "@sui-amm/tooling-core/constants"
-import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import {
   newTransaction,
   resolveSplitCoinResult
@@ -28,6 +27,7 @@ import { parseTypeNameFromString } from "@sui-amm/tooling-core/utils/type-name"
 import { parsePositiveU64 } from "@sui-amm/tooling-core/utils/utility"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { resolveValidationMessage } from "../helpers/inputValidation"
+import { resolveRequiredAmmAdminCapId } from "../helpers/ammAdminCap"
 import { getLocalnetClient, makeLocalnetExecutor } from "../helpers/localnet"
 import { transactionUrl } from "../helpers/network"
 import { notification } from "../helpers/notification"
@@ -704,13 +704,11 @@ export const useFundTraderAccountModalState = ({
     try {
       const normalizedCoinType = formState.coinType.trim()
       const fundingAmount = resolveFundingAmount(formState.amount)
-      const balanceManager = await getSuiSharedObject(
-        {
-          objectId: balanceManagerId,
-          mutable: true
-        },
-        { suiClient }
-      )
+      const ammAdminCapId = await resolveRequiredAmmAdminCapId({
+        ownerAddress: walletAddress,
+        packageId: ammPackageId,
+        suiClient
+      })
       const transaction = newTransaction()
       const fundingCoin = await resolveFundingCoinArgument({
         transaction,
@@ -720,11 +718,11 @@ export const useFundTraderAccountModalState = ({
         suiClient
       })
 
-      fundTraderAccount({
+      depositTraderAccount({
         transaction,
         ammPackageId,
         traderAccountId,
-        balanceManager,
+        ammAdminCapId,
         fundingCoin,
         coinAssetType: normalizedCoinType
       })

@@ -9,7 +9,11 @@ import {
   useSuiClientContext
 } from "@mysten/dapp-kit"
 import { resolveDeepbookRegistryIdForNetwork } from "@sui-amm/domain-core/models/deepbook"
-import { buildCreateTraderAccountTransaction } from "@sui-amm/domain-core/ptb/deepbook"
+import { getTraderAccountOverview } from "@sui-amm/domain-core/models/traderAccount"
+import {
+  buildCreateTraderAccountTransaction,
+  buildRegisterBalanceManagerTransaction
+} from "@sui-amm/domain-core/ptb/deepbook"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useCallback, useMemo, useState } from "react"
@@ -17,6 +21,7 @@ import {
   LOCALNET_DEEPBOOK_REGISTRY_ID,
   LOCALNET_DEEPBOOK_REGISTRY_ID_UNDEFINED
 } from "../config/network"
+import { resolveRequiredAmmAdminCapId } from "../helpers/ammAdminCap"
 import { getLocalnetClient, makeLocalnetExecutor } from "../helpers/localnet"
 import { resolveConfiguredId, transactionUrl } from "../helpers/network"
 import { notification } from "../helpers/notification"
@@ -170,19 +175,25 @@ const useCreateTraderAccountAction = ({
         { objectId: deepbookRegistryId, mutable: false },
         { suiClient }
       )
+      const ammAdminCapId = await resolveRequiredAmmAdminCapId({
+        ownerAddress: walletAddress,
+        packageId: ammPackageId,
+        suiClient
+      })
 
-      const buildTransaction = () => {
+      const buildCreateTransaction = () => {
         const transaction = buildCreateTraderAccountTransaction({
           ammPackageId,
           deepbookRegistry,
-          ownerAddress: walletAddress
+          ownerAddress: walletAddress,
+          ammAdminCapId
         })
         transaction.setSender(walletAddress)
         return transaction
       }
 
-      const { digest, transactionBlock } = await executeTransaction({
-        buildTransaction,
+      const createExecution = await executeTransaction({
+        buildTransaction: buildCreateTransaction,
         isLocalnet,
         expectedChain,
         localnetExecutor,
@@ -190,11 +201,46 @@ const useCreateTraderAccountAction = ({
         suiClient,
         retryLocalnetWithoutDryRunWhen: includesMissingGasCoinsError
       })
-
-      const summary = buildTraderAccountCreateSummary({
-        digest,
-        transactionBlock,
+      const createSummary = buildTraderAccountCreateSummary({
+        digest: createExecution.digest,
+        transactionBlock: createExecution.transactionBlock,
         ownerAddress: walletAddress
+      })
+      const mutableDeepbookRegistry = await getSuiSharedObject(
+        { objectId: deepbookRegistryId, mutable: true },
+        { suiClient }
+      )
+
+      const buildRegisterTransaction = () => {
+        const transaction = buildRegisterBalanceManagerTransaction({
+          ammPackageId,
+          traderAccountId: createSummary.traderAccountId,
+          deepbookRegistry: mutableDeepbookRegistry,
+          ammAdminCapId
+        })
+        transaction.setSender(walletAddress)
+        return transaction
+      }
+
+      const registerExecution = await executeTransaction({
+        buildTransaction: buildRegisterTransaction,
+        isLocalnet,
+        expectedChain,
+        localnetExecutor,
+        signAndExecuteTransaction: signAndExecuteTransaction.mutateAsync,
+        suiClient,
+        retryLocalnetWithoutDryRunWhen: includesMissingGasCoinsError
+      })
+      const traderAccountOverview = await getTraderAccountOverview(
+        createSummary.traderAccountId,
+        suiClient
+      ).catch(() => undefined)
+      const summary = buildTraderAccountCreateSummary({
+        digest: registerExecution.digest,
+        transactionBlock: registerExecution.transactionBlock,
+        ownerAddress: walletAddress,
+        traderAccountOverview,
+        fallbackTraderAccountId: createSummary.traderAccountId
       })
 
       setTransactionState({
@@ -204,9 +250,12 @@ const useCreateTraderAccountAction = ({
       onCreated?.()
 
       if (explorerUrl) {
-        notification.txSuccess(transactionUrl(explorerUrl, digest), toastId)
+        notification.txSuccess(
+          transactionUrl(explorerUrl, registerExecution.digest),
+          toastId
+        )
       } else {
-        notification.success("Trader account created.", toastId)
+        notification.success("Trader account created and registered.", toastId)
       }
     } catch (error) {
       const localnetSupportNote = resolveLocalnetSupportNote({
