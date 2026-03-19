@@ -42,12 +42,12 @@ public(package) fun amm_config_created(config_id: ID): AMMConfigCreated {
     AMMConfigCreated { config_id }
 }
 
-/// Emit an `AMMConfigCreated` event.
+/// Emit an `AMMConfigUpdated` event.
 public(package) fun emit_amm_config_updated(config_id: ID) {
     event::emit(AMMConfigUpdated { config_id });
 }
 
-/// Builds an `AMMConfigCreated` payload.
+/// Builds an `AMMConfigUpdated` payload.
 #[test_only]
 public(package) fun amm_config_updated(config_id: ID): AMMConfigUpdated {
     AMMConfigUpdated { config_id }

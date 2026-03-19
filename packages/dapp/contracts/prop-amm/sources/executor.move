@@ -146,6 +146,7 @@ public fun withdraw<T>(
         .withdraw_with_cap(&trader_account.caps.withdraw_cap, withdraw_amount, ctx)
 }
 
+// TODO#q: anyone at the moment can call `refresh_quotes` and pass fake pyth `PriceInfoObject`
 /// Public quote refresh entrypoint for bot-driven PTBs.
 ///
 /// Flow:
@@ -202,13 +203,16 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
 
-    // Split bid order balance equally between inner and outer spread.
-    let base_asset_balance = trader_account.balance_manager.balance<BaseAsset>();
-    let bid_outer_quantity = base_asset_balance / 2;
-    let bid_inner_quantity = base_asset_balance - bid_outer_quantity;
+    // Split bid order balance equally between inner and outer spread,
+    // and compute quantity in base asset (for deepbook limit order).
+    let base_asset_balance = trader_account.balance_manager.balance<QuoteAsset>();
+    let bid_outer_quantity_quote = base_asset_balance / 2;
+    let bid_inner_quantity_quote = base_asset_balance - bid_outer_quantity_quote;
+    let bid_outer_quantity = bid_outer_quantity_quote / bid_outer;
+    let bid_inner_quantity = bid_inner_quantity_quote / bid_inner;
 
     // Split ask order balance equally between inner and outer spread.
-    let quote_asset_balance = trader_account.balance_manager.balance<QuoteAsset>();
+    let quote_asset_balance = trader_account.balance_manager.balance<BaseAsset>();
     let ask_outer_quantity = quote_asset_balance / 2;
     let ask_inner_quantity = quote_asset_balance - ask_outer_quantity;
 
