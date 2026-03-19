@@ -45,12 +45,12 @@ const resolveBalanceByCoinType = ({
 describe("trader-account-withdraw script", () => {
   it("withdraws from the owned trader account and emits the DeepBook withdrawal event", async () => {
     await testEnv.withTestContext(
-      "user-trader-account-withdraw",
+      "owner-trader-account-withdraw",
       async (context) => {
         const trader = context.createAccount("trader")
         await context.fundAccount(trader, { minimumCoinObjects: 3 })
 
-        const { ammPackageId, deepbook, traderAccount } =
+        const { ammPackageId, ammAdminCapId, deepbook, traderAccount } =
           await publishAndSetupRegisteredTraderAccount({
             context,
             account: trader
@@ -64,12 +64,13 @@ describe("trader-account-withdraw script", () => {
         expect(fundingCoin.balance > seedFundingAmount).toBe(true)
 
         const scriptRunner = createSuiScriptRunner(context)
-        const fundingResult = await scriptRunner.runUserScript(
+        const fundingResult = await scriptRunner.runOwnerScript(
           "trader-account-fund",
           {
             account: trader,
             args: {
               ammPackageId,
+              ammAdminCapId,
               coinObjectId: fundingCoin.coinObjectId,
               amount: seedFundingAmount.toString(),
               json: true
@@ -88,7 +89,7 @@ describe("trader-account-withdraw script", () => {
         })
         expect(suiBalanceBeforeWithdraw >= withdrawAmount).toBe(true)
 
-        const withdrawResult = await scriptRunner.runUserScript(
+        const withdrawResult = await scriptRunner.runOwnerScript(
           "trader-account-withdraw",
           {
             account: trader,

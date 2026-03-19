@@ -2,21 +2,6 @@ import { logKeyValueGreen } from "@sui-amm/tooling-node/log"
 import type { RegisterBalanceManagerResult } from "./deepbook-registration.ts"
 import { toTransactionSummaryView } from "./transaction-summary.ts"
 
-export const OWNER_SIGNER_MISMATCH_ERROR =
-  "Owner address must match the active signer when registering the balance manager."
-
-export const assertOwnerMatchesSigner = ({
-  ownerAddress,
-  signerAddress
-}: {
-  ownerAddress: string
-  signerAddress: string
-}) => {
-  if (ownerAddress !== signerAddress) {
-    throw new Error(OWNER_SIGNER_MISMATCH_ERROR)
-  }
-}
-
 export const toRegistrationResultView = (
   registrationResult: RegisterBalanceManagerResult
 ) => ({

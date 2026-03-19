@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const traderAccountModelMocks = vi.hoisted(() => ({
-  findOwnedTraderAccountIds: vi.fn(),
-  getTraderAccountOverview: vi.fn(),
-  resolveTraderAccountType: vi.fn()
+const traderAccountMocks = vi.hoisted(() => ({
+  resolveOwnedTraderAccountId: vi.fn(),
+  getOwnedTraderAccountOverview: vi.fn()
 }))
 
 const deepbookPtbMocks = vi.hoisted(() => ({
@@ -15,10 +14,10 @@ const transactionMocks = vi.hoisted(() => ({
   ensureCreatedObject: vi.fn()
 }))
 
-vi.mock("@sui-amm/domain-core/models/traderAccount", () => ({
-  findOwnedTraderAccountIds: traderAccountModelMocks.findOwnedTraderAccountIds,
-  getTraderAccountOverview: traderAccountModelMocks.getTraderAccountOverview,
-  resolveTraderAccountType: traderAccountModelMocks.resolveTraderAccountType
+vi.mock("../trader-account.ts", () => ({
+  resolveOwnedTraderAccountId: traderAccountMocks.resolveOwnedTraderAccountId,
+  getOwnedTraderAccountOverview:
+    traderAccountMocks.getOwnedTraderAccountOverview
 }))
 
 vi.mock("@sui-amm/domain-core/ptb/deepbook", () => ({
@@ -47,38 +46,36 @@ const createTooling = (): RegistrationTooling =>
     suiClient: {}
   }) as unknown as RegistrationTooling
 
+const traderAccountOverview = {
+  traderAccountId: "0xtrader",
+  ownerAddress: "0xowner",
+  balanceManagerId: "0xbalance",
+  balanceManagerBalancesBagId: "0xbag",
+  tradeCapId: "0xtrade",
+  depositCapId: "0xdeposit",
+  withdrawCapId: "0xwithdraw"
+}
+
 describe("createTraderAccountAndRegisterBalanceManager", () => {
   beforeEach(() => {
-    traderAccountModelMocks.findOwnedTraderAccountIds.mockReset()
-    traderAccountModelMocks.getTraderAccountOverview.mockReset()
-    traderAccountModelMocks.resolveTraderAccountType.mockReset()
-    traderAccountModelMocks.resolveTraderAccountType.mockImplementation(
-      (packageId: string) => `${packageId}::executor::TraderAccount`
-    )
+    traderAccountMocks.resolveOwnedTraderAccountId.mockReset()
+    traderAccountMocks.getOwnedTraderAccountOverview.mockReset()
     deepbookPtbMocks.buildCreateTraderAccountTransaction.mockReset()
     deepbookPtbMocks.buildRegisterBalanceManagerTransaction.mockReset()
     transactionMocks.ensureCreatedObject.mockReset()
   })
 
-  it("reuses an owned trader account before creating a new one", async () => {
+  it("reuses an existing trader account and only runs registration", async () => {
     const tooling = createTooling()
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
     )
-    const getImmutableSharedObject = vi.mocked(tooling.getImmutableSharedObject)
     const getMutableSharedObject = vi.mocked(tooling.getMutableSharedObject)
 
-    traderAccountModelMocks.findOwnedTraderAccountIds.mockResolvedValue([
-      "0xtrader"
-    ])
-    traderAccountModelMocks.getTraderAccountOverview.mockResolvedValue({
-      traderAccountId: "0xtrader",
-      ownerAddress: "0xowner",
-      balanceManagerId: "0xbalance"
-    })
-    getImmutableSharedObject.mockResolvedValue({
-      sharedRef: { objectId: "0xbalance" }
-    } as never)
+    traderAccountMocks.resolveOwnedTraderAccountId.mockResolvedValue("0xtrader")
+    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue(
+      traderAccountOverview
+    )
     getMutableSharedObject.mockResolvedValue({
       sharedRef: { objectId: "0xregistry" }
     } as never)
@@ -93,36 +90,45 @@ describe("createTraderAccountAndRegisterBalanceManager", () => {
       tooling,
       ammPackageId: "0xamm",
       deepbookRegistryId: "0xregistry",
-      ownerAddress: "0xowner"
+      ownerAddress: "0xowner",
+      ammAdminCapId: "0xadmin-cap"
     })
 
-    expect(
-      traderAccountModelMocks.findOwnedTraderAccountIds
-    ).toHaveBeenCalledWith({
-      ownerAddress: "0xowner",
-      packageId: "0xamm",
-      suiClient: tooling.suiClient
-    })
+    expect(traderAccountMocks.resolveOwnedTraderAccountId).toHaveBeenCalledWith(
+      {
+        tooling,
+        ownerAddress: "0xowner",
+        ammPackageId: "0xamm"
+      }
+    )
     expect(
       deepbookPtbMocks.buildCreateTraderAccountTransaction
     ).not.toHaveBeenCalled()
+    expect(
+      deepbookPtbMocks.buildRegisterBalanceManagerTransaction
+    ).toHaveBeenCalledWith({
+      ammPackageId: "0xamm",
+      traderAccountId: "0xtrader",
+      deepbookRegistry: { sharedRef: { objectId: "0xregistry" } },
+      ammAdminCapId: "0xadmin-cap"
+    })
+    expect(result.status).toBe("registered")
+    expect(result.traderAccount?.traderAccountId).toBe("0xtrader")
     expect(result.transactionSummaries.createTraderAccount).toBeUndefined()
     expect(result.transactionSummaries.registerBalanceManager).toEqual({
       label: "register-balance-manager"
     })
-    expect(result.status).toBe("registered")
-    expect(result.traderAccount?.traderAccountId).toBe("0xtrader")
     expect(executeTransactionWithSummary).toHaveBeenCalledTimes(1)
   })
 
-  it("returns partial feedback on dry-run when creation would be required", async () => {
+  it("returns dry-run create feedback when no account exists", async () => {
     const tooling = createTooling()
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
     )
     const getImmutableSharedObject = vi.mocked(tooling.getImmutableSharedObject)
 
-    traderAccountModelMocks.findOwnedTraderAccountIds.mockResolvedValue([])
+    traderAccountMocks.resolveOwnedTraderAccountId.mockResolvedValue(undefined)
     getImmutableSharedObject.mockResolvedValue({
       sharedRef: { objectId: "0xregistry" }
     } as never)
@@ -139,85 +145,21 @@ describe("createTraderAccountAndRegisterBalanceManager", () => {
       ammPackageId: "0xamm",
       deepbookRegistryId: "0xregistry",
       ownerAddress: "0xowner",
+      ammAdminCapId: "0xadmin-cap",
       dryRun: true
     })
 
-    expect(
-      deepbookPtbMocks.buildCreateTraderAccountTransaction
-    ).toHaveBeenCalled()
-    expect(
-      deepbookPtbMocks.buildRegisterBalanceManagerTransaction
-    ).not.toHaveBeenCalled()
     expect(result.status).toBe("dry-run-create-only")
     expect(result.note).toContain("Created object IDs are unavailable")
     expect(result.transactionSummaries.createTraderAccount?.label).toBe(
       "create-trader-account"
     )
-    expect(executeTransactionWithSummary).toHaveBeenCalledTimes(1)
-  })
-
-  it("fails clearly when multiple owned trader accounts exist and none is specified", async () => {
-    const tooling = createTooling()
-
-    traderAccountModelMocks.findOwnedTraderAccountIds.mockResolvedValue([
-      "0xtrader-a",
-      "0xtrader-b"
-    ])
-
-    await expect(
-      createTraderAccountAndRegisterBalanceManager({
-        tooling,
-        ammPackageId: "0xamm",
-        deepbookRegistryId: "0xregistry",
-        ownerAddress: "0xowner"
-      })
-    ).rejects.toThrow(
-      "Multiple owned trader accounts were found for the active owner (2). Provide --trader-account-id to choose one explicitly."
-    )
-  })
-
-  it("uses explicit trader account id without owned-account discovery", async () => {
-    const tooling = createTooling()
-    const executeTransactionWithSummary = vi.mocked(
-      tooling.executeTransactionWithSummary
-    )
-    const getImmutableSharedObject = vi.mocked(tooling.getImmutableSharedObject)
-    const getMutableSharedObject = vi.mocked(tooling.getMutableSharedObject)
-
-    traderAccountModelMocks.getTraderAccountOverview.mockResolvedValue({
-      traderAccountId: "0xexplicit",
-      ownerAddress: "0xowner",
-      balanceManagerId: "0xbalance"
-    })
-    getImmutableSharedObject.mockResolvedValue({
-      sharedRef: { objectId: "0xbalance" }
-    } as never)
-    getMutableSharedObject.mockResolvedValue({
-      sharedRef: { objectId: "0xregistry" }
-    } as never)
-    deepbookPtbMocks.buildRegisterBalanceManagerTransaction.mockReturnValue(
-      "register-transaction"
-    )
-    executeTransactionWithSummary.mockResolvedValue({
-      summary: { label: "register-balance-manager" } as never
-    })
-
-    const result = await createTraderAccountAndRegisterBalanceManager({
-      tooling,
-      ammPackageId: "0xamm",
-      deepbookRegistryId: "0xregistry",
-      ownerAddress: "0xowner",
-      traderAccountId: "0xexplicit"
-    })
-
-    expect(result.status).toBe("registered")
-    expect(result.traderAccount?.traderAccountId).toBe("0xexplicit")
     expect(
-      traderAccountModelMocks.findOwnedTraderAccountIds
+      deepbookPtbMocks.buildRegisterBalanceManagerTransaction
     ).not.toHaveBeenCalled()
   })
 
-  it("creates and then registers when no trader account exists", async () => {
+  it("creates and then registers when no account exists", async () => {
     const tooling = createTooling()
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
@@ -225,18 +167,17 @@ describe("createTraderAccountAndRegisterBalanceManager", () => {
     const getImmutableSharedObject = vi.mocked(tooling.getImmutableSharedObject)
     const getMutableSharedObject = vi.mocked(tooling.getMutableSharedObject)
 
-    traderAccountModelMocks.findOwnedTraderAccountIds.mockResolvedValue([])
+    traderAccountMocks.resolveOwnedTraderAccountId.mockResolvedValue(undefined)
     transactionMocks.ensureCreatedObject.mockReturnValue({
       objectId: "0xcreated-trader"
     })
-    traderAccountModelMocks.getTraderAccountOverview.mockResolvedValue({
-      traderAccountId: "0xcreated-trader",
-      ownerAddress: "0xowner",
-      balanceManagerId: "0xbalance"
+    traderAccountMocks.getOwnedTraderAccountOverview.mockResolvedValue({
+      ...traderAccountOverview,
+      traderAccountId: "0xcreated-trader"
     })
-    getImmutableSharedObject
-      .mockResolvedValueOnce({ sharedRef: { objectId: "0xregistry" } } as never)
-      .mockResolvedValueOnce({ sharedRef: { objectId: "0xbalance" } } as never)
+    getImmutableSharedObject.mockResolvedValue({
+      sharedRef: { objectId: "0xregistry" }
+    } as never)
     getMutableSharedObject.mockResolvedValue({
       sharedRef: { objectId: "0xregistry" }
     } as never)
@@ -259,7 +200,8 @@ describe("createTraderAccountAndRegisterBalanceManager", () => {
       tooling,
       ammPackageId: "0xamm",
       deepbookRegistryId: "0xregistry",
-      ownerAddress: "0xowner"
+      ownerAddress: "0xowner",
+      ammAdminCapId: "0xadmin-cap"
     })
 
     expect(result.status).toBe("registered")
@@ -272,10 +214,11 @@ describe("createTraderAccountAndRegisterBalanceManager", () => {
     expect(executeTransactionWithSummary).toHaveBeenCalledTimes(2)
   })
 
-  it("wraps model lookup failures with actionable context", async () => {
+  it("bubbles up trader-account lookup failures during registration", async () => {
     const tooling = createTooling()
 
-    traderAccountModelMocks.getTraderAccountOverview.mockRejectedValue(
+    traderAccountMocks.resolveOwnedTraderAccountId.mockResolvedValue("0xtrader")
+    traderAccountMocks.getOwnedTraderAccountOverview.mockRejectedValue(
       new Error("Object not found")
     )
 
@@ -285,32 +228,8 @@ describe("createTraderAccountAndRegisterBalanceManager", () => {
         ammPackageId: "0xamm",
         deepbookRegistryId: "0xregistry",
         ownerAddress: "0xowner",
-        traderAccountId: "0xexplicit"
+        ammAdminCapId: "0xadmin-cap"
       })
-    ).rejects.toThrow(
-      "Trader account lookup failed for traderAccountId 0xexplicit (expected owner 0xowner, expected package 0xamm, expected type 0xamm::executor::TraderAccount). Cause: Object not found"
-    )
-  })
-
-  it("fails with clear context when trader account owner mismatches", async () => {
-    const tooling = createTooling()
-
-    traderAccountModelMocks.getTraderAccountOverview.mockResolvedValue({
-      traderAccountId: "0xexplicit",
-      ownerAddress: "0xanother-owner",
-      balanceManagerId: "0xbalance"
-    })
-
-    await expect(
-      createTraderAccountAndRegisterBalanceManager({
-        tooling,
-        ammPackageId: "0xamm",
-        deepbookRegistryId: "0xregistry",
-        ownerAddress: "0xowner",
-        traderAccountId: "0xexplicit"
-      })
-    ).rejects.toThrow(
-      "Trader account owner mismatch for traderAccountId 0xexplicit. Expected owner 0xowner, found 0xanother-owner, expected package 0xamm."
-    )
+    ).rejects.toThrow("Object not found")
   })
 })

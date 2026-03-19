@@ -8,7 +8,9 @@ import {
 } from "@sui-amm/domain-core/models/amm"
 import {
   AMM_DEEPBOOK_DEPENDENCY_NAME,
-  AMM_PACKAGE_FOLDER_NAME
+  AMM_PACKAGE_FOLDER_NAME,
+  resolveAmmAdminCapId,
+  resolveOwnedAmmAdminCapId
 } from "@sui-amm/domain-node/amm"
 import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
 import type { PublishArtifact } from "@sui-amm/tooling-core/types"
@@ -296,4 +298,61 @@ export const logAmmConfigOverview = (
   }
 
   console.log("")
+}
+
+const buildMissingSignerAmmAdminCapErrorMessage = ({
+  signerAddress,
+  ammPackageId
+}: {
+  signerAddress: string
+  ammPackageId: string
+}) =>
+  `No AMM admin cap owned by signer ${signerAddress} for package ${ammPackageId}. Provide --amm-admin-cap-id.`
+
+const resolveExplicitAmmAdminCapId = async ({
+  networkName,
+  ammAdminCapId
+}: {
+  networkName: string
+  ammAdminCapId?: string
+}) => {
+  const normalizedAmmAdminCapId = ammAdminCapId?.trim()
+  if (!normalizedAmmAdminCapId) return undefined
+
+  return resolveAmmAdminCapId({
+    networkName,
+    adminCapId: normalizedAmmAdminCapId
+  })
+}
+
+export const resolveAmmAdminCapIdForSigner = async ({
+  tooling,
+  ammPackageId,
+  signerAddress,
+  ammAdminCapId
+}: {
+  tooling: Pick<Tooling, "network" | "suiClient">
+  ammPackageId: string
+  signerAddress: string
+  ammAdminCapId?: string
+}): Promise<string> => {
+  const explicitAmmAdminCapId = await resolveExplicitAmmAdminCapId({
+    networkName: tooling.network.networkName,
+    ammAdminCapId
+  })
+  if (explicitAmmAdminCapId) return explicitAmmAdminCapId
+
+  const ownedAmmAdminCapId = await resolveOwnedAmmAdminCapId({
+    ammPackageId,
+    ownerAddress: signerAddress,
+    suiClient: tooling.suiClient
+  })
+  if (ownedAmmAdminCapId) return ownedAmmAdminCapId
+
+  throw new Error(
+    buildMissingSignerAmmAdminCapErrorMessage({
+      signerAddress,
+      ammPackageId
+    })
+  )
 }

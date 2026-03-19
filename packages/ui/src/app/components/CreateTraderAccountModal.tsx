@@ -122,7 +122,7 @@ const CreateTraderAccountSuccessView = ({
       status="success"
       title="Trader account created"
       subtitle={shortenId(summary.traderAccountId)}
-      description="The account and owner capabilities are now available on-chain."
+      description="The account was created and its balance manager was registered in DeepBook."
       onClose={onClose}
     />
     <ModalBody>
@@ -232,11 +232,11 @@ const CreateTraderAccountModal = ({
       <ModalBody>
         <ModalSection
           title="Transaction plan"
-          subtitle="This operation allocates and links account resources for the connected wallet."
+          subtitle="This operation creates the trader account and registers its balance manager."
         >
           <div className="rounded-xl border border-slate-200/70 bg-white/75 p-3 text-xs text-slate-600 dark:border-slate-50/15 dark:bg-slate-950/60 dark:text-slate-200/70">
-            The transaction creates the trader account object, balance manager,
-            and owner caps required for funding and trading.
+            The flow creates the trader account object, stores owner caps, and
+            registers the linked balance manager in the DeepBook registry.
           </div>
           {disabledReason ? (
             <div className={modalFieldWarningTextClassName}>

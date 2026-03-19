@@ -89,7 +89,7 @@ pnpm ui dev
 # Get your address's coin balances and coin's object ids (also visible from UI) (optional --address default to current active one)
 pnpm dapp chain:describe-coin-balances
 
-# Fund an account (also possible cia UI)
+# Fund an account (also possible via UI)
 pnpm dapp user:trader-account:fund --coin-type <0x2::sui::SUI> --amount 10000
 
 # Withdraw account (also available in UI)

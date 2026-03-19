@@ -11,14 +11,11 @@ import {
   resolveDeepbookRegistryId
 } from "@sui-amm/domain-core/models/deepbook"
 import { resolveAmmPackageId } from "@sui-amm/domain-node/amm"
-import {
-  resolveOwnerAddress,
-  resolveSignerAddress
-} from "@sui-amm/tooling-node/account"
+import { resolveSignerAddress } from "@sui-amm/tooling-node/account"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
+import { resolveAmmAdminCapIdForSigner } from "../../utils/amm.ts"
 import {
-  assertOwnerMatchesSigner,
   logRegistrationResult,
   toRegistrationResultView
 } from "../../utils/deepbook-registration-script.ts"
@@ -30,10 +27,9 @@ import {
 
 type RegisterAmmCliArgs = {
   ammPackageId?: string
+  ammAdminCapId?: string
   deepbookPackageId?: string
   deepbookRegistryId?: string
-  ownerAddress?: string
-  traderAccountId?: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
@@ -70,16 +66,18 @@ const resolveDeepbookIds = ({
 
 runSuiScript(
   async (tooling, cliArguments: RegisterAmmCliArgs) => {
-    const ownerAddress = await resolveOwnerAddress(
-      cliArguments.ownerAddress,
-      tooling.suiConfig.network
-    )
     const signerAddress = resolveSignerAddress(tooling.loadedEd25519KeyPair)
-    assertOwnerMatchesSigner({ ownerAddress, signerAddress })
+    const ownerAddress = signerAddress
 
     const ammPackageId = await resolveAmmPackageId({
       networkName: tooling.network.networkName,
       ammPackageId: cliArguments.ammPackageId
+    })
+    const ammAdminCapId = await resolveAmmAdminCapIdForSigner({
+      tooling,
+      ammPackageId,
+      signerAddress,
+      ammAdminCapId: cliArguments.ammAdminCapId
     })
 
     const { deepbookPackageId, deepbookRegistryId } = resolveDeepbookIds({
@@ -116,7 +114,7 @@ runSuiScript(
         ammPackageId,
         deepbookRegistryId,
         ownerAddress,
-        traderAccountId: cliArguments.traderAccountId,
+        ammAdminCapId,
         devInspect: cliArguments.devInspect,
         dryRun: cliArguments.dryRun
       })
@@ -128,6 +126,7 @@ runSuiScript(
         {
           ownerAddress,
           ammPackageId,
+          ammAdminCapId,
           deepbookPackageId,
           deepbookRegistryId,
           ...registrationResultView
@@ -148,6 +147,13 @@ runSuiScript(
   withCommonRegistrationOptions(withAmmPackageIdOption(yargs()), {
     includeDebugAlias: true
   })
+    .option("ammAdminCapId", {
+      alias: ["amm-admin-cap-id", "admin-cap-id"],
+      type: "string",
+      description:
+        "AMM admin cap id; defaults to the signer-owned admin cap for the selected package when omitted.",
+      demandOption: false
+    })
     .option("deepbookPackageId", {
       alias: ["deepbook-package-id"],
       type: "string",

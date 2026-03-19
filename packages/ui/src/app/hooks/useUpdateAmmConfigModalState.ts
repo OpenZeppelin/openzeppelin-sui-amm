@@ -25,7 +25,7 @@ import {
   parsePositiveU64
 } from "@sui-amm/tooling-core/utils/utility"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { resolveAmmAdminCapId } from "../helpers/ammAdminCap"
+import { resolveRequiredAmmAdminCapId } from "../helpers/ammAdminCap"
 import {
   resolveValidationMessage,
   validateRequiredHexBytes
@@ -364,16 +364,11 @@ export const useUpdateAmmConfigModalState = ({
       )
       const configId = configShared.object.objectId
       const packageId = deriveRelevantPackageId(configShared.object.type)
-      const adminCapId = await resolveAmmAdminCapId({
+      const adminCapId = await resolveRequiredAmmAdminCapId({
         ownerAddress: walletAddress,
         packageId,
         suiClient
       })
-
-      if (!adminCapId)
-        throw new Error(
-          "No AMM admin capability found for the connected wallet."
-        )
 
       const updateTransaction = buildUpdateAmmConfigTransaction({
         packageId,

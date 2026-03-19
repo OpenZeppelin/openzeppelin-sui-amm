@@ -1,6 +1,5 @@
 /**
- * Funds an existing trader account by depositing a selected coin into the
- * linked DeepBook balance manager.
+ * Funds the AMM owner's trader account by depositing a selected coin.
  */
 import yargs from "yargs"
 
@@ -15,6 +14,7 @@ import { resolveSignerAddress } from "@sui-amm/tooling-node/account"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { logKeyValueGreen } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
+import { resolveAmmAdminCapIdForSigner } from "../../utils/amm.ts"
 import { withAmmPackageIdOption } from "../../utils/register-script-options.ts"
 import {
   fundExistingTraderAccount,
@@ -24,7 +24,7 @@ import {
 
 type FundTraderAccountArguments = {
   ammPackageId?: string
-  traderAccountId?: string
+  ammAdminCapId?: string
   coinType?: string
   coinObjectId?: string
   amount: string
@@ -86,13 +86,16 @@ const resolveFundingCoinObjectId = async ({
 
 const logFundingResult = ({
   ammPackageId,
+  ammAdminCapId,
   fundingResult
 }: {
   ammPackageId: string
+  ammAdminCapId: string
   fundingResult: FundTraderAccountResult
 }) => {
   logKeyValueGreen("Status")(fundingResult.status)
   logKeyValueGreen("AMM package")(ammPackageId)
+  logKeyValueGreen("AMM admin cap")(ammAdminCapId)
   logKeyValueGreen("Trader account")(
     fundingResult.traderAccount.traderAccountId
   )
@@ -124,9 +127,16 @@ const logFundingResult = ({
 
 runSuiScript(
   async (tooling, cliArguments: FundTraderAccountArguments) => {
+    const signerAddress = resolveSignerAddress(tooling.loadedEd25519KeyPair)
     const ammPackageId = await resolveAmmPackageId({
       networkName: tooling.network.networkName,
       ammPackageId: cliArguments.ammPackageId
+    })
+    const ammAdminCapId = await resolveAmmAdminCapIdForSigner({
+      tooling,
+      ammPackageId,
+      signerAddress,
+      ammAdminCapId: cliArguments.ammAdminCapId
     })
     const fundingCoinObjectId = await resolveFundingCoinObjectId({
       tooling,
@@ -138,7 +148,7 @@ runSuiScript(
     const fundingResult = await fundExistingTraderAccount({
       tooling,
       ammPackageId,
-      traderAccountId: cliArguments.traderAccountId,
+      ammAdminCapId,
       coinObjectId: fundingCoinObjectId,
       amount: cliArguments.amount,
       devInspect: cliArguments.devInspect,
@@ -149,6 +159,7 @@ runSuiScript(
       emitJsonOutput(
         {
           ammPackageId,
+          ammAdminCapId,
           ...toFundTraderAccountResultView(fundingResult)
         },
         cliArguments.json
@@ -159,15 +170,16 @@ runSuiScript(
 
     logFundingResult({
       ammPackageId,
+      ammAdminCapId,
       fundingResult
     })
   },
   withAmmPackageIdOption(yargs())
-    .option("traderAccountId", {
-      alias: ["trader-account-id"],
+    .option("ammAdminCapId", {
+      alias: ["amm-admin-cap-id", "admin-cap-id"],
       type: "string",
       description:
-        "Existing trader account id; when omitted the flow uses the single trader account owned by the active signer.",
+        "AMM admin cap id; defaults to the signer-owned admin cap for the selected package when omitted.",
       demandOption: false
     })
     .option("coinType", {

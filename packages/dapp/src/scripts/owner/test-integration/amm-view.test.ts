@@ -44,7 +44,7 @@ const testEnv = createSuiLocalnetTestEnv({
 
 describe("amm-view script", () => {
   it("renders the latest AMM config snapshot when no id is provided", async () => {
-    await testEnv.withTestContext("user-amm-view", async (context) => {
+    await testEnv.withTestContext("owner-amm-view", async (context) => {
       const publisher = context.createAccount("publisher")
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
 
@@ -117,7 +117,7 @@ describe("amm-view script", () => {
       })
 
       const scriptRunner = createSuiScriptRunner(context)
-      const result = await scriptRunner.runUserScript("amm-view", {
+      const result = await scriptRunner.runOwnerScript("amm-view", {
         account: publisher,
         args: { json: true }
       })

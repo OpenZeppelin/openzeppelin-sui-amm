@@ -18,6 +18,7 @@ import {
 
 type FundTraderAccountScriptOutput = FundTraderAccountResultView & {
   ammPackageId: string
+  ammAdminCapId: string
 }
 
 const testEnv = createSuiLocalnetTestEnv({
@@ -28,12 +29,12 @@ const testEnv = createSuiLocalnetTestEnv({
 describe("trader-account-fund script", () => {
   it("funds the owned trader account and emits the DeepBook deposit event", async () => {
     await testEnv.withTestContext(
-      "user-trader-account-fund",
+      "owner-trader-account-fund",
       async (context) => {
         const trader = context.createAccount("trader")
         await context.fundAccount(trader, { minimumCoinObjects: 3 })
 
-        const { ammPackageId, deepbook, traderAccount } =
+        const { ammPackageId, ammAdminCapId, deepbook, traderAccount } =
           await publishAndSetupRegisteredTraderAccount({
             context,
             account: trader
@@ -47,15 +48,19 @@ describe("trader-account-fund script", () => {
         expect(fundingCoin.balance > fundingAmount).toBe(true)
 
         const scriptRunner = createSuiScriptRunner(context)
-        const result = await scriptRunner.runUserScript("trader-account-fund", {
-          account: trader,
-          args: {
-            ammPackageId,
-            coinObjectId: fundingCoin.coinObjectId,
-            amount: fundingAmount.toString(),
-            json: true
+        const result = await scriptRunner.runOwnerScript(
+          "trader-account-fund",
+          {
+            account: trader,
+            args: {
+              ammPackageId,
+              ammAdminCapId,
+              coinObjectId: fundingCoin.coinObjectId,
+              amount: fundingAmount.toString(),
+              json: true
+            }
           }
-        })
+        )
 
         expect(result.exitCode).toBe(0)
 
@@ -73,6 +78,7 @@ describe("trader-account-fund script", () => {
             balanceManagerId: traderAccount.balanceManagerId
           }
         })
+        expect(parsed.ammAdminCapId).toBe(ammAdminCapId)
         expect(parsed.coinObjectId).toBe(fundingCoin.coinObjectId)
         expect(parsed.amount).toBe(fundingAmount.toString())
         expect(parsed.transactionSummaries.prepareSuiGas).toBeUndefined()

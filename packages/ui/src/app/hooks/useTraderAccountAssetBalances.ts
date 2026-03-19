@@ -2,7 +2,7 @@
 
 import { useSuiClient } from "@mysten/dapp-kit"
 import {
-  getBalanceManagerAssetBalances,
+  getBalanceManagerAssetBalancesByBagId,
   type TraderAccountAssetBalance
 } from "@sui-amm/domain-core/models/traderAccount"
 import { useEffect, useState } from "react"
@@ -30,7 +30,7 @@ const resolveUnexpectedErrorMessage = (error: unknown) =>
     : "Unable to load trader account balances."
 
 const useTraderAccountAssetBalances = (
-  balanceManagerId?: string,
+  balanceManagerBalancesBagId?: string,
   refreshToken?: number
 ): TraderAccountAssetBalancesState => {
   const suiClient = useSuiClient()
@@ -41,7 +41,7 @@ const useTraderAccountAssetBalances = (
   useEffect(() => {
     let active = true
 
-    if (!balanceManagerId) {
+    if (!balanceManagerBalancesBagId) {
       setState(emptyTraderAccountAssetBalancesState())
       return () => {
         active = false
@@ -52,8 +52,8 @@ const useTraderAccountAssetBalances = (
 
     const load = async () => {
       try {
-        const assetBalances = await getBalanceManagerAssetBalances(
-          balanceManagerId,
+        const assetBalances = await getBalanceManagerAssetBalancesByBagId(
+          balanceManagerBalancesBagId,
           suiClient
         )
         if (!active) return
@@ -77,7 +77,7 @@ const useTraderAccountAssetBalances = (
     return () => {
       active = false
     }
-  }, [balanceManagerId, refreshToken, suiClient])
+  }, [balanceManagerBalancesBagId, refreshToken, suiClient])
 
   return state
 }

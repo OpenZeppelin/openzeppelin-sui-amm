@@ -16,4 +16,4 @@ deepbook = { published-at = "0x337f4f4f6567fcd778d5454f27c16c70e2f274cc6377ea624
 deepbook = { local = "../../../../vendor/deepbookv3/packages/deepbook", override = true }
 
 [environments]
-test-publish = "a25e3781"
+test-publish = "63910b79"

@@ -3,9 +3,9 @@ module openzeppelin_market_maker::executor;
 
 use deepbook::balance_manager::{Self, BalanceManager, DepositCap, TradeCap, WithdrawCap};
 use deepbook::registry::Registry;
+use openzeppelin_market_maker::events;
+use openzeppelin_market_maker::manager::AMMAdminCap;
 use sui::coin::Coin;
-use sui::event;
-use sui::table::{Self, Table};
 
 // === Errors ===
 
@@ -21,30 +21,26 @@ const EInvalidWithdrawAmount: vector<u8> = b"withdraw amount must be greater tha
 /// Application witness for DeepBook registry authorization.
 public struct PropAmmApp has drop {}
 
-/// Balance manager cap IDs owned by the trader account owner.
-public struct CapIds has copy, drop, store {
-    /// Trade capability ID.
-    trade_cap_id: ID,
-    /// Deposit capability ID.
-    deposit_cap_id: ID,
-    /// Withdraw capability ID.
-    withdraw_cap_id: ID,
-}
-
 /// Per-trader account state.
-///
-/// Uses a table to map each pool ID to the trader's active order IDs.
 public struct TraderAccount has key, store {
     /// Unique ID for the account object.
     id: UID,
     /// Account owner.
     owner: address,
-    /// Balance manager ID for DeepBook trading.
-    balance_manager_id: ID,
-    /// Capability IDs retained by the owner.
-    cap_ids: CapIds,
-    /// Active order IDs keyed by pool ID (table entries are stored on-chain).
-    active_orders: Table<ID, vector<ID>>,
+    /// Deepbook capabilities retained by the owner.
+    caps: Caps,
+    /// Balance manager linked to the trader account.
+    balance_manager: BalanceManager,
+}
+
+/// Balance manager caps owned by the trader account owner.
+public struct Caps has store {
+    /// Deepbook's trade capability.
+    trade_cap: TradeCap,
+    /// Deepbook's deposit capability.
+    deposit_cap: DepositCap,
+    /// Deepbook's withdraw capability.
+    withdraw_cap: WithdrawCap,
 }
 
 // === Events ===
@@ -57,66 +53,86 @@ public struct TraderAccountCreatedEvent has copy, drop {
 
 // === Public Functions ===
 
-/// Creates a trader account, transfers the owner caps, transfers the trader account,
-/// and shares the linked balance manager.
-#[allow(lint(share_owned))] // TODO: https://github.com/OpenZeppelin/openzeppelin-sui-amm/issues/106
-public fun create_trader_account_with_shared_manager_and_owner_caps(
+/// Creates a trader account.
+public fun create_trader_account(
+    _: &AMMAdminCap,
     deepbook_registry: &Registry,
-    owner: address,
+    owner: address, // TODO#q: take owner address from the sender
     ctx: &mut TxContext,
-) {
+): TraderAccount {
     let (
         balance_manager,
         deposit_cap,
         withdraw_cap,
         trade_cap,
-        trader_account,
-    ) = create_trader_account(
+    ) = balance_manager::new_with_custom_owner_caps<PropAmmApp>(
         deepbook_registry,
         owner,
         ctx,
     );
 
-    transfer::public_transfer(deposit_cap, owner);
-    transfer::public_transfer(withdraw_cap, owner);
-    transfer::public_transfer(trade_cap, owner);
-    transfer::public_transfer(trader_account, owner);
-    transfer::public_share_object(balance_manager);
+    let caps = Caps {
+        trade_cap,
+        deposit_cap,
+        withdraw_cap,
+    };
+    let trader_account = TraderAccount {
+        id: object::new(ctx),
+        owner,
+        caps,
+        balance_manager,
+    };
+
+    events::emit_trader_account_created(object::id(&trader_account));
+
+    trader_account
+}
+
+/// Creates a trader account and transfers to owner.
+public fun create_trader_account_and_transfer(
+    admin_cap: &AMMAdminCap,
+    deepbook_registry: &Registry,
+    owner: address,
+    ctx: &mut TxContext,
+): ID {
+    let trader_account = create_trader_account(
+        admin_cap,
+        deepbook_registry,
+        owner,
+        ctx,
+    );
+
+    let trader_account_id = object::id(&trader_account);
+    transfer::transfer(trader_account, owner);
+    trader_account_id
+}
+
+/// Deposits funds into the trader account's linked balance manager.
+public fun deposit<T>(
+    trader_account: &mut TraderAccount,
+    _: &AMMAdminCap,
+    coin: Coin<T>,
+    ctx: &TxContext,
+) {
+    trader_account
+        .balance_manager
+        .deposit_with_cap(
+            &trader_account.caps.deposit_cap,
+            coin,
+            ctx,
+        )
 }
 
 /// Registers the balance manager in the DeepBook registry.
 public fun register_balance_manager(
     trader_account: &TraderAccount,
-    balance_manager: &BalanceManager,
+    _: &AMMAdminCap,
     registry: &mut Registry,
     ctx: &mut TxContext,
 ) {
-    assert_sender_can_manage_balance_manager(
-        trader_account,
-        balance_manager,
-        ctx,
-    );
+    assert!(ctx.sender() == trader_account.owner, ENotTraderAccountOwner);
 
-    balance_manager.register_balance_manager(registry, ctx);
-}
-
-/// Deposits funds into the trader account's linked balance manager.
-public fun fund_trader_account<T>(
-    trader_account: &TraderAccount,
-    balance_manager: &mut BalanceManager,
-    funding_coin: Coin<T>,
-    ctx: &mut TxContext,
-) {
-    assert_sender_can_manage_balance_manager(
-        trader_account,
-        balance_manager,
-        ctx,
-    );
-
-    balance_manager.deposit(
-        funding_coin,
-        ctx,
-    );
+    trader_account.balance_manager.register_balance_manager(registry, ctx);
 }
 
 /// Withdraws funds from the trader account's linked balance manager to the sender.
@@ -141,56 +157,6 @@ public fun withdraw_trader_account<T>(
 
 // === Private Functions ===
 
-/// Creates a balance manager with caps and a trader account, returning the objects for PTB composition.
-///
-/// This is the low-level constructor flow for custom PTB composition.
-/// It returns the created objects without transferring the caps, trader account, or sharing the balance manager.
-/// Requires `PropAmmApp` to be authorized in the DeepBook registry.
-public(package) fun create_trader_account(
-    deepbook_registry: &Registry,
-    owner: address,
-    ctx: &mut TxContext,
-): (BalanceManager, DepositCap, WithdrawCap, TradeCap, TraderAccount) {
-    let (
-        balance_manager,
-        deposit_cap,
-        withdraw_cap,
-        trade_cap,
-    ) = balance_manager::new_with_custom_owner_caps<PropAmmApp>(
-        deepbook_registry,
-        owner,
-        ctx,
-    );
-
-    let cap_ids = create_cap_ids(&trade_cap, &deposit_cap, &withdraw_cap);
-    let trader_account = TraderAccount {
-        id: object::new(ctx),
-        owner,
-        balance_manager_id: balance_manager.id(),
-        cap_ids,
-        active_orders: table::new(ctx),
-    };
-
-    event::emit(TraderAccountCreatedEvent {
-        trader_account_id: trader_account.id.to_inner(),
-    });
-
-    (balance_manager, deposit_cap, withdraw_cap, trade_cap, trader_account)
-}
-
-/// Captures the cap IDs for storage in the trader account.
-fun create_cap_ids(
-    trade_cap: &TradeCap,
-    deposit_cap: &DepositCap,
-    withdraw_cap: &WithdrawCap,
-): CapIds {
-    CapIds {
-        trade_cap_id: object::id(trade_cap),
-        deposit_cap_id: object::id(deposit_cap),
-        withdraw_cap_id: object::id(withdraw_cap),
-    }
-}
-
 /// Ensures the sender owns the trader account and provided the linked balance manager.
 fun assert_sender_can_manage_balance_manager(
     trader_account: &TraderAccount,
@@ -198,7 +164,7 @@ fun assert_sender_can_manage_balance_manager(
     ctx: &TxContext,
 ) {
     assert!(ctx.sender() == trader_account.owner, ENotTraderAccountOwner);
-    assert!(trader_account.balance_manager_id == balance_manager.id(), EBalanceManagerMismatch);
+    assert!(trader_account.balance_manager.id() == balance_manager.id(), EBalanceManagerMismatch);
 }
 
 // === View helpers ===
@@ -213,32 +179,22 @@ public fun trader_account_id(trader_account: &TraderAccount): ID {
     trader_account.id.to_inner()
 }
 
-/// Returns the balance manager ID.
-public fun balance_manager_id(trader_account: &TraderAccount): ID {
-    trader_account.balance_manager_id
+/// Returns the balance manager.
+public fun balance_manager(trader_account: &TraderAccount): &BalanceManager {
+    &trader_account.balance_manager
 }
 
-/// Returns all capability IDs retained by the owner.
-public fun cap_ids(trader_account: &TraderAccount): CapIds {
-    trader_account.cap_ids
-}
-
-/// Returns the active orders table keyed by pool ID.
-public fun active_orders(trader_account: &TraderAccount): &Table<ID, vector<ID>> {
-    &trader_account.active_orders
-}
-
-/// Returns the trade cap ID.
+/// Returns a deepbook's trade cap ID.
 public fun trade_cap_id(trader_account: &TraderAccount): ID {
-    trader_account.cap_ids.trade_cap_id
+    object::id(&trader_account.caps.trade_cap)
 }
 
-/// Returns the deposit cap ID.
+/// Returns a deepbook's deposit cap ID.
 public fun deposit_cap_id(trader_account: &TraderAccount): ID {
-    trader_account.cap_ids.deposit_cap_id
+    object::id(&trader_account.caps.deposit_cap)
 }
 
-/// Returns the withdraw cap ID.
+/// Returns a deepbook's withdraw cap ID.
 public fun withdraw_cap_id(trader_account: &TraderAccount): ID {
-    trader_account.cap_ids.withdraw_cap_id
+    object::id(&trader_account.caps.withdraw_cap)
 }

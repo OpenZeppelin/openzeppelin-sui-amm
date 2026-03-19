@@ -27,12 +27,12 @@ const testEnv = createSuiLocalnetTestEnv({
 describe("trader-account-balance script", () => {
   it("renders funded balance-manager assets with withdraw-ready arguments", async () => {
     await testEnv.withTestContext(
-      "user-trader-account-balance",
+      "owner-trader-account-balance",
       async (context) => {
         const trader = context.createAccount("trader")
         await context.fundAccount(trader, { minimumCoinObjects: 3 })
 
-        const { ammPackageId, traderAccount } =
+        const { ammPackageId, ammAdminCapId, traderAccount } =
           await publishAndSetupRegisteredTraderAccount({
             context,
             account: trader
@@ -45,12 +45,13 @@ describe("trader-account-balance script", () => {
         expect(fundingCoin.balance > fundingAmount).toBe(true)
 
         const scriptRunner = createSuiScriptRunner(context)
-        const fundResult = await scriptRunner.runUserScript(
+        const fundResult = await scriptRunner.runOwnerScript(
           "trader-account-fund",
           {
             account: trader,
             args: {
               ammPackageId,
+              ammAdminCapId,
               coinObjectId: fundingCoin.coinObjectId,
               amount: fundingAmount.toString(),
               json: true
@@ -59,7 +60,7 @@ describe("trader-account-balance script", () => {
         )
         expect(fundResult.exitCode).toBe(0)
 
-        const balanceResult = await scriptRunner.runUserScript(
+        const balanceResult = await scriptRunner.runOwnerScript(
           "test-integration/trader-account-balance",
           {
             account: trader,

@@ -52,17 +52,20 @@ export const buildInitBalanceManagerMapTransaction = ({
 export const buildCreateTraderAccountTransaction = ({
   ammPackageId,
   deepbookRegistry,
-  ownerAddress
+  ownerAddress,
+  ammAdminCapId
 }: {
   ammPackageId: string
   deepbookRegistry: WrappedSuiSharedObject
   ownerAddress: string
+  ammAdminCapId: string
 }) => {
   const transaction = newTransaction()
 
   transaction.moveCall({
-    target: `${ammPackageId}::executor::create_trader_account_with_shared_manager_and_owner_caps`,
+    target: `${ammPackageId}::executor::create_trader_account_and_transfer`,
     arguments: [
+      transaction.object(ammAdminCapId),
       transaction.sharedObjectRef(deepbookRegistry.sharedRef),
       transaction.pure.address(ownerAddress)
     ]
@@ -74,13 +77,13 @@ export const buildCreateTraderAccountTransaction = ({
 export const buildRegisterBalanceManagerTransaction = ({
   ammPackageId,
   traderAccountId,
-  balanceManager,
-  deepbookRegistry
+  deepbookRegistry,
+  ammAdminCapId
 }: {
   ammPackageId: string
   traderAccountId: string
-  balanceManager: WrappedSuiSharedObject
   deepbookRegistry: WrappedSuiSharedObject
+  ammAdminCapId: string
 }) => {
   const transaction = newTransaction()
 
@@ -88,7 +91,7 @@ export const buildRegisterBalanceManagerTransaction = ({
     target: `${ammPackageId}::executor::register_balance_manager`,
     arguments: [
       transaction.object(traderAccountId),
-      transaction.sharedObjectRef(balanceManager.sharedRef),
+      transaction.object(ammAdminCapId),
       transaction.sharedObjectRef(deepbookRegistry.sharedRef)
     ]
   })
@@ -96,27 +99,27 @@ export const buildRegisterBalanceManagerTransaction = ({
   return transaction
 }
 
-export const fundTraderAccount = ({
+export const depositTraderAccount = ({
   transaction,
   ammPackageId,
   traderAccountId,
-  balanceManager,
+  ammAdminCapId,
   fundingCoin,
   coinAssetType
 }: {
   transaction: Transaction
   ammPackageId: string
   traderAccountId: string
-  balanceManager: WrappedSuiSharedObject
+  ammAdminCapId: string
   fundingCoin: TransactionArgument
   coinAssetType: string
 }) =>
   transaction.moveCall({
-    target: `${ammPackageId}::executor::fund_trader_account`,
+    target: `${ammPackageId}::executor::deposit`,
     typeArguments: [coinAssetType],
     arguments: [
       transaction.object(traderAccountId),
-      transaction.sharedObjectRef(balanceManager.sharedRef),
+      transaction.object(ammAdminCapId),
       fundingCoin
     ]
   })

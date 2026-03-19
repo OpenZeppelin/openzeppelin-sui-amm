@@ -23,6 +23,7 @@ export type TraderAccountOverview = {
   traderAccountId: string
   ownerAddress: string
   balanceManagerId: string
+  balanceManagerBalancesBagId: string
   tradeCapId: string
   depositCapId: string
   withdrawCapId: string
@@ -34,17 +35,33 @@ export type TraderAccountAssetBalance = {
   balance: bigint
 }
 
+type ResolvedAssetBalanceCandidate = {
+  status: "resolved"
+  assetBalance: TraderAccountAssetBalance
+}
+
+type UnresolvedAssetBalanceCandidate = {
+  status: "unresolved"
+  dynamicFieldId: string
+  coinType?: string
+  reason: string
+}
+
+type AssetBalanceCandidate =
+  | ResolvedAssetBalanceCandidate
+  | UnresolvedAssetBalanceCandidate
+
 type TraderAccountFields = {
   owner?: unknown
-  balance_manager_id?: unknown
-  cap_ids?: unknown
+  balance_manager?: unknown
+  caps?: unknown
   active_orders?: unknown
 }
 
 type TraderAccountCapFields = {
-  trade_cap_id?: unknown
-  deposit_cap_id?: unknown
-  withdraw_cap_id?: unknown
+  trade_cap?: unknown
+  deposit_cap?: unknown
+  withdraw_cap?: unknown
 }
 
 type BalanceManagerFields = {
@@ -70,17 +87,17 @@ const resolveCapId = (value: unknown, label: string) => {
   return normalized
 }
 
-const resolveCapIds = (capIdsValue: unknown) => {
-  const capIdsFields = unwrapMoveFields(capIdsValue)
+const resolveCapIds = (capsValue: unknown) => {
+  const capIdsFields = unwrapMoveFields(capsValue)
   if (!capIdsFields) {
     throw new Error("Trader account cap IDs are required.")
   }
 
   const capIds = capIdsFields as TraderAccountCapFields
   return {
-    tradeCapId: resolveCapId(capIds.trade_cap_id, "Trade cap id"),
-    depositCapId: resolveCapId(capIds.deposit_cap_id, "Deposit cap id"),
-    withdrawCapId: resolveCapId(capIds.withdraw_cap_id, "Withdraw cap id")
+    tradeCapId: resolveCapId(capIds.trade_cap, "Trade cap id"),
+    depositCapId: resolveCapId(capIds.deposit_cap, "Deposit cap id"),
+    withdrawCapId: resolveCapId(capIds.withdraw_cap, "Withdraw cap id")
   }
 }
 
@@ -112,6 +129,17 @@ const extractGenericTypeArgument = (
 const resolveBalanceManagerBagId = (balanceManagerObject: SuiObjectData) => {
   const fields =
     unwrapMoveObjectFields<BalanceManagerFields>(balanceManagerObject)
+  return requireIdField(fields.balances, "Balance manager balances bag id")
+}
+
+const resolveBalanceManagerBagIdFromValue = (balanceManagerValue: unknown) => {
+  const fields = unwrapMoveFields(balanceManagerValue) as
+    | BalanceManagerFields
+    | undefined
+  if (!fields) {
+    throw new Error("Balance manager fields are required.")
+  }
+
   return requireIdField(fields.balances, "Balance manager balances bag id")
 }
 
@@ -180,30 +208,67 @@ const mergeAndSortAssetBalances = (
     )
 }
 
+const buildUnresolvedAssetBalanceCandidate = ({
+  dynamicFieldId,
+  coinType,
+  reason
+}: {
+  dynamicFieldId: string
+  coinType?: string
+  reason: string
+}): UnresolvedAssetBalanceCandidate => ({
+  status: "unresolved",
+  dynamicFieldId,
+  coinType,
+  reason
+})
+
 const resolveAssetBalanceFromDynamicField = async ({
   dynamicField,
   suiClient
 }: {
   dynamicField: Awaited<ReturnType<typeof getAllDynamicFields>>[number]
   suiClient: SuiClient
-}): Promise<TraderAccountAssetBalance | undefined> => {
+}): Promise<AssetBalanceCandidate> => {
   const coinType = resolveCoinTypeFromDynamicField(dynamicField)
-  if (!coinType) return undefined
+  if (!coinType) {
+    return buildUnresolvedAssetBalanceCandidate({
+      dynamicFieldId: dynamicField.objectId,
+      reason: "Unable to resolve the coin type from the dynamic field."
+    })
+  }
 
-  const { object } = await getSuiObject(
-    {
-      objectId: dynamicField.objectId,
-      options: { showContent: true, showType: true }
-    },
-    { suiClient }
-  )
+  try {
+    const { object } = await getSuiObject(
+      {
+        objectId: dynamicField.objectId,
+        options: { showContent: true, showType: true }
+      },
+      { suiClient }
+    )
 
-  const balance = resolveBalanceAmountFromDynamicFieldObject(object)
-  if (balance === undefined) return undefined
+    const balance = resolveBalanceAmountFromDynamicFieldObject(object)
+    if (balance === undefined) {
+      return buildUnresolvedAssetBalanceCandidate({
+        dynamicFieldId: dynamicField.objectId,
+        coinType,
+        reason: "Unable to resolve the balance from the dynamic field object."
+      })
+    }
 
-  return {
-    coinType,
-    balance
+    return {
+      status: "resolved",
+      assetBalance: {
+        coinType,
+        balance
+      }
+    }
+  } catch (error) {
+    return buildUnresolvedAssetBalanceCandidate({
+      dynamicFieldId: dynamicField.objectId,
+      coinType,
+      reason: error instanceof Error ? error.message : String(error)
+    })
   }
 }
 
@@ -215,15 +280,15 @@ const buildTraderAccountOverviewFromObject = ({
   object: SuiObjectData
 }): TraderAccountOverview => {
   const fields = unwrapMoveObjectFields<TraderAccountFields>(object)
-  const capIds = resolveCapIds(fields.cap_ids)
+  const balanceManagerValue = fields.balance_manager
+  const capIds = resolveCapIds(fields.caps)
 
   return {
     traderAccountId: normalizeSuiObjectId(traderAccountId),
     ownerAddress: requireAddressField(fields.owner, "Trader account owner"),
-    balanceManagerId: requireIdField(
-      fields.balance_manager_id,
-      "Balance manager id"
-    ),
+    balanceManagerId: requireIdField(balanceManagerValue, "Balance manager id"),
+    balanceManagerBalancesBagId:
+      resolveBalanceManagerBagIdFromValue(balanceManagerValue),
     tradeCapId: capIds.tradeCapId,
     depositCapId: capIds.depositCapId,
     withdrawCapId: capIds.withdrawCapId,
@@ -249,22 +314,16 @@ export const getTraderAccountOverview = async (
   })
 }
 
-export const getBalanceManagerAssetBalances = async (
-  balanceManagerId: string,
+const resolveAssetBalancesFromBagId = async ({
+  balanceManagerBalancesBagId,
+  suiClient
+}: {
+  balanceManagerBalancesBagId: string
   suiClient: SuiClient
-): Promise<TraderAccountAssetBalance[]> => {
-  const { object: balanceManagerObject } = await getSuiObject(
-    {
-      objectId: balanceManagerId,
-      options: { showContent: true, showType: true }
-    },
-    { suiClient }
-  )
-
-  const balancesBagId = resolveBalanceManagerBagId(balanceManagerObject)
+}): Promise<TraderAccountAssetBalance[]> => {
   const dynamicFields = await getAllDynamicFields(
     {
-      parentObjectId: balancesBagId
+      parentObjectId: balanceManagerBalancesBagId
     },
     { suiClient }
   )
@@ -280,12 +339,62 @@ export const getBalanceManagerAssetBalances = async (
     )
   )
 
+  const unresolvedAssetBalanceCandidates = assetBalanceCandidates.filter(
+    (candidate): candidate is UnresolvedAssetBalanceCandidate =>
+      candidate.status === "unresolved"
+  )
+  if (unresolvedAssetBalanceCandidates.length > 0)
+    throw new Error(
+      `Unable to resolve ${unresolvedAssetBalanceCandidates.length} balance manager asset balance${
+        unresolvedAssetBalanceCandidates.length === 1 ? "" : "s"
+      }: ${unresolvedAssetBalanceCandidates
+        .map(
+          (candidate) =>
+            `${candidate.coinType ?? "unknown coin type"} @ ${
+              candidate.dynamicFieldId
+            } (${candidate.reason})`
+        )
+        .join("; ")}`
+    )
+
   return mergeAndSortAssetBalances(
-    assetBalanceCandidates.flatMap((assetBalance) =>
-      assetBalance ? [assetBalance] : []
+    assetBalanceCandidates.reduce<TraderAccountAssetBalance[]>(
+      (resolvedAssetBalances, candidate) =>
+        candidate.status === "resolved"
+          ? [...resolvedAssetBalances, candidate.assetBalance]
+          : resolvedAssetBalances,
+      []
     )
   )
 }
+
+export const getBalanceManagerAssetBalances = async (
+  balanceManagerId: string,
+  suiClient: SuiClient
+): Promise<TraderAccountAssetBalance[]> => {
+  const { object: balanceManagerObject } = await getSuiObject(
+    {
+      objectId: balanceManagerId,
+      options: { showContent: true, showType: true }
+    },
+    { suiClient }
+  )
+
+  const balancesBagId = resolveBalanceManagerBagId(balanceManagerObject)
+  return resolveAssetBalancesFromBagId({
+    balanceManagerBalancesBagId: balancesBagId,
+    suiClient
+  })
+}
+
+export const getBalanceManagerAssetBalancesByBagId = async (
+  balanceManagerBalancesBagId: string,
+  suiClient: SuiClient
+): Promise<TraderAccountAssetBalance[]> =>
+  resolveAssetBalancesFromBagId({
+    balanceManagerBalancesBagId,
+    suiClient
+  })
 
 export const findOwnedTraderAccountIds = async ({
   ownerAddress,

@@ -53,7 +53,7 @@ import {
   readKeystoreEntries
 } from "../keypair.ts"
 import { probeRpcHealth } from "../localnet.ts"
-import { resolveChainIdentifier } from "../move-toml.ts"
+import { listMoveTomlFiles, resolveChainIdentifier } from "../move-toml.ts"
 import {
   buildMoveEnvironmentFlags,
   buildMovePackage,
@@ -1239,12 +1239,6 @@ const copyMoveSources = async (
   await removeMoveLockFiles(destinationRoot)
   return resolvedSourceRoot
 }
-
-const listMoveTomlFiles = async (rootDir: string): Promise<string[]> =>
-  listFilesByNameRecursively({
-    rootDir,
-    fileName: "Move.toml"
-  })
 
 const listMoveLockFiles = async (rootDir: string): Promise<string[]> =>
   listFilesByNameRecursively({
@@ -2478,12 +2472,15 @@ export const createTestContext = async (
       }
     )
 
-    await waitForFinality(transactionResult.digest, {
-      timeoutMs: options?.timeoutMs,
-      intervalMs: options?.intervalMs
-    })
+    const finalizedTransactionResult = await waitForFinality(
+      transactionResult.digest,
+      {
+        timeoutMs: options?.timeoutMs,
+        intervalMs: options?.intervalMs
+      }
+    )
 
-    return transactionResult
+    return finalizedTransactionResult
   }
 
   const waitForFinality = async (
