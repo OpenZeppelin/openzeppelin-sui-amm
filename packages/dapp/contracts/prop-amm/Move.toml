@@ -17,8 +17,11 @@ git = "https://github.com/pyth-network/pyth-crosschain.git"
 subdir = "target_chains/sui/contracts"
 rev = "sui-contract-testnet"
 
-[dep-replacements.test-publish]
-pyth = { local = "../pyth-mock", override = true, addr_substitutions = { pyth = "0x2" } }
+[dep-replacements.test-publish.pyth]
+local = "../pyth-mock"
+rename-from = "local_mock_pyth"
+override = true
+addr_substitutions = { pyth = "0x2" }
 
 [environments]
 test-publish = "33fcc910"
