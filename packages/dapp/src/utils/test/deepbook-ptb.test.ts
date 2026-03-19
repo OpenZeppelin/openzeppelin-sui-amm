@@ -74,9 +74,9 @@ describe("deepbook PTB builders", () => {
     })
 
     const transactionData = transaction.getData()
-    const moveCall = expectMoveCall(transactionData.commands[0])
-
     expect(transactionData.commands).toHaveLength(1)
+    const [command] = transactionData.commands
+    const moveCall = expectMoveCall(command)
     expect(moveCall).toMatchObject({
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",

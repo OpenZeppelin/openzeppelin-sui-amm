@@ -562,13 +562,26 @@ fun fund_trader_account_rejects_mismatched_balance_manager() {
     scenario.next_tx(sender);
 
     let trader_account: TraderAccount = scenario.take_from_sender();
-    let mut mismatched_balance_manager: BalanceManager = scenario.take_shared();
+    let mut first_balance_manager: BalanceManager = scenario.take_shared();
+    let mut second_balance_manager: BalanceManager = scenario.take_shared();
+    let trader_balance_manager_id = balance_manager::id(trader_account.balance_manager());
+    let first_balance_manager_id = balance_manager::id(&first_balance_manager);
 
-    trader_account.fund_trader_account(
-        &mut mismatched_balance_manager,
-        mint_for_testing<SUI>(1, scenario.ctx()),
-        scenario.ctx(),
-    );
+    if (first_balance_manager_id == trader_balance_manager_id) {
+        test_scenario::return_shared(first_balance_manager);
+        trader_account.fund_trader_account(
+            &mut second_balance_manager,
+            mint_for_testing<SUI>(1, scenario.ctx()),
+            scenario.ctx(),
+        );
+    } else {
+        test_scenario::return_shared(second_balance_manager);
+        trader_account.fund_trader_account(
+            &mut first_balance_manager,
+            mint_for_testing<SUI>(1, scenario.ctx()),
+            scenario.ctx(),
+        );
+    };
 
     abort
 }
