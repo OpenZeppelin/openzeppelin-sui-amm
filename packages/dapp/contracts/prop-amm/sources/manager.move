@@ -68,7 +68,7 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 /// Creates a new AMM configuration object with validated inputs.
 ///
 /// Requires the admin capability used to control this config.
-/// Use `create_amm_config_and_share` to emit the creation event.
+/// Use `create_amm_config_and_share` to share config object.
 public fun create_amm_config(
     _: &AMMAdminCap,
     base_spread_bps: u64,
