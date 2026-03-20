@@ -58,7 +58,7 @@ public(package) fun emit_trader_account_created(trader_account_id: ID) {
     event::emit(TraderAccountCreated { trader_account_id });
 }
 
-/// Builds an `TraderAccountCreated` payload.
+/// Builds a `TraderAccountCreated` payload.
 #[test_only]
 public(package) fun trader_account_created(trader_account_id: ID): TraderAccountCreated {
     TraderAccountCreated { trader_account_id }
