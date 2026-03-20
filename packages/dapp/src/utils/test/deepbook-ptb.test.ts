@@ -17,7 +17,7 @@ const expectMoveCall = (
 }
 
 describe("deepbook PTB builders", () => {
-  it("builds trader-account creation against the current executor entrypoint and includes the admin cap", () => {
+  it("builds trader-account creation against the owner entrypoint and includes the admin cap", () => {
     const deepbookRegistry = {
       object: {
         objectId: "0x789",
@@ -46,7 +46,7 @@ describe("deepbook PTB builders", () => {
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
       module: "executor",
-      function: "create_trader_account_for_owner_and_transfer"
+      function: "create_trader_account_for_owner"
     })
     expect(moveCall.arguments).toHaveLength(3)
     expect(moveCall.arguments[0]).toMatchObject({

@@ -62,7 +62,7 @@ export const buildCreateTraderAccountTransaction = ({
   const transaction = newTransaction()
 
   transaction.moveCall({
-    target: `${ammPackageId}::executor::create_trader_account_for_owner_and_transfer`,
+    target: `${ammPackageId}::executor::create_trader_account_for_owner`,
     arguments: [
       transaction.object(adminCapId),
       transaction.sharedObjectRef(deepbookRegistry.sharedRef),

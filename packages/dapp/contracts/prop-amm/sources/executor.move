@@ -112,20 +112,6 @@ public fun create_trader_account_for_owner(
     trader_account
 }
 
-/// Creates a trader account and transfers to `owner`.
-public fun create_trader_account_for_owner_and_transfer(
-    admin_cap: &AMMAdminCap,
-    deepbook_registry: &Registry,
-    owner: address,
-    ctx: &mut TxContext,
-): ID {
-    let trader_account = create_trader_account_for_owner(admin_cap, deepbook_registry, owner, ctx);
-
-    let trader_account_id = object::id(&trader_account);
-    transfer::transfer(trader_account, owner);
-    trader_account_id
-}
-
 /// Deposit funds into a balance manager.
 public fun deposit<T>(
     trader_account: &mut TraderAccount,

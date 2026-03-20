@@ -81,12 +81,14 @@ fun create_trader_account_and_transfer_moves_account_to_owner() {
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let deepbook_registry: Registry = scenario.take_shared();
-    let trader_account_id = executor::create_trader_account_for_owner_and_transfer(
+    let trader_account = executor::create_trader_account_for_owner(
         &admin_cap,
         &deepbook_registry,
         owner,
         scenario.ctx(),
     );
+    let trader_account_id = object::id(&trader_account);
+    transfer::public_transfer(trader_account, owner);
     assert_emitted!(trader_account_created(trader_account_id));
 
     test_scenario::return_shared(deepbook_registry);
@@ -159,18 +161,23 @@ fun create_trader_account_and_transfer_supports_multiple_accounts_for_owner() {
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let deepbook_registry: Registry = scenario.take_shared();
-    let trader_account_id_a = executor::create_trader_account_for_owner_and_transfer(
+    let trader_account_a = executor::create_trader_account_for_owner(
         &admin_cap,
         &deepbook_registry,
         owner,
         scenario.ctx(),
     );
-    let trader_account_id_b = executor::create_trader_account_for_owner_and_transfer(
+    let trader_account_id_a = object::id(&trader_account_a);
+    transfer::public_transfer(trader_account_a, owner);
+
+    let trader_account_b = executor::create_trader_account_for_owner(
         &admin_cap,
         &deepbook_registry,
         owner,
         scenario.ctx(),
     );
+    let trader_account_id_b = object::id(&trader_account_b);
+    transfer::public_transfer(trader_account_b, owner);
 
     assert!(trader_account_id_a != trader_account_id_b);
 
