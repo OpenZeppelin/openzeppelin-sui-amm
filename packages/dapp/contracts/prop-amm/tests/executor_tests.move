@@ -460,7 +460,7 @@ fun refresh_quotes_rejects_when_trading_paused() {
     abort
 }
 
-#[test, expected_failure(abort_code = executor::EFeedIdentifierMismatch)]
+#[test, expected_failure(abort_code = executor::EPythFeedIdentifierMismatch)]
 fun refresh_quotes_rejects_when_feed_mismatch() {
     let sender = @0x22;
     let config_feed_id_byte = 9;

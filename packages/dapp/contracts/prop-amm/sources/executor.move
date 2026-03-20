@@ -38,7 +38,9 @@ const EPythExponentTooLarge: vector<u8> = b"pyth price exponent_u128 should fit 
 #[error(code = 4)]
 const EPythInvalidPriceValue: vector<u8> = b"pyth price must be of valid size";
 #[error(code = 5)]
-const EFeedIdentifierMismatch: vector<u8> = b"feed identifier mismatch";
+const EPythFeedIdentifierMismatch: vector<u8> = b"pyth feed identifier mismatch";
+#[error(code = 6)]
+const ETickIsTooLarge: vector<u8> = b"deepbook pool tick size is too large for price calculation";
 
 // === Structs ===
 
@@ -156,23 +158,13 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     let base_spread = config.base_spread(oracle_mid_price);
     let volatility_spread = config.volatility_spread(oracle_mid_price);
 
+    let (tick, lot_size, min_size) = pool.pool_book_params();
+
     // Calculate bids/ask order prices.
-    let bid_inner = oracle_mid_price
-        .checked_sub(base_spread)
-        .destroy_or!(constants::min_price())
-        .max(constants::min_price());
-    let bid_outer = oracle_mid_price
-        .checked_sub(volatility_spread)
-        .destroy_or!(constants::min_price())
-        .max(constants::min_price());
-    let ask_inner = oracle_mid_price
-        .checked_add(base_spread)
-        .destroy_or!(constants::max_price())
-        .min(constants::max_price());
-    let ask_outer = oracle_mid_price
-        .checked_add(volatility_spread)
-        .destroy_or!(constants::max_price())
-        .min(constants::max_price());
+    let bid_inner = compute_bid_price(oracle_mid_price, base_spread, tick);
+    let bid_outer = compute_bid_price(oracle_mid_price, volatility_spread, tick);
+    let ask_inner = compute_ask_price(oracle_mid_price, base_spread, tick);
+    let ask_outer = compute_ask_price(oracle_mid_price, volatility_spread, tick);
 
     // Generate trade proof.
     let trade_proof = trader_account
@@ -190,37 +182,39 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
 
-    // Split bid order balance equally between inner and outer spread,
+    // Split bid order balance equally (almost xD) between inner and outer spread,
     // and compute quantity in base asset (for deepbook limit order).
     let asset_balance_quote = trader_account.balance_manager.balance<QuoteAsset>();
     let bid_outer_quantity_quote = asset_balance_quote / 2;
     let bid_inner_quantity_quote = asset_balance_quote - bid_outer_quantity_quote;
-    let bid_outer_quantity = bid_outer_quantity_quote / bid_outer;
-    let bid_inner_quantity = bid_inner_quantity_quote / bid_inner;
+    let bid_outer_quantity = compute_quantity(
+        bid_outer_quantity_quote / bid_outer,
+        lot_size,
+        min_size,
+    );
+    let bid_inner_quantity = compute_quantity(
+        bid_inner_quantity_quote / bid_inner,
+        lot_size,
+        min_size,
+    );
 
     // Split ask order balance equally between inner and outer spread.
     let asset_balance_base = trader_account.balance_manager.balance<BaseAsset>();
-    let ask_outer_quantity = asset_balance_base / 2;
-    let ask_inner_quantity = asset_balance_base - ask_outer_quantity;
-
-    // Self matching should not happen (if happens due to logic error abort taker order).
-    let self_matching_option = constants::cancel_taker();
-    let expire_timestamp = clock.timestamp_ms() + ORDER_EXPIRATION_TIME_MS;
-    let order_type = constants::no_restriction();
-    let pay_with_deep = false;
+    let ask_outer_quantity = compute_quantity(asset_balance_base / 2, lot_size, min_size);
+    let ask_inner_quantity = compute_quantity(
+        asset_balance_base - ask_outer_quantity,
+        lot_size,
+        min_size,
+    );
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
     trader_account.try_place_limit_order(
         pool,
         &trade_proof,
         1,
-        order_type,
-        self_matching_option,
         bid_outer,
         bid_outer_quantity,
         true,
-        pay_with_deep,
-        expire_timestamp,
         clock,
         ctx,
     );
@@ -228,13 +222,9 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         pool,
         &trade_proof,
         2,
-        order_type,
-        self_matching_option,
         bid_inner,
         bid_inner_quantity,
         true,
-        pay_with_deep,
-        expire_timestamp,
         clock,
         ctx,
     );
@@ -242,13 +232,9 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         pool,
         &trade_proof,
         3,
-        order_type,
-        self_matching_option,
         ask_inner,
         ask_inner_quantity,
         false,
-        pay_with_deep,
-        expire_timestamp,
         clock,
         ctx,
     );
@@ -256,13 +242,9 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         pool,
         &trade_proof,
         4,
-        order_type,
-        self_matching_option,
         ask_outer,
         ask_outer_quantity,
         false,
-        pay_with_deep,
-        expire_timestamp,
         clock,
         ctx,
     );
@@ -274,6 +256,54 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     );
 }
 
+/// Compute bid price based on `mid_price`, `spread`
+/// to match deepbook's allowed `tick` size
+/// (rounding outside `mid_price`)
+/// Computed bid should not be more than a `mid_price`
+fun compute_bid_price(mid_price: u64, spread: u64, tick: u64): u64 {
+    // Min price is one `tick` higher than deepbook's `min_price`
+    // to avoid rounding down error.
+    let min_price = constants::min_price().checked_add(tick).destroy_or!(abort ETickIsTooLarge);
+
+    // Compute the maximal allowed bid price.
+    let bid = mid_price.checked_sub(spread).destroy_or!(min_price).max(min_price);
+
+    // Round down the bid to the nearest tick.
+    bid - bid % tick
+}
+
+/// Compute ask size based on `mid_price`, `spread`
+/// to match deepbook's allowed `tick` size
+/// (rounding outside `mid_price`).
+/// Computed ask will not be less than a `mid_price`.
+fun compute_ask_price(mid_price: u64, spread: u64, tick: u64): u64 {
+    // Max price is one `tick` lower than deepbook's `max_price`
+    // to avoid rounding up error.
+    let max_price = constants::max_price().checked_sub(tick).destroy_or!(abort ETickIsTooLarge);
+
+    // Compute the minimum allowed ask price.
+    let ask = mid_price.checked_add(spread).destroy_or!(max_price).min(max_price);
+
+    // Round up the ask price to the nearest tick.
+    let rem = ask % tick;
+    if (rem == 0) {
+        ask
+    } else {
+        ask + tick - rem
+    }
+}
+
+/// Round down order `quantity` to match deepbook's `lot_size`.
+/// Return `0` if quantity less than min_size.
+fun compute_quantity(quantity: u64, lot_size: u64, min_size: u64): u64 {
+    let quantity = quantity - quantity % lot_size;
+    if (quantity >= min_size) {
+        quantity
+    } else {
+        0
+    }
+}
+
 // === Private Functions ===
 
 /// Helper function to place a limit order if quantity is non-zero.
@@ -282,13 +312,9 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     trade_proof: &TradeProof,
     client_order_id: u64,
-    order_type: u8,
-    self_matching_option: u8,
     price: u64,
     quantity: u64,
     is_bid: bool,
-    pay_with_deep: bool,
-    expire_timestamp: u64,
     clock: &Clock,
     ctx: &TxContext,
 ) {
@@ -296,6 +322,12 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
     if (quantity == 0) {
         return
     };
+
+    // Self matching should not happen (if happens due to logic error abort taker order).
+    let self_matching_option = constants::cancel_taker();
+    let expire_timestamp = clock.timestamp_ms() + ORDER_EXPIRATION_TIME_MS;
+    let pay_with_deep = false;
+    let order_type = constants::no_restriction();
 
     // Place a limit order.
     pool.place_limit_order(
@@ -316,7 +348,7 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
 
 /// Helper function to convert pyth price into DeepBook price format, while checking for validity and freshness.
 fun deepbook_price(price_info_object: &PriceInfoObject, config: &AMMConfig, clock: &Clock): u64 {
-    assert!(config.has_valid_pyth_feed_id(price_info_object), EFeedIdentifierMismatch);
+    assert!(config.has_valid_pyth_feed_id(price_info_object), EPythFeedIdentifierMismatch);
 
     // Get pyth price object not older than `MAX_PRICE_AGE_SECS`.
     let price = pyth::get_price_no_older_than(
