@@ -1,3 +1,4 @@
+import type * as DomainAmmModule from "@sui-amm/domain-node/amm"
 import type * as ArtifactsModule from "@sui-amm/tooling-node/artifacts"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -9,6 +10,10 @@ const artifactMocks = vi.hoisted(() => ({
 const logMocks = vi.hoisted(() => ({
   logWarning: vi.fn(),
   logKeyValueGreen: vi.fn(() => vi.fn())
+}))
+const domainAmmMocks = vi.hoisted(() => ({
+  resolveAmmAdminCapId: vi.fn(),
+  resolveOwnedAmmAdminCapId: vi.fn()
 }))
 
 vi.mock("@sui-amm/tooling-node/artifacts", async (importOriginal) => ({
@@ -23,10 +28,17 @@ vi.mock("@sui-amm/tooling-node/log", () => ({
   logKeyValueGreen: logMocks.logKeyValueGreen
 }))
 
+vi.mock("@sui-amm/domain-node/amm", async (importOriginal) => ({
+  ...(await importOriginal<typeof DomainAmmModule>()),
+  resolveAmmAdminCapId: domainAmmMocks.resolveAmmAdminCapId,
+  resolveOwnedAmmAdminCapId: domainAmmMocks.resolveOwnedAmmAdminCapId
+}))
+
 import {
   DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID,
   resolveAmmAdminCapIdFromArtifacts,
-  resolvePythPriceFeedIdHex
+  resolvePythPriceFeedIdHex,
+  resolveSignerAmmAdminCapId
 } from "../amm.ts"
 
 type AdminCapTooling = Parameters<
@@ -145,6 +157,8 @@ describe("resolveAmmAdminCapIdFromArtifacts", () => {
     artifactMocks.loadDeploymentArtifacts.mockReset()
     artifactMocks.loadObjectArtifacts.mockReset()
     logMocks.logWarning.mockReset()
+    domainAmmMocks.resolveAmmAdminCapId.mockReset()
+    domainAmmMocks.resolveOwnedAmmAdminCapId.mockReset()
   })
 
   it("returns the admin cap from object artifacts that match the latest publish digest", async () => {
@@ -219,6 +233,63 @@ describe("resolveAmmAdminCapIdFromArtifacts", () => {
 
     expect(logMocks.logWarning).toHaveBeenCalledWith(
       "Unable to recover the AMM admin cap from publish digest digest-123: transaction lookup failed"
+    )
+  })
+})
+
+describe("resolveSignerAmmAdminCapId", () => {
+  beforeEach(() => {
+    domainAmmMocks.resolveAmmAdminCapId.mockReset()
+    domainAmmMocks.resolveOwnedAmmAdminCapId.mockReset()
+  })
+
+  it("prefers an explicit admin cap id when one is provided", async () => {
+    domainAmmMocks.resolveAmmAdminCapId.mockResolvedValue("0xexplicit")
+
+    const resolved = await resolveSignerAmmAdminCapId({
+      tooling: createAdminCapTooling(),
+      ammPackageId: "0x1",
+      signerAddress: "0x2",
+      adminCapId: " 0xexplicit "
+    })
+
+    expect(resolved).toBe("0xexplicit")
+    expect(domainAmmMocks.resolveAmmAdminCapId).toHaveBeenCalledWith({
+      networkName: "localnet",
+      adminCapId: "0xexplicit"
+    })
+    expect(domainAmmMocks.resolveOwnedAmmAdminCapId).not.toHaveBeenCalled()
+  })
+
+  it("reuses an admin cap owned by the signer when no explicit id is provided", async () => {
+    domainAmmMocks.resolveOwnedAmmAdminCapId.mockResolvedValue("0xowned")
+
+    const resolved = await resolveSignerAmmAdminCapId({
+      tooling: createAdminCapTooling(),
+      ammPackageId: "0x1",
+      signerAddress: "0x2"
+    })
+
+    expect(resolved).toBe("0xowned")
+    expect(domainAmmMocks.resolveOwnedAmmAdminCapId).toHaveBeenCalledWith({
+      ammPackageId: "0x1",
+      ownerAddress: "0x2",
+      suiClient: expect.any(Object)
+    })
+    expect(domainAmmMocks.resolveAmmAdminCapId).not.toHaveBeenCalled()
+  })
+
+  it("fails clearly when the signer does not own an admin cap and none is provided explicitly", async () => {
+    domainAmmMocks.resolveOwnedAmmAdminCapId.mockResolvedValue(undefined)
+
+    await expect(
+      resolveSignerAmmAdminCapId({
+        tooling: createAdminCapTooling(),
+        ammPackageId: "0x1",
+        signerAddress: "0x2"
+      })
+    ).rejects.toThrow(
+      "No AMM admin capability found for signer 0x2. Provide --admin-cap-id or use a signer that owns 0x0000000000000000000000000000000000000000000000000000000000000001::manager::AMMAdminCap."
     )
   })
 })

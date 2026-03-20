@@ -5,14 +5,14 @@ import yargs from "yargs"
 
 import {
   DEFAULT_BASE_SPREAD_BPS,
-  DEFAULT_VOLATILITY_MULTIPLIER_BPS,
+  DEFAULT_VOLATILITY_SPREAD_BPS,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
 import { buildCreateAmmConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { resolveAmmPackageId } from "@sui-amm/domain-node/amm"
-import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
+import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
 import { findCreatedArtifactBySuffix } from "@sui-amm/tooling-node/transactions"
 import {
@@ -24,7 +24,7 @@ import {
 type CreateAmmArguments = {
   adminCapId?: string
   baseSpreadBps?: string
-  volatilityMultiplierBps?: string
+  volatilitySpreadBps?: string
   useLaser?: boolean
   pythPriceFeedId?: string
   pythPriceFeedLabel?: string
@@ -72,7 +72,7 @@ runSuiScript(
         pythPriceFeedId: cliArguments.pythPriceFeedId,
         pythPriceFeedLabel: cliArguments.pythPriceFeedLabel
       }),
-      volatilityMultiplierBps: cliArguments.volatilityMultiplierBps,
+      volatilitySpreadBps: cliArguments.volatilitySpreadBps,
       baseSpreadBps: cliArguments.baseSpreadBps,
       useLaser: cliArguments.useLaser
     })
@@ -81,7 +81,7 @@ runSuiScript(
       packageId: ammPackageId,
       adminCapId,
       baseSpreadBps: ammConfigInputs.baseSpreadBps,
-      volatilityMultiplierBps: ammConfigInputs.volatilityMultiplierBps,
+      volatilitySpreadBps: ammConfigInputs.volatilitySpreadBps,
       useLaser: ammConfigInputs.useLaser,
       pythPriceFeedIdBytes: ammConfigInputs.pythPriceFeedIdBytes
     })
@@ -150,11 +150,11 @@ runSuiScript(
       default: DEFAULT_BASE_SPREAD_BPS,
       demandOption: false
     })
-    .option("volatilityMultiplierBps", {
-      alias: ["volatility-multiplier-bps"],
+    .option("volatilitySpreadBps", {
+      alias: ["volatility-spread-bps"],
       type: "string",
-      description: "Volatility multiplier in basis points (u64).",
-      default: DEFAULT_VOLATILITY_MULTIPLIER_BPS,
+      description: "Volatility spread in basis points (u64).",
+      default: DEFAULT_VOLATILITY_SPREAD_BPS,
       demandOption: false
     })
     .option("useLaser", {

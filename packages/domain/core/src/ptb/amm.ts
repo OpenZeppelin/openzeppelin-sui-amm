@@ -33,14 +33,14 @@ export const buildCreateAmmConfigTransaction = ({
   packageId,
   adminCapId,
   baseSpreadBps,
-  volatilityMultiplierBps,
+  volatilitySpreadBps,
   useLaser,
   pythPriceFeedIdBytes
 }: {
   packageId: string
   adminCapId: string
   baseSpreadBps: bigint | number
-  volatilityMultiplierBps: bigint | number
+  volatilitySpreadBps: bigint | number
   useLaser: boolean
   pythPriceFeedIdBytes: number[]
 }) => {
@@ -56,7 +56,7 @@ export const buildCreateAmmConfigTransaction = ({
     arguments: [
       transaction.object(adminCapId),
       transaction.pure.u64(baseSpreadBps),
-      transaction.pure.u64(volatilityMultiplierBps),
+      transaction.pure.u64(volatilitySpreadBps),
       transaction.pure.bool(useLaser),
       transaction.pure.vector("u8", validatedPythPriceFeedIdBytes)
     ]
@@ -70,7 +70,7 @@ export const buildUpdateAmmConfigTransaction = ({
   adminCapId,
   config,
   baseSpreadBps,
-  volatilityMultiplierBps,
+  volatilitySpreadBps,
   useLaser,
   tradingPaused,
   pythPriceFeedIdBytes
@@ -79,7 +79,7 @@ export const buildUpdateAmmConfigTransaction = ({
   adminCapId: string
   config: WrappedSuiSharedObject
   baseSpreadBps: bigint | number
-  volatilityMultiplierBps: bigint | number
+  volatilitySpreadBps: bigint | number
   useLaser: boolean
   tradingPaused: boolean
   pythPriceFeedIdBytes: number[]
@@ -92,12 +92,12 @@ export const buildUpdateAmmConfigTransaction = ({
   const transaction = newTransaction()
 
   transaction.moveCall({
-    target: `${packageId}::manager::update_amm_config_and_emit`,
+    target: `${packageId}::manager::update_amm_config`,
     arguments: [
       transaction.sharedObjectRef(config.sharedRef),
       transaction.object(adminCapId),
       transaction.pure.u64(baseSpreadBps),
-      transaction.pure.u64(volatilityMultiplierBps),
+      transaction.pure.u64(volatilitySpreadBps),
       transaction.pure.bool(useLaser),
       transaction.pure.bool(tradingPaused),
       transaction.pure.vector("u8", validatedPythPriceFeedIdBytes)

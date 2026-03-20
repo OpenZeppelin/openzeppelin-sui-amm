@@ -3,7 +3,9 @@ import type { Argv } from "yargs"
 const AMM_PACKAGE_ID_DESCRIPTION =
   "Package ID for the PropAmm Move package; inferred from the latest publish entry when omitted."
 const OWNER_ADDRESS_DESCRIPTION =
-  "Owner address for trader-account creation; defaults to the active signer."
+  "Owner address that will receive the trader account; defaults to the active signer."
+const ADMIN_CAP_ID_DESCRIPTION =
+  "AMM admin cap id required for trader-account creation; defaults to an AMM admin cap owned by the active signer."
 const TRADER_ACCOUNT_ID_DESCRIPTION =
   "Existing trader account id; when omitted the flow reuses an owned trader account first and only creates one if none exists."
 const DEV_INSPECT_DESCRIPTION = "Run a dev-inspect and log VM error details."
@@ -16,6 +18,14 @@ export const withAmmPackageIdOption = <T>(yargsInstance: Argv<T>) =>
     alias: ["amm-package-id"],
     type: "string",
     description: AMM_PACKAGE_ID_DESCRIPTION,
+    demandOption: false
+  })
+
+export const withAdminCapIdOption = <T>(yargsInstance: Argv<T>) =>
+  yargsInstance.option("adminCapId", {
+    alias: ["admin-cap-id"],
+    type: "string",
+    description: ADMIN_CAP_ID_DESCRIPTION,
     demandOption: false
   })
 

@@ -1,13 +1,17 @@
-import type { SuiClient, SuiObjectData } from "@mysten/sui/client"
-import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils"
+import type { ObjectOwner, SuiClient, SuiObjectData } from "@mysten/sui/client"
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
 
 import {
+  extractOwnerAddress,
   getAllOwnedObjectsByFilter,
   getSuiObject,
   normalizeOptionalIdFromValue,
   unwrapMoveObjectFields
 } from "@sui-amm/tooling-core/object"
-import { unwrapMoveFields } from "@sui-amm/tooling-core/utils/move-values"
+import {
+  extractFieldValueByKeys,
+  unwrapMoveFields
+} from "@sui-amm/tooling-core/utils/move-values"
 
 export const TRADER_ACCOUNT_TYPE_SUFFIX = "::executor::TraderAccount"
 
@@ -21,25 +25,23 @@ export type TraderAccountOverview = {
   tradeCapId: string
   depositCapId: string
   withdrawCapId: string
-  activeOrdersTableId?: string
 }
 
 type TraderAccountFields = {
   owner?: unknown
+  balance_manager?: unknown
   balance_manager_id?: unknown
+  caps?: unknown
   cap_ids?: unknown
-  active_orders?: unknown
 }
 
 type TraderAccountCapFields = {
+  trade_cap?: unknown
   trade_cap_id?: unknown
+  deposit_cap?: unknown
   deposit_cap_id?: unknown
+  withdraw_cap?: unknown
   withdraw_cap_id?: unknown
-}
-
-const requireAddressField = (value: unknown, label: string): string => {
-  if (typeof value !== "string") throw new Error(`${label} is required.`)
-  return normalizeSuiAddress(value)
 }
 
 const requireIdField = (value: unknown, label: string): string => {
@@ -62,33 +64,67 @@ const resolveCapIds = (capIdsValue: unknown) => {
 
   const capIds = capIdsFields as TraderAccountCapFields
   return {
-    tradeCapId: resolveCapId(capIds.trade_cap_id, "Trade cap id"),
-    depositCapId: resolveCapId(capIds.deposit_cap_id, "Deposit cap id"),
-    withdrawCapId: resolveCapId(capIds.withdraw_cap_id, "Withdraw cap id")
+    tradeCapId: resolveCapId(
+      extractFieldValueByKeys(capIds, ["trade_cap", "trade_cap_id"]),
+      "Trade cap id"
+    ),
+    depositCapId: resolveCapId(
+      extractFieldValueByKeys(capIds, ["deposit_cap", "deposit_cap_id"]),
+      "Deposit cap id"
+    ),
+    withdrawCapId: resolveCapId(
+      extractFieldValueByKeys(capIds, ["withdraw_cap", "withdraw_cap_id"]),
+      "Withdraw cap id"
+    )
   }
+}
+
+const resolveOwnerAddress = ({
+  fields,
+  owner
+}: {
+  fields: TraderAccountFields
+  owner?: ObjectOwner
+}) => {
+  const ownerField = extractFieldValueByKeys(fields, ["owner"])
+  if (typeof ownerField === "string") {
+    return extractOwnerAddress({ AddressOwner: ownerField })
+  }
+
+  if (owner) {
+    return extractOwnerAddress(owner)
+  }
+
+  throw new Error("Trader account owner is required.")
 }
 
 const buildTraderAccountOverviewFromObject = ({
   traderAccountId,
-  object
+  object,
+  owner
 }: {
   traderAccountId: string
   object: SuiObjectData
+  owner?: ObjectOwner
 }): TraderAccountOverview => {
   const fields = unwrapMoveObjectFields<TraderAccountFields>(object)
-  const capIds = resolveCapIds(fields.cap_ids)
+  const capIds = resolveCapIds(
+    extractFieldValueByKeys(fields, ["caps", "cap_ids"])
+  )
 
   return {
     traderAccountId: normalizeSuiObjectId(traderAccountId),
-    ownerAddress: requireAddressField(fields.owner, "Trader account owner"),
+    ownerAddress: resolveOwnerAddress({ fields, owner }),
     balanceManagerId: requireIdField(
-      fields.balance_manager_id,
+      extractFieldValueByKeys(fields, [
+        "balance_manager",
+        "balance_manager_id"
+      ]),
       "Balance manager id"
     ),
     tradeCapId: capIds.tradeCapId,
     depositCapId: capIds.depositCapId,
-    withdrawCapId: capIds.withdrawCapId,
-    activeOrdersTableId: normalizeOptionalIdFromValue(fields.active_orders)
+    withdrawCapId: capIds.withdrawCapId
   }
 }
 
@@ -96,7 +132,7 @@ export const getTraderAccountOverview = async (
   traderAccountId: string,
   suiClient: SuiClient
 ): Promise<TraderAccountOverview> => {
-  const { object } = await getSuiObject(
+  const { object, owner } = await getSuiObject(
     {
       objectId: traderAccountId,
       options: { showContent: true, showType: true }
@@ -106,7 +142,8 @@ export const getTraderAccountOverview = async (
 
   return buildTraderAccountOverviewFromObject({
     traderAccountId,
-    object
+    object,
+    owner
   })
 }
 

@@ -25,7 +25,7 @@ describe("amm PTB builders", () => {
       packageId: "0x123",
       adminCapId: "0x456",
       baseSpreadBps: 25n,
-      volatilityMultiplierBps: 200n,
+      volatilitySpreadBps: 200n,
       useLaser: true,
       pythPriceFeedIdBytes: Array.from({ length: 32 }, (_, index) => index)
     })
@@ -52,7 +52,7 @@ describe("amm PTB builders", () => {
         packageId: "0x123",
         adminCapId: "0x456",
         baseSpreadBps: 25n,
-        volatilityMultiplierBps: 200n,
+        volatilitySpreadBps: 200n,
         useLaser: true,
         pythPriceFeedIdBytes: "0xfeed" as unknown as number[]
       })
@@ -80,7 +80,7 @@ describe("amm PTB builders", () => {
       adminCapId: "0x456",
       config,
       baseSpreadBps: 25n,
-      volatilityMultiplierBps: 200n,
+      volatilitySpreadBps: 200n,
       useLaser: false,
       tradingPaused: true,
       pythPriceFeedIdBytes: Array.from({ length: 32 }, (_, index) => index)
@@ -94,7 +94,7 @@ describe("amm PTB builders", () => {
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
       module: "manager",
-      function: "update_amm_config_and_emit"
+      function: "update_amm_config"
     })
     expect(moveCall.arguments[0]).toMatchObject({
       $kind: "Input",
@@ -126,7 +126,7 @@ describe("amm PTB builders", () => {
         adminCapId: "0x456",
         config,
         baseSpreadBps: 25n,
-        volatilityMultiplierBps: 200n,
+        volatilitySpreadBps: 200n,
         useLaser: false,
         tradingPaused: true,
         pythPriceFeedIdBytes: Array.from({ length: 31 }, (_, index) => index)

@@ -230,7 +230,7 @@ export const createAmmConfigSnapshot = async ({
     packageId: ammPackageId,
     adminCapId,
     baseSpreadBps: ammConfigInputs.baseSpreadBps,
-    volatilityMultiplierBps: ammConfigInputs.volatilityMultiplierBps,
+    volatilitySpreadBps: ammConfigInputs.volatilitySpreadBps,
     useLaser: ammConfigInputs.useLaser,
     pythPriceFeedIdBytes: ammConfigInputs.pythPriceFeedIdBytes
   })
@@ -266,7 +266,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
   adminCapId,
   pythPriceFeedIdHex,
   baseSpreadBps,
-  volatilityMultiplierBps,
+  volatilitySpreadBps,
   useLaser
 }: {
   tooling: Tooling
@@ -274,7 +274,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
   adminCapId: string
   pythPriceFeedIdHex: string
   baseSpreadBps?: string
-  volatilityMultiplierBps?: string
+  volatilitySpreadBps?: string
   useLaser?: boolean
 }): Promise<{
   ammConfigSnapshot: AmmConfigSnapshot
@@ -283,7 +283,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
 }> => {
   const ammConfigInputs = resolveAmmConfigInputs({
     pythPriceFeedIdHex,
-    volatilityMultiplierBps,
+    volatilitySpreadBps,
     baseSpreadBps,
     useLaser
   })

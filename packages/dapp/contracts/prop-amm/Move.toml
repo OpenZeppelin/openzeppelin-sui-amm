@@ -12,5 +12,16 @@ deepbook = { published-at = "0x22be4cade64bf2d02412c7e8d0e8beea2f78828b948118d46
 [dep-replacements.mainnet]
 deepbook = { published-at = "0x337f4f4f6567fcd778d5454f27c16c70e2f274cc6377ea6249ddf491482ef497", original-id = "0x2c8d603bc51326b8c13cef9dd07031a408a48dddb541963357661df5d3204809" }
 
+[dependencies.pyth]
+git = "https://github.com/pyth-network/pyth-crosschain.git"
+subdir = "target_chains/sui/contracts"
+rev = "sui-contract-testnet"
+
+[dep-replacements.test-publish.pyth]
+local = "../pyth-mock"
+rename-from = "local_mock_pyth"
+override = true
+addr_substitutions = { pyth = "0x2" }
+
 [environments]
-test-publish = "33fcc910"
+test-publish = "9947f38b"

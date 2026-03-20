@@ -122,8 +122,8 @@ const AmmConfigSummarySection = ({
         value={summary.ammConfig.baseSpreadBps}
       />
       <ConfigValueCard
-        label="Volatility multiplier (bps)"
-        value={summary.ammConfig.volatilityMultiplierBps}
+        label="Volatility spread (bps)"
+        value={summary.ammConfig.volatilitySpreadBps}
       />
       <ConfigValueCard
         label="Laser"
@@ -350,36 +350,33 @@ const UpdateAmmConfigModal = ({
 
             <label className={modalFieldLabelClassName}>
               <span className={modalFieldTitleClassName}>
-                Volatility multiplier (bps)
+                Volatility spread (bps)
               </span>
               <span className={modalFieldDescriptionClassName}>
                 Zero or higher u64.
               </span>
               <input
-                value={formState.volatilityMultiplierBps}
+                value={formState.volatilitySpreadBps}
                 onChange={(event) =>
-                  handleInputChange(
-                    "volatilityMultiplierBps",
-                    event.target.value
-                  )
+                  handleInputChange("volatilitySpreadBps", event.target.value)
                 }
-                onBlur={() => markFieldBlur("volatilityMultiplierBps")}
+                onBlur={() => markFieldBlur("volatilitySpreadBps")}
                 className={inputClassName(
                   shouldShowFieldError(
-                    "volatilityMultiplierBps",
-                    fieldErrors.volatilityMultiplierBps
+                    "volatilitySpreadBps",
+                    fieldErrors.volatilitySpreadBps
                   )
-                    ? fieldErrors.volatilityMultiplierBps
+                    ? fieldErrors.volatilitySpreadBps
                     : undefined
                 )}
                 placeholder="200"
               />
               {shouldShowFieldError(
-                "volatilityMultiplierBps",
-                fieldErrors.volatilityMultiplierBps
+                "volatilitySpreadBps",
+                fieldErrors.volatilitySpreadBps
               ) ? (
                 <span className={modalFieldErrorTextClassName}>
-                  {fieldErrors.volatilityMultiplierBps}
+                  {fieldErrors.volatilitySpreadBps}
                 </span>
               ) : undefined}
             </label>

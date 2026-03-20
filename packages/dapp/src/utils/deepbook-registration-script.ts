@@ -1,21 +1,6 @@
 import { logKeyValueGreen } from "@sui-amm/tooling-node/log"
 import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
-import type { RegisterBalanceManagerResult } from "./deepbook-registration.ts"
-
-export const OWNER_SIGNER_MISMATCH_ERROR =
-  "Owner address must match the active signer when registering the balance manager."
-
-export const assertOwnerMatchesSigner = ({
-  ownerAddress,
-  signerAddress
-}: {
-  ownerAddress: string
-  signerAddress: string
-}) => {
-  if (ownerAddress !== signerAddress) {
-    throw new Error(OWNER_SIGNER_MISMATCH_ERROR)
-  }
-}
+import type { ResolveOrCreateTraderAccountResult } from "./deepbook-registration.ts"
 
 export type TransactionSummaryView = Pick<
   TransactionSummary,
@@ -35,60 +20,59 @@ export const toTransactionSummaryView = (
   }
 }
 
-export const toRegistrationResultView = (
-  registrationResult: RegisterBalanceManagerResult
+export const toTraderAccountResultView = (
+  traderAccountResult: ResolveOrCreateTraderAccountResult
 ) => ({
-  status: registrationResult.status,
-  note: registrationResult.note,
-  traderAccount: registrationResult.traderAccount,
+  status: traderAccountResult.status,
+  note: traderAccountResult.note,
+  traderAccount: traderAccountResult.traderAccount,
   transactionSummaries: {
     createTraderAccount: toTransactionSummaryView(
-      registrationResult.transactionSummaries.createTraderAccount
-    ),
-    registerBalanceManager: toTransactionSummaryView(
-      registrationResult.transactionSummaries.registerBalanceManager
+      traderAccountResult.transactionSummaries.createTraderAccount
     )
   }
 })
 
-export const logRegistrationResult = ({
+export const logTraderAccountResult = ({
   ownerAddress,
   ammPackageId,
+  adminCapId,
   deepbookPackageId,
   deepbookRegistryId,
-  registrationResult
+  traderAccountResult
 }: {
   ownerAddress: string
   ammPackageId: string
+  adminCapId?: string
   deepbookPackageId: string
   deepbookRegistryId: string
-  registrationResult: RegisterBalanceManagerResult
+  traderAccountResult: ResolveOrCreateTraderAccountResult
 }) => {
   logKeyValueGreen("Owner")(ownerAddress)
   logKeyValueGreen("AMM package")(ammPackageId)
+  if (adminCapId) {
+    logKeyValueGreen("AMM admin cap")(adminCapId)
+  }
   logKeyValueGreen("DeepBook package")(deepbookPackageId)
   logKeyValueGreen("DeepBook registry")(deepbookRegistryId)
-  logKeyValueGreen("Status")(registrationResult.status)
+  logKeyValueGreen("Status")(traderAccountResult.status)
 
-  if (registrationResult.note) {
-    logKeyValueGreen("Note")(registrationResult.note)
+  if (traderAccountResult.note) {
+    logKeyValueGreen("Note")(traderAccountResult.note)
   }
 
-  if (registrationResult.traderAccount) {
+  if (traderAccountResult.traderAccount) {
     logKeyValueGreen("Trader account")(
-      registrationResult.traderAccount.traderAccountId
+      traderAccountResult.traderAccount.traderAccountId
     )
     logKeyValueGreen("Balance manager")(
-      registrationResult.traderAccount.balanceManagerId
+      traderAccountResult.traderAccount.balanceManagerId
     )
   }
 
-  logKeyValueGreen("Create summary")(
-    registrationResult.transactionSummaries.createTraderAccount?.label ??
-      "create-trader-account"
-  )
-  logKeyValueGreen("Register summary")(
-    registrationResult.transactionSummaries.registerBalanceManager?.label ??
-      "register-balance-manager"
-  )
+  if (traderAccountResult.transactionSummaries.createTraderAccount) {
+    logKeyValueGreen("Create summary")(
+      traderAccountResult.transactionSummaries.createTraderAccount.label
+    )
+  }
 }

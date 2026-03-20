@@ -4,7 +4,6 @@ export type TTraderAccountDetails = {
   tradeCapId?: string
   depositCapId?: string
   withdrawCapId?: string
-  activeOrdersTableId?: string
 }
 
 export type TTraderAccountCardContent =

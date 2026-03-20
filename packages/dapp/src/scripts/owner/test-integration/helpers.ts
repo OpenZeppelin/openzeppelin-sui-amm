@@ -30,7 +30,7 @@ export type CompleteAmmSeedOutput = AmmSeedOutput & {
 export type AmmSeedScriptArguments = {
   json: boolean
   baseSpreadBps?: string
-  volatilityMultiplierBps?: string
+  volatilitySpreadBps?: string
   useLaser?: boolean
   pythPriceFeedId?: string
 }

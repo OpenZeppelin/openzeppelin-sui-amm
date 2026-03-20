@@ -7,7 +7,7 @@ export type TAmmConfigBadge = {
 
 export type TAmmConfigDetails = {
   baseSpreadBps: string
-  volatilityMultiplierBps: string
+  volatilitySpreadBps: string
   laserBadge: TAmmConfigBadge
   tradingBadge: TAmmConfigBadge
   pythPriceFeedIdHex?: string

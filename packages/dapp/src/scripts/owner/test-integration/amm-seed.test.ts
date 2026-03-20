@@ -11,21 +11,17 @@ import {
   type AmmSeedScriptArguments,
   type CompleteAmmSeedOutput
 } from "./helpers.ts"
-import {
-  resolveKeepTemp,
-  resolveOnChainSharedVersion,
-  resolveWithFaucet
-} from "./test-helpers.ts"
+import { resolveOnChainSharedVersion } from "./test-helpers.ts"
 
 const SEEDED_BASE_SPREAD_BPS = "37"
-const SEEDED_VOLATILITY_MULTIPLIER_BPS = "420"
+const SEEDED_VOLATILITY_SPREAD_BPS = "420"
 const SEEDED_USE_LASER = true
 const SEEDED_PYTH_PRICE_FEED_ID = DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
 
 const SEED_ARGS: AmmSeedScriptArguments = {
   json: true,
   baseSpreadBps: SEEDED_BASE_SPREAD_BPS,
-  volatilityMultiplierBps: SEEDED_VOLATILITY_MULTIPLIER_BPS,
+  volatilitySpreadBps: SEEDED_VOLATILITY_SPREAD_BPS,
   useLaser: SEEDED_USE_LASER,
   pythPriceFeedId: SEEDED_PYTH_PRICE_FEED_ID
 }
@@ -33,8 +29,8 @@ const SEED_ARGS: AmmSeedScriptArguments = {
 const expectSeededAmmConfigValues = (output: CompleteAmmSeedOutput) => {
   expect(output.ammConfigId).toBe(output.ammConfig.configId)
   expect(output.ammConfig.baseSpreadBps).toBe(SEEDED_BASE_SPREAD_BPS)
-  expect(output.ammConfig.volatilityMultiplierBps).toBe(
-    SEEDED_VOLATILITY_MULTIPLIER_BPS
+  expect(output.ammConfig.volatilitySpreadBps).toBe(
+    SEEDED_VOLATILITY_SPREAD_BPS
   )
   expect(output.ammConfig.useLaser).toBe(SEEDED_USE_LASER)
   expect(output.ammConfig.tradingPaused).toBe(false)
@@ -51,8 +47,6 @@ const expectSeededAmmConfigValues = (output: CompleteAmmSeedOutput) => {
 
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
-  keepTemp: resolveKeepTemp(),
-  withFaucet: resolveWithFaucet(),
   moveSourceRootPath: resolveDappMoveRoot()
 })
 

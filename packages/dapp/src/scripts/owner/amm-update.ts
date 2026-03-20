@@ -28,7 +28,7 @@ type UpdateAmmArguments = {
   adminCapId?: string
   ammPackageId?: string
   baseSpreadBps?: string
-  volatilityMultiplierBps?: string
+  volatilitySpreadBps?: string
   useLaser?: boolean
   tradingPaused?: boolean
   pythPriceFeedId?: string
@@ -40,7 +40,7 @@ type UpdateAmmArguments = {
 
 type ResolvedAmmUpdateInputs = {
   baseSpreadBps: bigint
-  volatilityMultiplierBps: bigint
+  volatilitySpreadBps: bigint
   useLaser: boolean
   tradingPaused: boolean
   pythPriceFeedIdHex: string
@@ -128,9 +128,8 @@ const resolveAmmUpdateInputs = async ({
 
   const resolvedAmmConfigInputs = resolveAmmConfigInputs({
     baseSpreadBps: cliArguments.baseSpreadBps ?? currentOverview.baseSpreadBps,
-    volatilityMultiplierBps:
-      cliArguments.volatilityMultiplierBps ??
-      currentOverview.volatilityMultiplierBps,
+    volatilitySpreadBps:
+      cliArguments.volatilitySpreadBps ?? currentOverview.volatilitySpreadBps,
     useLaser: cliArguments.useLaser ?? currentOverview.useLaser,
     pythPriceFeedIdHex
   })
@@ -176,7 +175,7 @@ runSuiScript(
       adminCapId,
       config: ammConfigSharedObject,
       baseSpreadBps: updateInputs.baseSpreadBps,
-      volatilityMultiplierBps: updateInputs.volatilityMultiplierBps,
+      volatilitySpreadBps: updateInputs.volatilitySpreadBps,
       useLaser: updateInputs.useLaser,
       tradingPaused: updateInputs.tradingPaused,
       pythPriceFeedIdBytes: updateInputs.pythPriceFeedIdBytes
@@ -247,11 +246,11 @@ runSuiScript(
         "Base spread in basis points (u64); defaults to the current config value.",
       demandOption: false
     })
-    .option("volatilityMultiplierBps", {
-      alias: ["volatility-multiplier-bps"],
+    .option("volatilitySpreadBps", {
+      alias: ["volatility-spread-bps"],
       type: "string",
       description:
-        "Volatility multiplier in basis points (u64); defaults to the current config value.",
+        "Volatility spread in basis points (u64); defaults to the current config value.",
       demandOption: false
     })
     .option("useLaser", {

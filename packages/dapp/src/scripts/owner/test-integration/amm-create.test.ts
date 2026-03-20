@@ -17,11 +17,7 @@ import {
   parseJsonFromScriptOutput
 } from "@sui-amm/tooling-node/testing/scripts"
 import { DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID } from "../../../utils/amm.ts"
-import {
-  resolveKeepTemp,
-  resolveOnChainSharedVersion,
-  resolveWithFaucet
-} from "./test-helpers.ts"
+import { resolveOnChainSharedVersion } from "./test-helpers.ts"
 
 type AmmCreateOutput = {
   adminCapId?: string
@@ -66,8 +62,6 @@ const findObjectArtifactById = (
 
 const testEnv = createSuiLocalnetTestEnv({
   mode: "test",
-  keepTemp: resolveKeepTemp(),
-  withFaucet: resolveWithFaucet(),
   moveSourceRootPath: resolveDappMoveRoot()
 })
 
@@ -82,7 +76,7 @@ describe("owner amm-create integration", () => {
       })
 
       const baseSpreadBps = "37"
-      const volatilityMultiplierBps = "420"
+      const volatilitySpreadBps = "420"
       const useLaser = true
       const pythPriceFeedId = DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
 
@@ -94,7 +88,7 @@ describe("owner amm-create integration", () => {
           args: {
             json: true,
             baseSpreadBps,
-            volatilityMultiplierBps,
+            volatilitySpreadBps,
             useLaser
           }
         }
@@ -119,9 +113,7 @@ describe("owner amm-create integration", () => {
       expect(output.digest).toBeTruthy()
       expect(output.transactionSummary?.label).toBe("create-amm")
       expect(output.ammConfig.baseSpreadBps).toBe(baseSpreadBps)
-      expect(output.ammConfig.volatilityMultiplierBps).toBe(
-        volatilityMultiplierBps
-      )
+      expect(output.ammConfig.volatilitySpreadBps).toBe(volatilitySpreadBps)
       expect(output.ammConfig.useLaser).toBe(useLaser)
       expect(output.ammConfig.tradingPaused).toBe(false)
       expect(normalizeHex(output.ammConfig.pythPriceFeedIdHex)).toBe(

@@ -43,7 +43,7 @@ type CreatedAmmConfigSnapshot = {
   initialSharedVersion: string
   pythPriceFeedIdHex: string
   useLaser: boolean
-  volatilityMultiplierBps: bigint
+  volatilitySpreadBps: bigint
 }
 
 const resolveKeepTemp = () => process.env.SUI_IT_KEEP_TEMP === "1"
@@ -97,7 +97,7 @@ describe("amm-view script", () => {
 
       const createAmmConfig = async ({
         baseSpreadBps,
-        volatilityMultiplierBps,
+        volatilitySpreadBps,
         useLaser,
         pythPriceFeedIdHex
       }: Omit<
@@ -108,7 +108,7 @@ describe("amm-view script", () => {
           packageId: rootArtifact.packageId,
           adminCapId,
           baseSpreadBps,
-          volatilityMultiplierBps,
+          volatilitySpreadBps,
           useLaser,
           pythPriceFeedIdBytes: parsePythPriceFeedIdBytes(pythPriceFeedIdHex)
         })
@@ -136,19 +136,19 @@ describe("amm-view script", () => {
           initialSharedVersion,
           pythPriceFeedIdHex,
           useLaser,
-          volatilityMultiplierBps
+          volatilitySpreadBps
         }
       }
 
       await createAmmConfig({
         baseSpreadBps: 37n,
-        volatilityMultiplierBps: 420n,
+        volatilitySpreadBps: 420n,
         useLaser: false,
         pythPriceFeedIdHex: DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
       })
       const latestAmmConfig = await createAmmConfig({
         baseSpreadBps: 58n,
-        volatilityMultiplierBps: 777n,
+        volatilitySpreadBps: 777n,
         useLaser: true,
         pythPriceFeedIdHex: DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
       })
@@ -179,8 +179,8 @@ describe("amm-view script", () => {
       expect(parsed.ammConfig.baseSpreadBps).toBe(
         latestAmmConfig.baseSpreadBps.toString()
       )
-      expect(parsed.ammConfig.volatilityMultiplierBps).toBe(
-        latestAmmConfig.volatilityMultiplierBps.toString()
+      expect(parsed.ammConfig.volatilitySpreadBps).toBe(
+        latestAmmConfig.volatilitySpreadBps.toString()
       )
       expect(parsed.ammConfig.useLaser).toBe(latestAmmConfig.useLaser)
       expect(parsed.ammConfig.tradingPaused).toBe(false)
