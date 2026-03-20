@@ -23,8 +23,5 @@ rename-from = "local_mock_pyth"
 override = true
 addr_substitutions = { pyth = "0x2" }
 
-[dep-replacements.test-publish]
-deepbook = { local = "../../../../vendor/deepbookv3/packages/deepbook", override = true }
-
 [environments]
 test-publish = "9947f38b"
