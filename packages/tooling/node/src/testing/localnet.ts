@@ -1506,6 +1506,7 @@ export const copyExternalMoveDependenciesIntoTempRoot = async ({
       recursive: true
     })
     await removeMoveBuildArtifacts(destinationDependencyPath)
+    await removeMoveLockFiles(destinationDependencyPath)
 
     sourceToDestinationMap.set(
       resolvedDependencyPath,

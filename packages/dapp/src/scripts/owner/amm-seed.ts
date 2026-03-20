@@ -379,7 +379,7 @@ const collectAmmConfigInputMismatches = ({
 }) => {
   const mismatches: string[] = []
   const expectedBaseSpreadBps = expectedInputs.baseSpreadBps.toString()
-  const expectedvolatilitySpreadBps =
+  const expectedVolatilitySpreadBps =
     expectedInputs.volatilitySpreadBps.toString()
 
   if (
@@ -397,9 +397,9 @@ const collectAmmConfigInputMismatches = ({
     )
   }
 
-  if (existingOverview.volatilitySpreadBps !== expectedvolatilitySpreadBps) {
+  if (existingOverview.volatilitySpreadBps !== expectedVolatilitySpreadBps) {
     mismatches.push(
-      `volatilitySpreadBps expected ${expectedvolatilitySpreadBps} but got ${existingOverview.volatilitySpreadBps}`
+      `volatilitySpreadBps expected ${expectedVolatilitySpreadBps} but got ${existingOverview.volatilitySpreadBps}`
     )
   }
 
