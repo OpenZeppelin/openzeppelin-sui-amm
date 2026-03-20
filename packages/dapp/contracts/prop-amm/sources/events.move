@@ -53,7 +53,7 @@ public(package) fun amm_config_updated(config_id: ID): AMMConfigUpdated {
     AMMConfigUpdated { config_id }
 }
 
-/// Emit an  `TraderAccountCreated` event.
+/// Emit a `TraderAccountCreated` event.
 public(package) fun emit_trader_account_created(trader_account_id: ID) {
     event::emit(TraderAccountCreated { trader_account_id });
 }
