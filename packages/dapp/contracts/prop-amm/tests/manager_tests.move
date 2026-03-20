@@ -4,21 +4,13 @@ module openzeppelin_market_maker::manager_tests;
 
 use openzeppelin_market_maker::events::{amm_config_created, amm_config_updated};
 use openzeppelin_market_maker::manager::{Self, AMMAdminCap, AMMConfig};
-use openzeppelin_market_maker::test_helpers::assert_emitted;
+use openzeppelin_market_maker::test_helpers::{
+    assert_emitted,
+    build_pyth_price_feed_id,
+    build_invalid_pyth_price_feed_id
+};
 use std::unit_test::assert_eq;
 use sui::test_scenario;
-
-// === Helpers ===
-
-/// Builds a dummy Pyth feed ID with a caller-provided byte value.
-fun build_pyth_price_feed_id(byte_value: u8): vector<u8> {
-    vector::tabulate!(manager::pyth_price_identifier_length(), |_| byte_value)
-}
-
-/// Builds a dummy Pyth feed ID with invalid length.
-fun build_invalid_pyth_price_feed_id(): vector<u8> {
-    vector::tabulate!(manager::pyth_price_identifier_length() - 1, |_| 0)
-}
 
 // === Tests ===
 
@@ -28,6 +20,7 @@ fun init_transfers_admin_cap() {
     let mut scenario = test_scenario::begin(sender);
 
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
@@ -45,6 +38,7 @@ fun create_amm_config_shares_config_and_emits_event() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -57,6 +51,7 @@ fun create_amm_config_shares_config_and_emits_event() {
         scenario.ctx(),
     );
     assert_emitted!(amm_config_created(config_id));
+
     scenario.next_tx(sender);
 
     let config: AMMConfig = scenario.take_shared();
@@ -82,6 +77,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -93,6 +89,7 @@ fun update_amm_config_updates_config_and_emits_event() {
         pyth_price_feed_id,
         scenario.ctx(),
     );
+
     scenario.next_tx(sender);
 
     let mut config: AMMConfig = scenario.take_shared();
@@ -111,6 +108,7 @@ fun update_amm_config_updates_config_and_emits_event() {
         updated_pyth_price_feed_id,
     );
     assert_emitted!(amm_config_updated(config.config_id()));
+
     scenario.next_tx(sender);
 
     assert_eq!(config.base_spread_bps(), updated_base_spread_bps);
@@ -134,6 +132,7 @@ fun update_amm_config_supports_multiple_updates() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -145,6 +144,7 @@ fun update_amm_config_supports_multiple_updates() {
         pyth_price_feed_id,
         scenario.ctx(),
     );
+
     scenario.next_tx(sender);
 
     let mut config: AMMConfig = scenario.take_shared();
@@ -159,6 +159,7 @@ fun update_amm_config_supports_multiple_updates() {
         first_update_pyth_price_feed_id,
     );
     assert_emitted!(amm_config_updated(config.config_id()));
+
     scenario.next_tx(sender);
 
     let second_update_pyth_price_feed_id = build_pyth_price_feed_id(2);
@@ -171,6 +172,7 @@ fun update_amm_config_supports_multiple_updates() {
         second_update_pyth_price_feed_id,
     );
     assert_emitted!(amm_config_updated(config.config_id()));
+
     scenario.next_tx(sender);
 
     assert_eq!(config.base_spread_bps(), 30);
@@ -193,6 +195,7 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -219,6 +222,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -230,6 +234,7 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
         pyth_price_feed_id,
         scenario.ctx(),
     );
+
     scenario.next_tx(sender);
 
     let mut config: AMMConfig = scenario.take_shared();
@@ -255,6 +260,7 @@ fun create_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -281,6 +287,7 @@ fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -292,6 +299,7 @@ fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
         pyth_price_feed_id,
         scenario.ctx(),
     );
+
     scenario.next_tx(sender);
 
     let mut config: AMMConfig = scenario.take_shared();
@@ -317,6 +325,7 @@ fun create_amm_config_rejects_empty_feed_id() {
     let use_laser = false;
     let pyth_price_feed_id = vector[];
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -343,6 +352,7 @@ fun update_amm_config_rejects_empty_feed_id() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -354,6 +364,7 @@ fun update_amm_config_rejects_empty_feed_id() {
         pyth_price_feed_id,
         scenario.ctx(),
     );
+
     scenario.next_tx(sender);
 
     let mut config: AMMConfig = scenario.take_shared();
@@ -379,6 +390,7 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
     let use_laser = false;
     let pyth_price_feed_id = build_invalid_pyth_price_feed_id();
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -405,6 +417,7 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
@@ -416,6 +429,7 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
         pyth_price_feed_id,
         scenario.ctx(),
     );
+
     scenario.next_tx(sender);
 
     let mut config: AMMConfig = scenario.take_shared();

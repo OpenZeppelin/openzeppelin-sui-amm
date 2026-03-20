@@ -221,7 +221,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     let self_matching_option = constants::cancel_taker();
     let expire_timestamp = clock.timestamp_ms() + ORDER_EXPIRATION_TIME_MS;
     let order_type = constants::no_restriction();
-    let pay_with_deep = true;
+    let pay_with_deep = false;
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
     trader_account.try_place_limit_order(
