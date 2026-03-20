@@ -36,32 +36,14 @@ public(package) fun emit_amm_config_created(config_id: ID) {
     event::emit(AMMConfigCreated { config_id });
 }
 
-/// Builds an `AMMConfigCreated` payload.
-#[test_only]
-public(package) fun amm_config_created(config_id: ID): AMMConfigCreated {
-    AMMConfigCreated { config_id }
-}
-
 /// Emit an `AMMConfigUpdated` event.
 public(package) fun emit_amm_config_updated(config_id: ID) {
     event::emit(AMMConfigUpdated { config_id });
 }
 
-/// Builds an `AMMConfigUpdated` payload.
-#[test_only]
-public(package) fun amm_config_updated(config_id: ID): AMMConfigUpdated {
-    AMMConfigUpdated { config_id }
-}
-
 /// Emit a `TraderAccountCreated` event.
 public(package) fun emit_trader_account_created(trader_account_id: ID) {
     event::emit(TraderAccountCreated { trader_account_id });
-}
-
-/// Builds a `TraderAccountCreated` payload.
-#[test_only]
-public(package) fun trader_account_created(trader_account_id: ID): TraderAccountCreated {
-    TraderAccountCreated { trader_account_id }
 }
 
 /// Emit a `QuoteUpdated` event.
@@ -71,6 +53,26 @@ public(package) fun emit_quote_updated(
     volatility_spread_bps: u64,
 ) {
     event::emit(QuoteUpdated { price, base_spread_bps, volatility_spread_bps });
+}
+
+// === Test only helpers ===
+
+/// Builds an `AMMConfigCreated` payload.
+#[test_only]
+public(package) fun amm_config_created(config_id: ID): AMMConfigCreated {
+    AMMConfigCreated { config_id }
+}
+
+/// Builds an `AMMConfigUpdated` payload.
+#[test_only]
+public(package) fun amm_config_updated(config_id: ID): AMMConfigUpdated {
+    AMMConfigUpdated { config_id }
+}
+
+/// Builds a `TraderAccountCreated` payload.
+#[test_only]
+public(package) fun trader_account_created(trader_account_id: ID): TraderAccountCreated {
+    TraderAccountCreated { trader_account_id }
 }
 
 /// Builds a `QuoteUpdated` payload.

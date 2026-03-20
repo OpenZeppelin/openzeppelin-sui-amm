@@ -17,7 +17,7 @@ const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 const EInvalidBaseSpreadBps: vector<u8> = b"base spread bps must be greater than zero";
 #[error(code = 1)]
 const EBaseSpreadBpsExceedsVolatilitySpread: vector<u8> =
-    b"volatility spread must be greater than a base spread";
+    b"volatility spread should not exceed a base spread";
 #[error(code = 2)]
 const EVolatilitySpreadBpsExceedsMaxBasisPoints: vector<u8> =
     b"volatility spread bps must be at most 10000";
