@@ -7,7 +7,7 @@ use deepbook::constants;
 use deepbook::order_info::{OrderFilled, OrderFullyFilled};
 use deepbook::pool::{Self, Pool};
 use deepbook::registry::{Self, Registry};
-use openzeppelin_market_maker::events::{quote_updated, trader_account_created};
+use openzeppelin_market_maker::events::{QuoteUpdated, quote_updated, trader_account_created};
 use openzeppelin_market_maker::executor::{Self, TraderAccount};
 use openzeppelin_market_maker::manager::{Self, AMMAdminCap, AMMConfig};
 use openzeppelin_market_maker::test_helpers::{assert_emitted, build_pyth_price_feed_id};
@@ -350,11 +350,11 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     scenario.end();
 }
 
-#[test, expected_failure(abort_code = executor::ETradingPaused)]
-fun refresh_quotes_rejects_when_trading_paused() {
+#[test]
+fun refresh_quotes_when_paused_reflects_settled_balances() {
     let sender = @0x21;
+    let maker = @0x22;
     let feed_id_byte = 8;
-    let quote_balance = 19_404_002 * constants::float_scaling();
     let mut scenario = test_scenario::begin(sender);
 
     manager::test_init(scenario.ctx());
@@ -412,12 +412,7 @@ fun refresh_quotes_rejects_when_trading_paused() {
     );
     trader_account.deposit(
         &admin_cap,
-        mint_for_testing<SUI>(1_000_000 * constants::float_scaling(), scenario.ctx()),
-        scenario.ctx(),
-    );
-    trader_account.deposit(
-        &admin_cap,
-        mint_for_testing<USDC>(quote_balance, scenario.ctx()),
+        mint_for_testing<SUI>(2 * constants::min_size(), scenario.ctx()),
         scenario.ctx(),
     );
 
@@ -425,6 +420,55 @@ fun refresh_quotes_rejects_when_trading_paused() {
     destroy(deepbook_admin_cap);
     test_scenario::return_to_sender(&scenario, admin_cap);
     transfer::public_transfer(trader_account, sender);
+
+    scenario.next_tx(sender);
+
+    let mut trader_account: TraderAccount = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let config: AMMConfig = scenario.take_shared();
+    let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
+    let clock: Clock = scenario.take_shared();
+
+    trader_account.refresh_quotes(
+        &mut pool,
+        &config,
+        &price_info_object,
+        &clock,
+        scenario.ctx(),
+    );
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(config);
+    test_scenario::return_shared(price_info_object);
+    test_scenario::return_shared(clock);
+    transfer::public_transfer(trader_account, sender);
+
+    scenario.next_tx(maker);
+
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+    let mut taker_balance_manager = balance_manager::new(scenario.ctx());
+    taker_balance_manager.deposit(
+        mint_for_testing<USDC>(100_000_000 * constants::float_scaling(), scenario.ctx()),
+        scenario.ctx(),
+    );
+    let taker_trade_proof = taker_balance_manager.generate_proof_as_owner(scenario.ctx());
+
+    pool.place_market_order(
+        &mut taker_balance_manager,
+        &taker_trade_proof,
+        99,
+        constants::self_matching_allowed(),
+        constants::min_size(),
+        true,
+        false,
+        &clock,
+        scenario.ctx(),
+    );
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(clock);
+    transfer::public_share_object(taker_balance_manager);
 
     scenario.next_tx(sender);
 
@@ -449,6 +493,8 @@ fun refresh_quotes_rejects_when_trading_paused() {
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
 
+    let quote_balance_before = trader_account.balance_manager().balance<USDC>();
+
     trader_account.refresh_quotes(
         &mut pool,
         &config,
@@ -457,7 +503,17 @@ fun refresh_quotes_rejects_when_trading_paused() {
         scenario.ctx(),
     );
 
-    abort
+    let quote_balance_after = trader_account.balance_manager().balance<USDC>();
+    assert!(quote_balance_after > quote_balance_before);
+    assert_eq!(event::events_by_type<QuoteUpdated>().length(), 0);
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(config);
+    test_scenario::return_shared(price_info_object);
+    test_scenario::return_shared(clock);
+    transfer::public_transfer(trader_account, sender);
+
+    scenario.end();
 }
 
 #[test, expected_failure(abort_code = executor::EPythFeedIdentifierMismatch)]

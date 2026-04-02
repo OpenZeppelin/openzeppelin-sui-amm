@@ -28,18 +28,16 @@ const MAX_DECIMAL_POWER: u8 = 38;
 // === Errors ===
 
 #[error(code = 0)]
-const ETradingPaused: vector<u8> = b"trading is paused";
-#[error(code = 1)]
 const EPythPriceNonPositive: vector<u8> = b"pyth price must be positive";
-#[error(code = 2)]
+#[error(code = 1)]
 const EPythExponentNonNegative: vector<u8> = b"pyth price exponent_u128 must be negative";
-#[error(code = 3)]
+#[error(code = 2)]
 const EPythExponentTooLarge: vector<u8> = b"pyth price exponent_u128 should fit in u8";
-#[error(code = 4)]
+#[error(code = 3)]
 const EPythInvalidPriceValue: vector<u8> = b"pyth price must be of valid size";
-#[error(code = 5)]
+#[error(code = 4)]
 const EPythFeedIdentifierMismatch: vector<u8> = b"pyth feed identifier mismatch";
-#[error(code = 6)]
+#[error(code = 5)]
 const ETickIsTooLarge: vector<u8> = b"deepbook pool tick size is too large for price calculation";
 
 // === Structs ===
@@ -151,21 +149,6 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    assert!(!config.trading_paused(), ETradingPaused);
-
-    // Calculate base and volatility spread values.
-    let oracle_mid_price = deepbook_price(price_info_object, config, clock);
-    let base_spread = config.base_spread(oracle_mid_price);
-    let volatility_spread = config.volatility_spread(oracle_mid_price);
-
-    let (tick, lot_size, min_size) = pool.pool_book_params();
-
-    // Calculate bids/ask order prices.
-    let bid_inner = compute_bid_price(oracle_mid_price, base_spread, tick);
-    let bid_outer = compute_bid_price(oracle_mid_price, volatility_spread, tick);
-    let ask_inner = compute_ask_price(oracle_mid_price, base_spread, tick);
-    let ask_outer = compute_ask_price(oracle_mid_price, volatility_spread, tick);
-
     // Generate trade proof.
     let trade_proof = trader_account
         .balance_manager
@@ -181,6 +164,27 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
+
+    // Making sure that orders are cancelled and balances are updated based on settled
+    // orders before honoring pause state. While paused, we stop after housekeeping and
+    // do not place any new orders.
+    if (config.trading_paused()) {
+        return
+    };
+
+    // Calculate base and volatility spread values.
+    let oracle_mid_price = deepbook_price(price_info_object, config, clock);
+    let base_spread = config.base_spread(oracle_mid_price);
+    let volatility_spread = config.volatility_spread(oracle_mid_price);
+
+    // Fetch deepbook's pool parameters.
+    let (tick, lot_size, min_size) = pool.pool_book_params();
+
+    // Calculate bids/ask order prices.
+    let bid_inner = compute_bid_price(oracle_mid_price, base_spread, tick);
+    let bid_outer = compute_bid_price(oracle_mid_price, volatility_spread, tick);
+    let ask_inner = compute_ask_price(oracle_mid_price, base_spread, tick);
+    let ask_outer = compute_ask_price(oracle_mid_price, volatility_spread, tick);
 
     // Split bid order balance equally (almost xD) between inner and outer spread,
     // and compute quantity in base asset (for deepbook limit order).
