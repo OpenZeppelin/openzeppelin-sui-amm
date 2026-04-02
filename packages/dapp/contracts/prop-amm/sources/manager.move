@@ -5,26 +5,29 @@ use openzeppelin_market_maker::events;
 use pyth::price_info::PriceInfoObject;
 use sui::package;
 
+// === Errors ===
+
+#[error(code = 0)]
+const EInvalidBaseSpreadBps: vector<u8> = "base spread bps must be greater than zero";
+#[error(code = 1)]
+const EBaseSpreadBpsExceedsVolatilitySpread: vector<u8> =
+    "base spread should not exceed a volatility spread";
+#[error(code = 2)]
+const EVolatilitySpreadBpsExceedsMaxBasisPoints: vector<u8> =
+    "volatility spread bps must be at most 10000";
+#[error(code = 3)]
+const EInvalidPythPriceFeedIdLength: vector<u8> = "pyth price feed id must be 32 bytes";
+
 // === Constants ===
 
 const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 const HUNDRED_PERCENT_BPS: u64 = 10_000;
 const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
-// === Errors ===
-
-#[error(code = 0)]
-const EInvalidBaseSpreadBps: vector<u8> = b"base spread bps must be greater than zero";
-#[error(code = 1)]
-const EBaseSpreadBpsExceedsVolatilitySpread: vector<u8> =
-    b"base spread should not exceed a volatility spread";
-#[error(code = 2)]
-const EVolatilitySpreadBpsExceedsMaxBasisPoints: vector<u8> =
-    b"volatility spread bps must be at most 10000";
-#[error(code = 3)]
-const EInvalidPythPriceFeedIdLength: vector<u8> = b"pyth price feed id must be 32 bytes";
-
 // === Structs ===
+
+/// One-time publisher witness created at publish time.
+public struct MANAGER has drop {}
 
 /// AMM configuration shared across pools.
 public struct AMMConfig has key {
@@ -49,9 +52,6 @@ public struct AMMAdminCap has key, store {
 }
 
 // === Init ===
-
-/// One-time publisher witness created at publish time.
-public struct MANAGER has drop {}
 
 /// Initializes the package and transfers the admin capability to the publisher.
 ///
@@ -140,29 +140,6 @@ public fun update_amm_config(
     events::emit_amm_config_updated(object::id(config))
 }
 
-// === Private Functions ===
-
-/// Validates all inputs for a new or updated configuration.
-macro fun assert_valid_amm_config_inputs(
-    $base_spread_bps: u64,
-    $volatility_spread_bps: u64,
-    $pyth_price_feed_id: vector<u8>,
-) {
-    let base_spread_bps = $base_spread_bps;
-    let volatility_spread_bps = $volatility_spread_bps;
-    let pyth_price_feed_id = $pyth_price_feed_id;
-    assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
-    assert!(base_spread_bps <= volatility_spread_bps, EBaseSpreadBpsExceedsVolatilitySpread);
-    assert!(
-        volatility_spread_bps <= HUNDRED_PERCENT_BPS,
-        EVolatilitySpreadBpsExceedsMaxBasisPoints,
-    );
-    assert!(
-        pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
-        EInvalidPythPriceFeedIdLength,
-    );
-}
-
 // === View helpers ===
 
 /// Returns the base spread in basis points.
@@ -220,6 +197,29 @@ public fun admin_cap_id(admin_cap: &AMMAdminCap): ID {
 /// Returns the required Pyth price feed identifier length.
 public(package) fun pyth_price_identifier_length(): u64 {
     PYTH_PRICE_IDENTIFIER_LENGTH
+}
+
+// === Private Functions ===
+
+/// Validates all inputs for a new or updated configuration.
+macro fun assert_valid_amm_config_inputs(
+    $base_spread_bps: u64,
+    $volatility_spread_bps: u64,
+    $pyth_price_feed_id: vector<u8>,
+) {
+    let base_spread_bps = $base_spread_bps;
+    let volatility_spread_bps = $volatility_spread_bps;
+    let pyth_price_feed_id = $pyth_price_feed_id;
+    assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
+    assert!(base_spread_bps <= volatility_spread_bps, EBaseSpreadBpsExceedsVolatilitySpread);
+    assert!(
+        volatility_spread_bps <= HUNDRED_PERCENT_BPS,
+        EVolatilitySpreadBpsExceedsMaxBasisPoints,
+    );
+    assert!(
+        pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
+        EInvalidPythPriceFeedIdLength,
+    );
 }
 
 // === Test-Only Helpers ===

@@ -3,6 +3,8 @@ module openzeppelin_market_maker::events;
 
 use sui::event;
 
+// === Events ===
+
 /// Emitted when a new configuration object is created.
 public struct AMMConfigCreated has copy, drop {
     /// ID of the configuration object.
@@ -31,6 +33,8 @@ public struct QuoteUpdated has copy, drop {
     volatility_spread_bps: u64,
 }
 
+// === Public Functions ===
+
 /// Emit an `AMMConfigCreated` event.
 public(package) fun emit_amm_config_created(config_id: ID) {
     event::emit(AMMConfigCreated { config_id });
@@ -55,7 +59,7 @@ public(package) fun emit_quote_updated(
     event::emit(QuoteUpdated { price, base_spread_bps, volatility_spread_bps });
 }
 
-// === Test only helpers ===
+// === Test-Only Helpers ===
 
 /// Builds an `AMMConfigCreated` payload.
 #[test_only]

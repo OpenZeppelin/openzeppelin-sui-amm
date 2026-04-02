@@ -19,28 +19,28 @@ use pyth::pyth;
 use sui::clock::Clock;
 use sui::coin::Coin;
 
+// === Errors ===
+
+#[error(code = 0)]
+const ETradingPaused: vector<u8> = "trading is paused";
+#[error(code = 1)]
+const EPythPriceNonPositive: vector<u8> = "pyth price must be positive";
+#[error(code = 2)]
+const EPythExponentNonNegative: vector<u8> = "pyth price exponent_u128 must be negative";
+#[error(code = 3)]
+const EPythExponentTooLarge: vector<u8> = "pyth price exponent_u128 should fit in u8";
+#[error(code = 4)]
+const EPythInvalidPriceValue: vector<u8> = "pyth price must be of valid size";
+#[error(code = 5)]
+const EPythFeedIdentifierMismatch: vector<u8> = "pyth feed identifier mismatch";
+#[error(code = 6)]
+const ETickIsTooLarge: vector<u8> = "deepbook pool tick size is too large for price calculation";
+
 // === Constants ===
 
 const ORDER_EXPIRATION_TIME_MS: u64 = 30_000;
 const MAX_PRICE_AGE_SECS: u64 = 30;
 const MAX_DECIMAL_POWER: u8 = 38;
-
-// === Errors ===
-
-#[error(code = 0)]
-const ETradingPaused: vector<u8> = b"trading is paused";
-#[error(code = 1)]
-const EPythPriceNonPositive: vector<u8> = b"pyth price must be positive";
-#[error(code = 2)]
-const EPythExponentNonNegative: vector<u8> = b"pyth price exponent_u128 must be negative";
-#[error(code = 3)]
-const EPythExponentTooLarge: vector<u8> = b"pyth price exponent_u128 should fit in u8";
-#[error(code = 4)]
-const EPythInvalidPriceValue: vector<u8> = b"pyth price must be of valid size";
-#[error(code = 5)]
-const EPythFeedIdentifierMismatch: vector<u8> = b"pyth feed identifier mismatch";
-#[error(code = 6)]
-const ETickIsTooLarge: vector<u8> = b"deepbook pool tick size is too large for price calculation";
 
 // === Structs ===
 
@@ -106,7 +106,7 @@ public fun create_trader_account_for_owner(
     let trader_account = TraderAccount {
         id: object::new(ctx),
         caps,
-        balance_manager: balance_manager,
+        balance_manager,
     };
 
     events::emit_trader_account_created(object::id(&trader_account));
@@ -256,6 +256,40 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     );
 }
 
+// === View helpers ===
+
+/// Returns the trader account owner.
+public fun owner(trader_account: &TraderAccount): address {
+    trader_account.balance_manager.owner()
+}
+
+/// Returns the trader account object ID.
+public fun trader_account_id(trader_account: &TraderAccount): ID {
+    trader_account.id.to_inner()
+}
+
+/// Returns the balance manager.
+public fun balance_manager(trader_account: &TraderAccount): &BalanceManager {
+    &trader_account.balance_manager
+}
+
+/// Returns a deepbook's trade cap ID.
+public(package) fun trade_cap_id(trader_account: &TraderAccount): ID {
+    object::id(&trader_account.caps.trade_cap)
+}
+
+/// Returns a deepbook's deposit cap ID.
+public(package) fun deposit_cap_id(trader_account: &TraderAccount): ID {
+    object::id(&trader_account.caps.deposit_cap)
+}
+
+/// Returns a deepbook's withdraw cap ID.
+public(package) fun withdraw_cap_id(trader_account: &TraderAccount): ID {
+    object::id(&trader_account.caps.withdraw_cap)
+}
+
+// === Private Functions ===
+
 /// Compute bid price based on `mid_price`, `spread`
 /// to match deepbook's allowed `tick` size
 /// (rounding outside `mid_price`)
@@ -303,8 +337,6 @@ fun compute_quantity(quantity: u64, lot_size: u64, min_size: u64): u64 {
         0
     }
 }
-
-// === Private Functions ===
 
 /// Helper function to place a limit order if quantity is non-zero.
 fun try_place_limit_order<BaseAsset, QuoteAsset>(
@@ -383,36 +415,4 @@ fun deepbook_price(price_info_object: &PriceInfoObject, config: &AMMConfig, cloc
     assert!(deepbook_price <= constants::max_price(), EPythInvalidPriceValue);
 
     deepbook_price
-}
-
-// === View helpers ===
-
-/// Returns the trader account owner.
-public fun owner(trader_account: &TraderAccount): address {
-    trader_account.balance_manager.owner()
-}
-
-/// Returns the trader account object ID.
-public fun trader_account_id(trader_account: &TraderAccount): ID {
-    trader_account.id.to_inner()
-}
-
-/// Returns the balance manager.
-public fun balance_manager(trader_account: &TraderAccount): &BalanceManager {
-    &trader_account.balance_manager
-}
-
-/// Returns a deepbook's trade cap ID.
-public fun trade_cap_id(trader_account: &TraderAccount): ID {
-    object::id(&trader_account.caps.trade_cap)
-}
-
-/// Returns a deepbook's deposit cap ID.
-public fun deposit_cap_id(trader_account: &TraderAccount): ID {
-    object::id(&trader_account.caps.deposit_cap)
-}
-
-/// Returns a deepbook's withdraw cap ID.
-public fun withdraw_cap_id(trader_account: &TraderAccount): ID {
-    object::id(&trader_account.caps.withdraw_cap)
 }
