@@ -32,7 +32,6 @@ fun create_authorized_registry(scenario: &mut test_scenario::Scenario, sender: a
 
     let admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
     let mut deepbook_registry: Registry = scenario.take_shared();
-    deepbook_registry.authorize_app<executor::PropAmmApp>(&admin_cap);
     deepbook_registry.init_balance_manager_map(&admin_cap, scenario.ctx());
 
     test_scenario::return_shared(deepbook_registry);
@@ -42,7 +41,6 @@ fun create_authorized_registry(scenario: &mut test_scenario::Scenario, sender: a
 #[test]
 fun create_trader_account_sets_owner_and_emits_created_event() {
     let sender = @0xA;
-    let owner = @0xB;
     let mut scenario = test_scenario::begin(sender);
 
     manager::test_init(scenario.ctx());
@@ -51,21 +49,14 @@ fun create_trader_account_sets_owner_and_emits_created_event() {
     scenario.next_tx(sender);
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
-    let deepbook_registry: Registry = scenario.take_shared();
-    let trader_account = executor::create_trader_account_for_owner(
-        &admin_cap,
-        &deepbook_registry,
-        owner,
-        scenario.ctx(),
-    );
+    let trader_account = executor::create_trader_account(&admin_cap, scenario.ctx());
     assert_emitted!(trader_account_created(trader_account.trader_account_id()));
 
-    assert_eq!(trader_account.owner(), owner);
+    assert_eq!(trader_account.owner(), sender);
     assert_eq!(trader_account.trader_account_id(), object::id(&trader_account));
 
-    test_scenario::return_shared(deepbook_registry);
     scenario.return_to_sender(admin_cap);
-    transfer::public_transfer(trader_account, owner);
+    transfer::public_transfer(trader_account, sender);
     scenario.end();
 }
 
@@ -81,24 +72,17 @@ fun create_trader_account_and_transfer_moves_account_to_owner() {
     scenario.next_tx(sender);
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
-    let deepbook_registry: Registry = scenario.take_shared();
-    let trader_account = executor::create_trader_account_for_owner(
-        &admin_cap,
-        &deepbook_registry,
-        owner,
-        scenario.ctx(),
-    );
+    let trader_account = executor::create_trader_account(&admin_cap, scenario.ctx());
     let trader_account_id = object::id(&trader_account);
     transfer::public_transfer(trader_account, owner);
     assert_emitted!(trader_account_created(trader_account_id));
 
-    test_scenario::return_shared(deepbook_registry);
     scenario.return_to_sender(admin_cap);
 
     scenario.next_tx(owner);
 
     let trader_account: TraderAccount = scenario.take_from_sender();
-    assert_eq!(trader_account.owner(), owner);
+    assert_eq!(trader_account.owner(), sender);
     assert_eq!(trader_account.trader_account_id(), trader_account_id);
     scenario.return_to_sender(trader_account);
 
@@ -108,7 +92,6 @@ fun create_trader_account_and_transfer_moves_account_to_owner() {
 #[test]
 fun create_trader_account_creates_distinct_accounts_for_same_owner() {
     let sender = @0xE;
-    let owner = @0xF;
     let mut scenario = test_scenario::begin(sender);
 
     manager::test_init(scenario.ctx());
@@ -117,20 +100,8 @@ fun create_trader_account_creates_distinct_accounts_for_same_owner() {
     scenario.next_tx(sender);
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
-    let deepbook_registry: Registry = scenario.take_shared();
-
-    let trader_account_a = executor::create_trader_account_for_owner(
-        &admin_cap,
-        &deepbook_registry,
-        owner,
-        scenario.ctx(),
-    );
-    let trader_account_b = executor::create_trader_account_for_owner(
-        &admin_cap,
-        &deepbook_registry,
-        owner,
-        scenario.ctx(),
-    );
+    let trader_account_a = executor::create_trader_account(&admin_cap, scenario.ctx());
+    let trader_account_b = executor::create_trader_account(&admin_cap, scenario.ctx());
 
     assert!(trader_account_a.trader_account_id() != trader_account_b.trader_account_id());
     assert!(trader_account_a.trade_cap_id() != trader_account_b.trade_cap_id());
@@ -141,10 +112,9 @@ fun create_trader_account_creates_distinct_accounts_for_same_owner() {
     let balance_manager_b = trader_account_b.balance_manager();
     assert!(balance_manager_a.id() != balance_manager_b.id());
 
-    test_scenario::return_shared(deepbook_registry);
     scenario.return_to_sender(admin_cap);
-    transfer::public_transfer(trader_account_a, owner);
-    transfer::public_transfer(trader_account_b, owner);
+    transfer::public_transfer(trader_account_a, sender);
+    transfer::public_transfer(trader_account_b, sender);
 
     scenario.end();
 }
@@ -161,28 +131,16 @@ fun create_trader_account_and_transfer_supports_multiple_accounts_for_owner() {
     scenario.next_tx(sender);
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
-    let deepbook_registry: Registry = scenario.take_shared();
-    let trader_account_a = executor::create_trader_account_for_owner(
-        &admin_cap,
-        &deepbook_registry,
-        owner,
-        scenario.ctx(),
-    );
+    let trader_account_a = executor::create_trader_account(&admin_cap, scenario.ctx());
     let trader_account_id_a = object::id(&trader_account_a);
     transfer::public_transfer(trader_account_a, owner);
 
-    let trader_account_b = executor::create_trader_account_for_owner(
-        &admin_cap,
-        &deepbook_registry,
-        owner,
-        scenario.ctx(),
-    );
+    let trader_account_b = executor::create_trader_account(&admin_cap, scenario.ctx());
     let trader_account_id_b = object::id(&trader_account_b);
     transfer::public_transfer(trader_account_b, owner);
 
     assert!(trader_account_id_a != trader_account_id_b);
 
-    test_scenario::return_shared(deepbook_registry);
     scenario.return_to_sender(admin_cap);
 
     scenario.next_tx(owner);
@@ -216,12 +174,7 @@ fun deposit_and_withdraw_updates_trader_balance() {
     scenario.next_tx(sender);
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
-    let deepbook_registry: Registry = scenario.take_shared();
-    let mut trader_account = executor::create_trader_account(
-        &admin_cap,
-        &deepbook_registry,
-        scenario.ctx(),
-    );
+    let mut trader_account = executor::create_trader_account(&admin_cap, scenario.ctx());
 
     trader_account.deposit(
         &admin_cap,
@@ -238,7 +191,6 @@ fun deposit_and_withdraw_updates_trader_balance() {
     assert_eq!(trader_account.balance_manager().balance<SUI>(), deposit_amount - withdraw_amount);
 
     coin::burn_for_testing(withdrawn_coin);
-    test_scenario::return_shared(deepbook_registry);
     scenario.return_to_sender(admin_cap);
     transfer::public_transfer(trader_account, sender);
     scenario.end();
@@ -293,11 +245,7 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
         scenario.ctx(),
     );
 
-    let mut trader_account = executor::create_trader_account(
-        &admin_cap,
-        &deepbook_registry,
-        scenario.ctx(),
-    );
+    let mut trader_account = executor::create_trader_account(&admin_cap, scenario.ctx());
     trader_account.deposit(
         &admin_cap,
         mint_for_testing<SUI>(1_000_000 * constants::float_scaling(), scenario.ctx()),
@@ -404,11 +352,7 @@ fun refresh_quotes_when_paused_reflects_settled_balances() {
         scenario.ctx(),
     );
 
-    let mut trader_account = executor::create_trader_account(
-        &admin_cap,
-        &deepbook_registry,
-        scenario.ctx(),
-    );
+    let mut trader_account = executor::create_trader_account(&admin_cap, scenario.ctx());
     trader_account.deposit(
         &admin_cap,
         mint_for_testing<SUI>(2 * constants::min_size(), scenario.ctx()),
@@ -578,11 +522,7 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
         scenario.ctx(),
     );
 
-    let mut trader_account = executor::create_trader_account(
-        &admin_cap,
-        &deepbook_registry,
-        scenario.ctx(),
-    );
+    let mut trader_account = executor::create_trader_account(&admin_cap, scenario.ctx());
     trader_account.deposit(
         &admin_cap,
         mint_for_testing<SUI>(1_000_000 * constants::float_scaling(), scenario.ctx()),
@@ -684,11 +624,7 @@ fun refresh_quotes_rejects_when_pool_mismatch() {
         scenario.ctx(),
     );
 
-    let trader_account = executor::create_trader_account(
-        &admin_cap,
-        &deepbook_registry,
-        scenario.ctx(),
-    );
+    let trader_account = executor::create_trader_account(&admin_cap, scenario.ctx());
 
     test_scenario::return_shared(deepbook_registry);
     destroy(deepbook_admin_cap);
@@ -776,11 +712,7 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
         scenario.ctx(),
     );
 
-    let mut trader_account = executor::create_trader_account(
-        &admin_cap,
-        &deepbook_registry,
-        scenario.ctx(),
-    );
+    let mut trader_account = executor::create_trader_account(&admin_cap, scenario.ctx());
     trader_account.deposit(
         &admin_cap,
         mint_for_testing<SUI>(2 * constants::min_size(), scenario.ctx()),

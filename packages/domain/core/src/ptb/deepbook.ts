@@ -50,24 +50,16 @@ export const buildInitBalanceManagerMapTransaction = ({
 
 export const buildCreateTraderAccountTransaction = ({
   ammPackageId,
-  adminCapId,
-  deepbookRegistry,
-  ownerAddress
+  adminCapId
 }: {
   ammPackageId: string
   adminCapId: string
-  deepbookRegistry: WrappedSuiSharedObject
-  ownerAddress: string
 }) => {
   const transaction = newTransaction()
 
   transaction.moveCall({
-    target: `${ammPackageId}::executor::create_trader_account_for_owner`,
-    arguments: [
-      transaction.object(adminCapId),
-      transaction.sharedObjectRef(deepbookRegistry.sharedRef),
-      transaction.pure.address(ownerAddress)
-    ]
+    target: `${ammPackageId}::executor::create_trader_account`,
+    arguments: [transaction.object(adminCapId)]
   })
 
   return transaction

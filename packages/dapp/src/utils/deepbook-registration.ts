@@ -93,36 +93,25 @@ const createTraderAccount = async ({
   tooling,
   ammPackageId,
   resolveCreateDependencies,
-  deepbookRegistryId,
-  ownerAddress,
   devInspect,
   dryRun
 }: {
   tooling: Pick<
     Tooling,
-    | "executeTransactionWithSummary"
-    | "getImmutableSharedObject"
-    | "loadedEd25519KeyPair"
+    "executeTransactionWithSummary" | "loadedEd25519KeyPair"
   >
   ammPackageId: string
   resolveCreateDependencies: ResolveCreateDependencies
-  deepbookRegistryId: string
-  ownerAddress: string
   devInspect?: boolean
   dryRun?: boolean
 }): Promise<{
   traderAccountId?: string
   summary: TransactionSummary
 }> => {
-  const deepbookRegistry = await tooling.getImmutableSharedObject({
-    objectId: deepbookRegistryId
-  })
   const { adminCapId } = await resolveCreateDependencies()
   const createTransaction = buildCreateTraderAccountTransaction({
     ammPackageId,
-    adminCapId,
-    deepbookRegistry,
-    ownerAddress
+    adminCapId
   })
   const createResult = await tooling.executeTransactionWithSummary({
     transaction: createTransaction,
@@ -192,7 +181,6 @@ export const resolveOrCreateTraderAccount = async ({
   tooling: Pick<
     Tooling,
     | "executeTransactionWithSummary"
-    | "getImmutableSharedObject"
     | "loadedEd25519KeyPair"
     | "suiClient"
   >
@@ -204,6 +192,9 @@ export const resolveOrCreateTraderAccount = async ({
   devInspect?: boolean
   dryRun?: boolean
 }): Promise<ResolveOrCreateTraderAccountResult> => {
+  // Kept for backward-compatible callsites; no longer needed by create_trader_account.
+  void deepbookRegistryId
+
   const resolvedTraderAccountId = await resolveExistingTraderAccountId({
     tooling,
     traderAccountId,
@@ -228,8 +219,6 @@ export const resolveOrCreateTraderAccount = async ({
     tooling,
     ammPackageId,
     resolveCreateDependencies,
-    deepbookRegistryId,
-    ownerAddress,
     devInspect,
     dryRun
   })

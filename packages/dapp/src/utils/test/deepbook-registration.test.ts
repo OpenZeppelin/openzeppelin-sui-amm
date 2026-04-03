@@ -47,7 +47,6 @@ const buildTraderAccountOverview = (traderAccountId: string) => ({
 const createTooling = (): TraderAccountTooling =>
   ({
     executeTransactionWithSummary: vi.fn(),
-    getImmutableSharedObject: vi.fn(),
     loadedEd25519KeyPair: { toSuiAddress: () => "0xadmin" },
     suiClient: {}
   }) as unknown as TraderAccountTooling
@@ -110,15 +109,11 @@ describe("resolveOrCreateTraderAccount", () => {
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
     )
-    const getImmutableSharedObject = vi.mocked(tooling.getImmutableSharedObject)
     const resolveCreateDependencies = vi.fn(async () => ({
       adminCapId: "0xadmin-cap"
     }))
 
     traderAccountModelMocks.findOwnedTraderAccountIds.mockResolvedValue([])
-    getImmutableSharedObject.mockResolvedValue({
-      sharedRef: { objectId: "0xregistry" }
-    } as never)
     deepbookPtbMocks.buildCreateTraderAccountTransaction.mockReturnValue(
       "create-transaction"
     )
@@ -140,9 +135,7 @@ describe("resolveOrCreateTraderAccount", () => {
       deepbookPtbMocks.buildCreateTraderAccountTransaction
     ).toHaveBeenCalledWith({
       ammPackageId: "0xamm",
-      adminCapId: "0xadmin-cap",
-      deepbookRegistry: { sharedRef: { objectId: "0xregistry" } },
-      ownerAddress: "0xowner"
+      adminCapId: "0xadmin-cap"
     })
     expect(resolveCreateDependencies).toHaveBeenCalledTimes(1)
     expect(result.status).toBe("dry-run-created")
@@ -213,7 +206,6 @@ describe("resolveOrCreateTraderAccount", () => {
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
     )
-    const getImmutableSharedObject = vi.mocked(tooling.getImmutableSharedObject)
     const resolveCreateDependencies = vi.fn(async () => ({
       adminCapId: "0xadmin-cap"
     }))
@@ -222,9 +214,6 @@ describe("resolveOrCreateTraderAccount", () => {
     traderAccountModelMocks.getTraderAccountOverview.mockResolvedValue(
       buildTraderAccountOverview("0xcreated-trader")
     )
-    getImmutableSharedObject.mockResolvedValue({
-      sharedRef: { objectId: "0xregistry" }
-    } as never)
     deepbookPtbMocks.buildCreateTraderAccountTransaction.mockReturnValue(
       "create-transaction"
     )

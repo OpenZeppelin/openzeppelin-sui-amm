@@ -11,7 +11,6 @@ import {
 import type { IdentifierString } from "@mysten/wallet-standard"
 import { resolveDeepbookRegistryIdForNetwork } from "@sui-amm/domain-core/models/deepbook"
 import { buildCreateTraderAccountTransaction } from "@sui-amm/domain-core/ptb/deepbook"
-import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { LOCALNET_DEEPBOOK_REGISTRY_ID } from "../config/network"
@@ -274,16 +273,9 @@ const useCreateTraderAccountAction = ({
     setTransactionState({ status: "processing" })
 
     try {
-      const deepbookRegistry = await getSuiSharedObject(
-        { objectId: deepbookRegistryId, mutable: false },
-        { suiClient }
-      )
-
       const transaction = buildCreateTraderAccountTransaction({
         ammPackageId,
-        adminCapId,
-        deepbookRegistry,
-        ownerAddress: walletAddress
+        adminCapId
       })
       transaction.setSender(walletAddress)
 

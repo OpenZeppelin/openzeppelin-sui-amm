@@ -11,7 +11,6 @@ use deepbook::balance_manager::{
 };
 use deepbook::constants;
 use deepbook::pool::Pool;
-use deepbook::registry::Registry;
 use openzeppelin_market_maker::events;
 use openzeppelin_market_maker::manager::{AMMConfig, AMMAdminCap};
 use pyth::price_info::PriceInfoObject;
@@ -44,9 +43,6 @@ const EInvalidPool: vector<u8> = b"pool does not match the associated pool";
 
 // === Structs ===
 
-/// Application witness for DeepBook registry authorization.
-public struct PropAmmApp has drop {}
-
 /// Per-trader account state.
 ///
 /// Uses a table to map each pool ID to the trader's active order IDs.
@@ -73,30 +69,14 @@ public struct Caps has store {
 
 /// Creates a trader account for sender.
 public fun create_trader_account(
-    admin_cap: &AMMAdminCap,
-    deepbook_registry: &Registry,
-    ctx: &mut TxContext,
-): TraderAccount {
-    create_trader_account_for_owner(admin_cap, deepbook_registry, ctx.sender(), ctx)
-}
-
-/// Creates a trader account for `owner`.
-public fun create_trader_account_for_owner(
     _: &AMMAdminCap,
-    deepbook_registry: &Registry,
-    owner: address,
     ctx: &mut TxContext,
 ): TraderAccount {
-    let (
-        balance_manager,
-        deposit_cap,
-        withdraw_cap,
-        trade_cap,
-    ) = balance_manager::new_with_custom_owner_caps<PropAmmApp>(
-        deepbook_registry,
-        owner,
-        ctx,
-    );
+    let mut balance_manager = balance_manager::new(ctx);
+
+    let deposit_cap = balance_manager.mint_deposit_cap(ctx);
+    let withdraw_cap = balance_manager.mint_withdraw_cap(ctx);
+    let trade_cap = balance_manager.mint_trade_cap(ctx);
 
     let caps = Caps {
         trade_cap,
