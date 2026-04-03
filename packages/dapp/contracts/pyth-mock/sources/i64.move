@@ -2,13 +2,13 @@ module local_mock_pyth::i64;
 
 // === Errors ===
 #[error(code = 0)]
-const EMagnitudeTooLarge: vector<u8> = b"Magnitude exceeds maximum allowed value";
+const EMagnitudeTooLarge: vector<u8> = "Magnitude exceeds maximum allowed value";
 
 #[error(code = 1)]
-const ENotPositive: vector<u8> = b"Expected a positive I64 value";
+const ENotPositive: vector<u8> = "Expected a positive I64 value";
 
 #[error(code = 2)]
-const ENotNegative: vector<u8> = b"Expected a negative I64 value";
+const ENotNegative: vector<u8> = "Expected a negative I64 value";
 
 // === Constants ===
 

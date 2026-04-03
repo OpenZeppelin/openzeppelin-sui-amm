@@ -12,8 +12,6 @@ use openzeppelin_market_maker::test_helpers::{
 use std::unit_test::assert_eq;
 use sui::test_scenario;
 
-// === Tests ===
-
 #[test]
 fun init_transfers_admin_cap() {
     let sender = @0xA;

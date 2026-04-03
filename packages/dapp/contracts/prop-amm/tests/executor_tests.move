@@ -18,9 +18,11 @@ use sui::event;
 use sui::sui::SUI;
 use sui::test_scenario;
 
+// === Structs ===
+
 public struct USDC has store {}
 
-// === Helpers ===
+// === Test-Only Helpers ===
 
 fun create_authorized_registry(scenario: &mut test_scenario::Scenario, sender: address) {
     scenario.next_tx(sender);

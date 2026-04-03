@@ -1,9 +1,13 @@
 module local_mock_pyth::price_identifier;
 
+// === Errors ===
+
+#[error(code = 0)]
+const EIncorrectIdentifierLength: vector<u8> = "Identifier must be 32 bytes";
+
 // === Constants ===
 
 const IDENTIFIER_BYTES_LENGTH: u64 = 32;
-const E_INCORRECT_IDENTIFIER_LENGTH: u64 = 0;
 
 // === Structs ===
 
@@ -16,7 +20,7 @@ public struct PriceIdentifier has copy, drop, store {
 // === Public Functions ===
 
 public fun from_byte_vec(bytes: vector<u8>): PriceIdentifier {
-    assert!(bytes.length() == IDENTIFIER_BYTES_LENGTH, E_INCORRECT_IDENTIFIER_LENGTH);
+    assert!(bytes.length() == IDENTIFIER_BYTES_LENGTH, EIncorrectIdentifierLength);
     PriceIdentifier { bytes }
 }
 

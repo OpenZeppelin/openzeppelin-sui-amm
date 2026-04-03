@@ -2,6 +2,11 @@ module local_mock_coin::mock_coin;
 
 use sui::coin_registry;
 
+// === Constants ===
+
+/// Fixed supply minted at initialization and transferred to `recipient`.
+const MOCK_COIN_SUPPLY: u64 = 1_000_000_000_000_000_000;
+
 // === Structs ===
 
 /// Dev/local-only mock USD coin. Published for localnet convenience.
@@ -9,11 +14,6 @@ public struct LocalMockUsd has key, store {
     /// Unique ID for the coin object.
     id: UID,
 }
-
-// === Constants ===
-
-/// Fixed supply minted at initialization and transferred to `recipient`.
-const MOCK_COIN_SUPPLY: u64 = 1_000_000_000_000_000_000;
 
 // === Public Functions ===
 

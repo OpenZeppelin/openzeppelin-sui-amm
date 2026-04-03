@@ -4,9 +4,10 @@ use local_mock_pyth::price::Price;
 use local_mock_pyth::price_info::{Self, PriceInfoObject};
 use sui::clock::Clock;
 
-// === Constants ===
+// === Errors ===
 
-const EStalePriceUpdate: u64 = 3;
+#[error(code = 0)]
+const EStalePriceUpdate: vector<u8> = "price update is stale";
 
 // === Public Functions ===
 
