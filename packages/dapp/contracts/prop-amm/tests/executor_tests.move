@@ -19,6 +19,7 @@ use sui::sui::SUI;
 use sui::test_scenario;
 
 public struct USDC has store {}
+public struct USDT has store {}
 
 // === Helpers ===
 
@@ -63,7 +64,7 @@ fun create_trader_account_sets_owner_and_emits_created_event() {
     assert_eq!(trader_account.trader_account_id(), object::id(&trader_account));
 
     test_scenario::return_shared(deepbook_registry);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     transfer::public_transfer(trader_account, owner);
     scenario.end();
 }
@@ -92,14 +93,14 @@ fun create_trader_account_and_transfer_moves_account_to_owner() {
     assert_emitted!(trader_account_created(trader_account_id));
 
     test_scenario::return_shared(deepbook_registry);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
 
     scenario.next_tx(owner);
 
     let trader_account: TraderAccount = scenario.take_from_sender();
     assert_eq!(trader_account.owner(), owner);
     assert_eq!(trader_account.trader_account_id(), trader_account_id);
-    test_scenario::return_to_sender(&scenario, trader_account);
+    scenario.return_to_sender(trader_account);
 
     scenario.end();
 }
@@ -141,7 +142,7 @@ fun create_trader_account_creates_distinct_accounts_for_same_owner() {
     assert!(balance_manager_a.id() != balance_manager_b.id());
 
     test_scenario::return_shared(deepbook_registry);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     transfer::public_transfer(trader_account_a, owner);
     transfer::public_transfer(trader_account_b, owner);
 
@@ -182,7 +183,7 @@ fun create_trader_account_and_transfer_supports_multiple_accounts_for_owner() {
     assert!(trader_account_id_a != trader_account_id_b);
 
     test_scenario::return_shared(deepbook_registry);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
 
     scenario.next_tx(owner);
 
@@ -196,8 +197,8 @@ fun create_trader_account_and_transfer_supports_multiple_accounts_for_owner() {
         || (id_a == trader_account_id_b && id_b == trader_account_id_a),
     );
 
-    test_scenario::return_to_sender(&scenario, trader_account_a);
-    test_scenario::return_to_sender(&scenario, trader_account_b);
+    scenario.return_to_sender(trader_account_a);
+    scenario.return_to_sender(trader_account_b);
 
     scenario.end();
 }
@@ -238,7 +239,7 @@ fun deposit_and_withdraw_updates_trader_balance() {
 
     coin::burn_for_testing(withdrawn_coin);
     test_scenario::return_shared(deepbook_registry);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     transfer::public_transfer(trader_account, sender);
     scenario.end();
 }
@@ -280,15 +281,6 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let mut deepbook_registry: Registry = scenario.take_shared();
 
-    manager::create_amm_config_and_share(
-        &admin_cap,
-        base_spread_bps,
-        volatility_spread_bps,
-        false,
-        build_pyth_price_feed_id(feed_id_byte),
-        scenario.ctx(),
-    );
-
     let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
     let pool_id = pool::create_pool_admin<SUI, USDC>(
         &mut deepbook_registry,
@@ -319,8 +311,24 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
 
     test_scenario::return_shared(deepbook_registry);
     destroy(deepbook_admin_cap);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     transfer::public_transfer(trader_account, sender);
+
+    scenario.next_tx(sender);
+
+    let admin_cap: AMMAdminCap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    manager::create_amm_config_and_share(
+        &admin_cap,
+        &pool,
+        base_spread_bps,
+        volatility_spread_bps,
+        false,
+        build_pyth_price_feed_id(feed_id_byte),
+        scenario.ctx(),
+    );
+    test_scenario::return_shared(pool);
+    scenario.return_to_sender(admin_cap);
 
     scenario.next_tx(sender);
 
@@ -384,15 +392,6 @@ fun refresh_quotes_when_paused_reflects_settled_balances() {
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let mut deepbook_registry: Registry = scenario.take_shared();
 
-    manager::create_amm_config_and_share(
-        &admin_cap,
-        100,
-        200,
-        false,
-        build_pyth_price_feed_id(feed_id_byte),
-        scenario.ctx(),
-    );
-
     let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
     let pool_id = pool::create_pool_admin<SUI, USDC>(
         &mut deepbook_registry,
@@ -418,8 +417,24 @@ fun refresh_quotes_when_paused_reflects_settled_balances() {
 
     test_scenario::return_shared(deepbook_registry);
     destroy(deepbook_admin_cap);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     transfer::public_transfer(trader_account, sender);
+
+    scenario.next_tx(sender);
+
+    let admin_cap: AMMAdminCap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    manager::create_amm_config_and_share(
+        &admin_cap,
+        &pool,
+        100,
+        200,
+        false,
+        build_pyth_price_feed_id(feed_id_byte),
+        scenario.ctx(),
+    );
+    test_scenario::return_shared(pool);
+    scenario.return_to_sender(admin_cap);
 
     scenario.next_tx(sender);
 
@@ -483,7 +498,7 @@ fun refresh_quotes_when_paused_reflects_settled_balances() {
         build_pyth_price_feed_id(feed_id_byte),
     );
     test_scenario::return_shared(config);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
 
     scenario.next_tx(sender);
 
@@ -551,15 +566,6 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let mut deepbook_registry: Registry = scenario.take_shared();
 
-    manager::create_amm_config_and_share(
-        &admin_cap,
-        100,
-        200,
-        false,
-        build_pyth_price_feed_id(config_feed_id_byte),
-        scenario.ctx(),
-    );
-
     let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
     let pool_id = pool::create_pool_admin<SUI, USDC>(
         &mut deepbook_registry,
@@ -590,8 +596,23 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
 
     test_scenario::return_shared(deepbook_registry);
     destroy(deepbook_admin_cap);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     transfer::public_transfer(trader_account, sender);
+
+    scenario.next_tx(sender);
+    let admin_cap: AMMAdminCap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    manager::create_amm_config_and_share(
+        &admin_cap,
+        &pool,
+        100,
+        200,
+        false,
+        build_pyth_price_feed_id(config_feed_id_byte),
+        scenario.ctx(),
+    );
+    test_scenario::return_shared(pool);
+    scenario.return_to_sender(admin_cap);
 
     scenario.next_tx(sender);
     let mut trader_account: TraderAccount = scenario.take_from_sender();
@@ -602,6 +623,103 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
 
     trader_account.refresh_quotes(
         &mut pool,
+        &config,
+        &price_info_object,
+        &clock,
+        scenario.ctx(),
+    );
+
+    abort
+}
+
+#[test, expected_failure(abort_code = executor::EInvalidPool)]
+fun refresh_quotes_rejects_when_pool_mismatch() {
+    let sender = @0x23;
+    let feed_id_byte = 12;
+    let mut scenario = test_scenario::begin(sender);
+
+    manager::test_init(scenario.ctx());
+    create_authorized_registry(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+    clock::create_for_testing(scenario.ctx()).share_for_testing();
+
+    scenario.next_tx(sender);
+    let clock_for_price_feed: Clock = scenario.take_shared();
+    pyth::price_info::publish_price_feed(
+        build_pyth_price_feed_id(feed_id_byte),
+        10_000,
+        false,
+        0,
+        2,
+        true,
+        &clock_for_price_feed,
+        scenario.ctx(),
+    );
+    test_scenario::return_shared(clock_for_price_feed);
+
+    scenario.next_tx(sender);
+    let admin_cap: AMMAdminCap = scenario.take_from_sender();
+    let mut deepbook_registry: Registry = scenario.take_shared();
+
+    let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
+    let configured_pool_id = pool::create_pool_admin<SUI, USDC>(
+        &mut deepbook_registry,
+        constants::tick_size(),
+        constants::lot_size(),
+        constants::min_size(),
+        true,
+        false,
+        &deepbook_admin_cap,
+        scenario.ctx(),
+    );
+    let other_pool_id = pool::create_pool_admin<SUI, USDT>(
+        &mut deepbook_registry,
+        constants::tick_size(),
+        constants::lot_size(),
+        constants::min_size(),
+        true,
+        false,
+        &deepbook_admin_cap,
+        scenario.ctx(),
+    );
+
+    let trader_account = executor::create_trader_account(
+        &admin_cap,
+        &deepbook_registry,
+        scenario.ctx(),
+    );
+
+    test_scenario::return_shared(deepbook_registry);
+    destroy(deepbook_admin_cap);
+    scenario.return_to_sender(admin_cap);
+    transfer::public_transfer(trader_account, sender);
+
+    scenario.next_tx(sender);
+
+    let admin_cap: AMMAdminCap = scenario.take_from_sender();
+    let configured_pool: Pool<SUI, USDC> = scenario.take_shared_by_id(configured_pool_id);
+    manager::create_amm_config_and_share(
+        &admin_cap,
+        &configured_pool,
+        100,
+        200,
+        false,
+        build_pyth_price_feed_id(feed_id_byte),
+        scenario.ctx(),
+    );
+    test_scenario::return_shared(configured_pool);
+    scenario.return_to_sender(admin_cap);
+
+    scenario.next_tx(sender);
+    let mut trader_account: TraderAccount = scenario.take_from_sender();
+    let mut other_pool: Pool<SUI, USDT> = scenario.take_shared_by_id(other_pool_id);
+    let config: AMMConfig = scenario.take_shared();
+    let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
+    let clock: Clock = scenario.take_shared();
+
+    trader_account.refresh_quotes(
+        &mut other_pool,
         &config,
         &price_info_object,
         &clock,
@@ -646,15 +764,6 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
     let mut deepbook_registry: Registry = scenario.take_shared();
 
-    manager::create_amm_config_and_share(
-        &admin_cap,
-        base_spread_bps,
-        volatility_spread_bps,
-        false,
-        build_pyth_price_feed_id(feed_id_byte),
-        scenario.ctx(),
-    );
-
     let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
     let pool_id = pool::create_pool_admin<SUI, USDC>(
         &mut deepbook_registry,
@@ -685,8 +794,23 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
 
     test_scenario::return_shared(deepbook_registry);
     destroy(deepbook_admin_cap);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     transfer::public_transfer(trader_account, sender);
+
+    scenario.next_tx(sender);
+    let admin_cap: AMMAdminCap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    manager::create_amm_config_and_share(
+        &admin_cap,
+        &pool,
+        base_spread_bps,
+        volatility_spread_bps,
+        false,
+        build_pyth_price_feed_id(feed_id_byte),
+        scenario.ctx(),
+    );
+    test_scenario::return_shared(pool);
+    scenario.return_to_sender(admin_cap);
 
     scenario.next_tx(sender);
     let mut trader_account: TraderAccount = scenario.take_from_sender();

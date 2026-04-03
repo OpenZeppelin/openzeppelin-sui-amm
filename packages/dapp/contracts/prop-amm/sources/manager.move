@@ -1,6 +1,7 @@
 /// AMM configuration and admin controls.
 module openzeppelin_market_maker::manager;
 
+use deepbook::pool::Pool;
 use openzeppelin_market_maker::events;
 use pyth::price_info::PriceInfoObject;
 use sui::package;
@@ -40,6 +41,8 @@ public struct AMMConfig has key {
     pyth_price_feed_id: vector<u8>,
     /// Whether LASER pricing is enabled.
     use_laser: bool,
+    /// ID of the associated pool.
+    pool_id: ID,
 }
 
 /// Capability required to update configuration.
@@ -69,8 +72,9 @@ fun init(publisher_witness: MANAGER, ctx: &mut TxContext) {
 ///
 /// Requires the admin capability used to control this config.
 /// Use `create_amm_config_and_share` to share config object.
-public fun create_amm_config(
+public fun create_amm_config<BaseAsset, QuoteAsset>(
     _: &AMMAdminCap,
+    pool: &Pool<BaseAsset, QuoteAsset>,
     base_spread_bps: u64,
     volatility_spread_bps: u64,
     use_laser: bool,
@@ -86,6 +90,7 @@ public fun create_amm_config(
         use_laser,
         trading_paused: false,
         pyth_price_feed_id,
+        pool_id: object::id(pool),
     };
 
     events::emit_amm_config_created(object::id(&config));
@@ -96,8 +101,9 @@ public fun create_amm_config(
 /// Creates, emits, and shares a new AMM configuration.
 /// Requires the admin capability used to control this config.
 /// Returns the new configuration's object ID.
-public fun create_amm_config_and_share(
+public fun create_amm_config_and_share<BaseAsset, QuoteAsset>(
     admin_cap: &AMMAdminCap,
+    pool: &Pool<BaseAsset, QuoteAsset>,
     base_spread_bps: u64,
     volatility_spread_bps: u64,
     use_laser: bool,
@@ -106,6 +112,7 @@ public fun create_amm_config_and_share(
 ): ID {
     let config = create_amm_config(
         admin_cap,
+        pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
@@ -165,6 +172,11 @@ macro fun assert_valid_amm_config_inputs(
 
 // === View helpers ===
 
+/// Returns the configuration object ID as an address.
+public fun id(config: &AMMConfig): ID {
+    config.id.to_inner()
+}
+
 /// Returns the base spread in basis points.
 public fun base_spread_bps(config: &AMMConfig): u64 {
     config.base_spread_bps
@@ -207,9 +219,17 @@ public fun has_valid_pyth_feed_id(config: &AMMConfig, price_info_object: &PriceI
     actual_price_feed_id == config.pyth_price_feed_id
 }
 
-/// Returns the configuration object ID as an address.
-public fun config_id(config: &AMMConfig): ID {
-    config.id.to_inner()
+/// Returns the associated pool's object ID.
+public fun pool_id(config: &AMMConfig): ID {
+    config.pool_id
+}
+
+/// Checks whether the given pool matches the config's associated pool ID.
+public fun has_valid_pool<BaseAsset, QuoteAsset>(
+    config: &AMMConfig,
+    pool: &Pool<BaseAsset, QuoteAsset>,
+): bool {
+    config.pool_id == object::id(pool)
 }
 
 /// Returns the admin capability object ID.

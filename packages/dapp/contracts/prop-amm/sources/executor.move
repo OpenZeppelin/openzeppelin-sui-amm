@@ -39,6 +39,8 @@ const EPythInvalidPriceValue: vector<u8> = b"pyth price must be of valid size";
 const EPythFeedIdentifierMismatch: vector<u8> = b"pyth feed identifier mismatch";
 #[error(code = 5)]
 const ETickIsTooLarge: vector<u8> = b"deepbook pool tick size is too large for price calculation";
+#[error(code = 6)]
+const EInvalidPool: vector<u8> = b"pool does not match the associated pool";
 
 // === Structs ===
 
@@ -149,6 +151,9 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
+    // Assert an input pool is valid.
+    assert!(config.has_valid_pool(pool), EInvalidPool);
+
     // Generate trade proof.
     let trade_proof = trader_account
         .balance_manager
@@ -166,8 +171,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
 
     // Making sure that orders are cancelled and balances are updated based on settled
-    // orders before honoring pause state. While paused, we stop after housekeeping and
-    // do not place any new orders.
+    // orders before enabling pause state.
     if (config.trading_paused()) {
         return
     };

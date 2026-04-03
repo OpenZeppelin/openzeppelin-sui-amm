@@ -2,6 +2,9 @@
 #[test_only]
 module openzeppelin_market_maker::manager_tests;
 
+use deepbook::constants;
+use deepbook::pool::{Self, Pool};
+use deepbook::registry::{Self, Registry};
 use openzeppelin_market_maker::events::{amm_config_created, amm_config_updated};
 use openzeppelin_market_maker::manager::{Self, AMMAdminCap, AMMConfig};
 use openzeppelin_market_maker::test_helpers::{
@@ -9,8 +12,38 @@ use openzeppelin_market_maker::test_helpers::{
     build_pyth_price_feed_id,
     build_invalid_pyth_price_feed_id
 };
-use std::unit_test::assert_eq;
+use std::unit_test::{assert_eq, destroy};
+use sui::sui::SUI;
 use sui::test_scenario;
+
+public struct USDC has store {}
+
+// === Helpers ===
+
+fun create_pool(scenario: &mut test_scenario::Scenario, sender: address): ID {
+    scenario.next_tx(sender);
+    registry::test_registry(scenario.ctx());
+
+    scenario.next_tx(sender);
+
+    let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
+    let mut deepbook_registry: Registry = scenario.take_shared();
+    let pool_id = pool::create_pool_admin<SUI, USDC>(
+        &mut deepbook_registry,
+        constants::tick_size(),
+        constants::lot_size(),
+        constants::min_size(),
+        true,
+        false,
+        &deepbook_admin_cap,
+        scenario.ctx(),
+    );
+
+    test_scenario::return_shared(deepbook_registry);
+    destroy(deepbook_admin_cap);
+
+    pool_id
+}
 
 // === Tests ===
 
@@ -24,7 +57,7 @@ fun init_transfers_admin_cap() {
     scenario.next_tx(sender);
 
     let admin_cap: AMMAdminCap = scenario.take_from_sender();
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     scenario.end();
 }
 
@@ -38,12 +71,15 @@ fun create_amm_config_shares_config_and_emits_event() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let config_id = manager::create_amm_config_and_share(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
@@ -51,6 +87,7 @@ fun create_amm_config_shares_config_and_emits_event() {
         scenario.ctx(),
     );
     assert_emitted!(amm_config_created(config_id));
+    test_scenario::return_shared(pool);
 
     scenario.next_tx(sender);
 
@@ -63,7 +100,7 @@ fun create_amm_config_shares_config_and_emits_event() {
     assert_eq!(config.pyth_price_feed_id(), pyth_price_feed_id);
 
     test_scenario::return_shared(config);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     scenario.end();
 }
 
@@ -77,18 +114,22 @@ fun update_amm_config_updates_config_and_emits_event() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     manager::create_amm_config_and_share(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
     );
+    test_scenario::return_shared(pool);
 
     scenario.next_tx(sender);
 
@@ -107,7 +148,7 @@ fun update_amm_config_updates_config_and_emits_event() {
         updated_trading_paused,
         updated_pyth_price_feed_id,
     );
-    assert_emitted!(amm_config_updated(config.config_id()));
+    assert_emitted!(amm_config_updated(config.id()));
 
     scenario.next_tx(sender);
 
@@ -118,7 +159,7 @@ fun update_amm_config_updates_config_and_emits_event() {
     assert_eq!(config.pyth_price_feed_id(), updated_pyth_price_feed_id);
 
     test_scenario::return_shared(config);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     scenario.end();
 }
 
@@ -132,18 +173,22 @@ fun update_amm_config_supports_multiple_updates() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     manager::create_amm_config_and_share(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
     );
+    test_scenario::return_shared(pool);
 
     scenario.next_tx(sender);
 
@@ -158,7 +203,7 @@ fun update_amm_config_supports_multiple_updates() {
         true,
         first_update_pyth_price_feed_id,
     );
-    assert_emitted!(amm_config_updated(config.config_id()));
+    assert_emitted!(amm_config_updated(config.id()));
 
     scenario.next_tx(sender);
 
@@ -171,7 +216,7 @@ fun update_amm_config_supports_multiple_updates() {
         false,
         second_update_pyth_price_feed_id,
     );
-    assert_emitted!(amm_config_updated(config.config_id()));
+    assert_emitted!(amm_config_updated(config.id()));
 
     scenario.next_tx(sender);
 
@@ -182,7 +227,7 @@ fun update_amm_config_supports_multiple_updates() {
     assert_eq!(config.pyth_price_feed_id(), second_update_pyth_price_feed_id);
 
     test_scenario::return_shared(config);
-    test_scenario::return_to_sender(&scenario, admin_cap);
+    scenario.return_to_sender(admin_cap);
     scenario.end();
 }
 
@@ -195,12 +240,15 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let _config = manager::create_amm_config(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
@@ -222,18 +270,22 @@ fun update_amm_config_rejects_zero_base_spread_bps() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     manager::create_amm_config_and_share(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
     );
+    test_scenario::return_shared(pool);
 
     scenario.next_tx(sender);
 
@@ -260,12 +312,15 @@ fun create_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     let use_laser = false;
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let _config = manager::create_amm_config(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
@@ -287,18 +342,22 @@ fun update_amm_config_rejects_base_spread_bps_above_max_basis_points() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     manager::create_amm_config_and_share(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
     );
+    test_scenario::return_shared(pool);
 
     scenario.next_tx(sender);
 
@@ -325,12 +384,15 @@ fun create_amm_config_rejects_empty_feed_id() {
     let use_laser = false;
     let pyth_price_feed_id = vector[];
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let _config = manager::create_amm_config(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
@@ -352,18 +414,22 @@ fun update_amm_config_rejects_empty_feed_id() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     manager::create_amm_config_and_share(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
     );
+    test_scenario::return_shared(pool);
 
     scenario.next_tx(sender);
 
@@ -390,12 +456,15 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
     let use_laser = false;
     let pyth_price_feed_id = build_invalid_pyth_price_feed_id();
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let _config = manager::create_amm_config(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
@@ -417,18 +486,22 @@ fun update_amm_config_rejects_invalid_feed_id_length() {
     let pyth_price_feed_id = build_pyth_price_feed_id(0);
 
     manager::test_init(scenario.ctx());
+    let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let admin_cap = scenario.take_from_sender();
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     manager::create_amm_config_and_share(
         &admin_cap,
+        &pool,
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
         pyth_price_feed_id,
         scenario.ctx(),
     );
+    test_scenario::return_shared(pool);
 
     scenario.next_tx(sender);
 
