@@ -53,11 +53,11 @@ export SUI_ACCOUNT_ADDRESS=<0x...>
 export SUI_ACCOUNT_PRIVATE_KEY=<base64 or hex>
 export SUI_NETWORK=localnet
 
-# Start localnet (new terminal) (--with-faucet is recommended as some script auto fund address if fund is missing)
-pnpm script chain:localnet:start --with-faucet
+# Start localnet (new terminal)
+RUST_LOG="off,sui_node=info" sui start --with-faucet --force-regenesis
 
 # Publish mocks and contracts
-pnpm dapp mock:setup 
+pnpm dapp mock:setup
 pnpm dapp move:publish --packagePath contracts/prop-amm/
 
 # Register mocks
@@ -73,7 +73,7 @@ pnpm dapp owner:amm:create
 ## Copy the sample .env file
 cp packages/ui/.env.example packages/ui/.env.local
 
-## Add required field details - you will find these details in the output of the two last pnpm commands. 
+## Add required field details - you will find these details in the output of the two last pnpm commands.
 NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<0x...>
 NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
 NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID=<0x..>
