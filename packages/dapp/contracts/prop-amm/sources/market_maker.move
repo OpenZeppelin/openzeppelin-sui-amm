@@ -37,6 +37,12 @@ const ETickIsTooLarge: vector<u8> = "deepbook pool tick size is too large for pr
 const EInvalidPool: vector<u8> = "pool does not match the associated pool";
 #[error(code = 7)]
 const EInvalidCap: vector<u8> = "invalid market maker cap";
+#[error(code = 8)]
+const EPaused: vector<u8> = "trading paused";
+#[error(code = 9)]
+const ENotPaused: vector<u8> = "trading not paused";
+#[error(code = 10)]
+const EInvalidPoolUpdate: vector<u8> = "should update pool while trading paused";
 
 // === Constants ===
 
@@ -121,10 +127,56 @@ public fun update_market_maker(
     config: MarketMakerConfig,
 ) {
     assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    // Should update pool when trading is paused (to settle balances properly).
+    if (market_maker.config.active()) {
+        assert!(market_maker.config.pool_id() == config.pool_id(), EInvalidPoolUpdate)
+    };
+
     // TODO#q: think what we can do when dropping old value.
     market_maker.config = config;
     // TODO#q: nullify timestamp updates.
     // TODO#q: emit event on update.
+}
+
+/// Pauses trading by cancelling all existing orders and preventing new orders until next activation.
+public fun pause<BaseAsset, QuoteAsset>(
+    market_maker: &mut MarketMaker,
+    cap: &MarketMakerCap,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    assert!(market_maker.config.active(), EPaused);
+    assert!(market_maker.config.has_valid_pool(pool), EInvalidPool);
+
+    // Generate trade proof.
+    let trade_proof = market_maker
+        .balance_manager
+        .generate_proof_as_trader(&market_maker.caps.trade_cap, ctx);
+
+    // Cancel all previous active orders.
+    pool.cancel_all_orders(
+        &mut market_maker.balance_manager,
+        &trade_proof,
+        clock,
+        ctx,
+    );
+
+    // Update balance manager, to reflect previous settled limit orders in balance.
+    pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
+
+    // Pause config.
+    market_maker.config.pause();
+}
+
+/// Unpauses trading, allowing new orders to be placed.
+public fun unpause(market_maker: &mut MarketMaker, cap: &MarketMakerCap) {
+    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    assert!(!market_maker.config.active(), ENotPaused);
+
+    // Unpause config.
+    market_maker.config.unpause();
 }
 
 /// Deposit funds into a balance manager.
@@ -170,6 +222,8 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 ) {
     // Assert an input pool is valid.
     assert!(market_maker.config.has_valid_pool(pool), EInvalidPool);
+    // Assert trading is active.
+    assert!(market_maker.config.active(), EPaused);
 
     // Generate trade proof.
     let trade_proof = market_maker
@@ -186,12 +240,6 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
-
-    // Making sure that orders are cancelled and balances are updated based on settled
-    // orders before enabling pause state.
-    if (market_maker.config.trading_paused()) {
-        return
-    };
 
     // Calculate base and volatility spread values.
     let oracle_mid_price = deepbook_price(price_info_object, &market_maker.config, clock);

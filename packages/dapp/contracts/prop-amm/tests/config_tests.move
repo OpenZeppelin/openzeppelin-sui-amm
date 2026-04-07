@@ -65,7 +65,7 @@ fun create_amm_config_builds_expected_config() {
     assert_eq!(market_maker_config.base_spread_bps(), base_spread_bps);
     assert_eq!(market_maker_config.volatility_spread_bps(), volatility_spread_bps);
     assert_eq!(market_maker_config.use_laser(), use_laser);
-    assert_eq!(market_maker_config.trading_paused(), false);
+    assert_eq!(market_maker_config.active(), true);
     assert_eq!(market_maker_config.pyth_price_feed_id(), pyth_price_feed_id);
     assert!(market_maker_config.has_valid_pool(&pool));
 

@@ -27,8 +27,8 @@ const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
 /// AMM configuration shared across pools.
 public struct MarketMakerConfig has drop, store {
-    /// Whether trading is paused.
-    trading_paused: bool,
+    /// Whether trading is active.
+    active: bool,
     /// Base spread in basis points.
     base_spread_bps: u64,
     /// Volatility spread in basis points.
@@ -61,7 +61,7 @@ public fun create<BaseAsset, QuoteAsset>(
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
-        trading_paused: false,
+        active: true,
         pyth_price_feed_id,
         pool_id: object::id(pool),
     }
@@ -85,8 +85,8 @@ public fun use_laser(config: &MarketMakerConfig): bool {
 }
 
 /// Returns whether trading is paused.
-public fun trading_paused(config: &MarketMakerConfig): bool {
-    config.trading_paused
+public fun active(config: &MarketMakerConfig): bool {
+    config.active
 }
 
 /// Returns the Pyth price feed ID bytes.
@@ -132,6 +132,17 @@ public(package) fun volatility_spread(config: &MarketMakerConfig, mid_price: u64
 /// Returns the required Pyth price feed identifier length.
 public(package) fun pyth_price_identifier_length(): u64 {
     PYTH_PRICE_IDENTIFIER_LENGTH
+}
+
+/// Pauses trading by setting `active` to false.
+public(package) fun pause(config: &mut MarketMakerConfig) {
+    // TODO#q: emit trading paused.
+    config.active = false
+}
+
+/// Activate trading by setting `active` to true.
+public(package) fun unpause(config: &mut MarketMakerConfig) {
+    config.active = true
 }
 
 // === Private Functions ===
