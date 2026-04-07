@@ -62,7 +62,7 @@ export const logTraderAccountResult = ({
   }
 
   if (traderAccountResult.traderAccount) {
-    logKeyValueGreen("Trader account")(
+    logKeyValueGreen("Market maker")(
       traderAccountResult.traderAccount.traderAccountId
     )
     logKeyValueGreen("Balance manager")(

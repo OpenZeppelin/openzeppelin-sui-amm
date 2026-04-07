@@ -1,5 +1,5 @@
-/// Execution-time state for the AMM.
-module openzeppelin_market_maker::executor;
+/// AMM logic.
+module openzeppelin_market_maker::market_maker;
 
 use deepbook::balance_manager::{
     Self,
@@ -11,51 +11,63 @@ use deepbook::balance_manager::{
 };
 use deepbook::constants;
 use deepbook::pool::Pool;
+use openzeppelin_market_maker::config::MarketMakerConfig;
 use openzeppelin_market_maker::events;
-use openzeppelin_market_maker::manager::{AMMConfig, AMMAdminCap};
 use pyth::price_info::PriceInfoObject;
 use pyth::pyth;
 use sui::clock::Clock;
 use sui::coin::Coin;
-
-// === Constants ===
-
-const ORDER_EXPIRATION_TIME_MS: u64 = 30_000;
-const MAX_PRICE_AGE_SECS: u64 = 30;
-const MAX_DECIMAL_POWER: u8 = 38;
+use sui::package;
 
 // === Errors ===
 
 #[error(code = 0)]
-const EPythPriceNonPositive: vector<u8> = b"pyth price must be positive";
+const EPythPriceNonPositive: vector<u8> = "pyth price must be positive";
 #[error(code = 1)]
-const EPythExponentNonNegative: vector<u8> = b"pyth price exponent_u128 must be negative";
+const EPythExponentNonNegative: vector<u8> = "pyth price exponent_u128 must be negative";
 #[error(code = 2)]
-const EPythExponentTooLarge: vector<u8> = b"pyth price exponent_u128 should fit in u8";
+const EPythExponentTooLarge: vector<u8> = "pyth price exponent_u128 should fit in u8";
 #[error(code = 3)]
-const EPythInvalidPriceValue: vector<u8> = b"pyth price must be of valid size";
+const EPythInvalidPriceValue: vector<u8> = "pyth price must be of valid size";
 #[error(code = 4)]
-const EPythFeedIdentifierMismatch: vector<u8> = b"pyth feed identifier mismatch";
+const EPythFeedIdentifierMismatch: vector<u8> = "pyth feed identifier mismatch";
 #[error(code = 5)]
-const ETickIsTooLarge: vector<u8> = b"deepbook pool tick size is too large for price calculation";
+const ETickIsTooLarge: vector<u8> = "deepbook pool tick size is too large for price calculation";
 #[error(code = 6)]
-const EInvalidPool: vector<u8> = b"pool does not match the associated pool";
+const EInvalidPool: vector<u8> = "pool does not match the associated pool";
+#[error(code = 7)]
+const EInvalidCap: vector<u8> = "invalid market maker cap";
+
+// === Constants ===
+
+// TODO#q: move to configuration
+const ORDER_EXPIRATION_TIME_MS: u64 = 30_000;
+const MAX_PRICE_AGE_SECS: u64 = 30;
+const MAX_DECIMAL_POWER: u8 = 38;
 
 // === Structs ===
 
-/// Per-trader account state.
-///
-/// Uses a table to map each pool ID to the trader's active order IDs.
-public struct TraderAccount has key, store {
+/// Capability required to update configuration.
+public struct MarketMakerCap has key, store {
+    /// Unique ID for the market maker capability object.
+    id: UID,
+    /// ID of the associated market maker.
+    market_maker_id: ID,
+}
+
+/// Per-market maker state.
+public struct MarketMaker has key, store {
     /// Unique ID for the account object.
     id: UID,
     /// Deepbook capabilities retained by the owner.
     caps: Caps,
-    /// Balance manager linked to the trader account.
+    /// Balance manager linked to the market maker.
     balance_manager: BalanceManager,
+    /// Pool onchain configuration.
+    config: MarketMakerConfig,
 }
 
-/// Balance manager caps owned by the trader account owner.
+/// Balance manager caps owned by the market maker owner.
 public struct Caps has store {
     /// Deepbook's trade capability.
     trade_cap: TradeCap,
@@ -65,55 +77,80 @@ public struct Caps has store {
     withdraw_cap: WithdrawCap,
 }
 
+// === Init ===
+
+/// One-time publisher witness created at publish time.
+public struct MARKET_MAKER has drop {}
+
+/// Initializes publish-time metadata by claiming and keeping the package publisher object.
+fun init(publisher_witness: MARKET_MAKER, ctx: &mut TxContext) {
+    package::claim_and_keep<MARKET_MAKER>(publisher_witness, ctx);
+}
+
 // === Public Functions ===
 
-/// Creates a trader account for sender.
-public fun create_trader_account(
-    _: &AMMAdminCap,
-    ctx: &mut TxContext,
-): TraderAccount {
+/// Creates a market maker for sender.
+public fun create(config: MarketMakerConfig, ctx: &mut TxContext): (MarketMaker, MarketMakerCap) {
     let mut balance_manager = balance_manager::new(ctx);
-
     let deposit_cap = balance_manager.mint_deposit_cap(ctx);
     let withdraw_cap = balance_manager.mint_withdraw_cap(ctx);
     let trade_cap = balance_manager.mint_trade_cap(ctx);
+    let id = object::new(ctx);
 
-    let caps = Caps {
-        trade_cap,
-        deposit_cap,
-        withdraw_cap,
+    events::emit_market_maker_created(id.to_inner());
+
+    let market_maker_cap = MarketMakerCap { id: object::new(ctx), market_maker_id: id.to_inner() };
+    let market_maker = MarketMaker {
+        id,
+        caps: Caps {
+            trade_cap,
+            deposit_cap,
+            withdraw_cap,
+        },
+        balance_manager,
+        config,
     };
-    let trader_account = TraderAccount {
-        id: object::new(ctx),
-        caps,
-        balance_manager: balance_manager,
-    };
 
-    events::emit_trader_account_created(object::id(&trader_account));
+    (market_maker, market_maker_cap)
+}
 
-    trader_account
+/// Replaces the market maker configuration. Requires the matching market maker capability.
+public fun update_market_maker(
+    market_maker: &mut MarketMaker,
+    cap: &MarketMakerCap,
+    config: MarketMakerConfig,
+) {
+    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    // TODO#q: think what we can do when dropping old value.
+    market_maker.config = config;
+    // TODO#q: nullify timestamp updates.
+    // TODO#q: emit event on update.
 }
 
 /// Deposit funds into a balance manager.
 public fun deposit<T>(
-    trader_account: &mut TraderAccount,
-    _: &AMMAdminCap,
+    market_maker: &mut MarketMaker,
+    cap: &MarketMakerCap,
     coin: Coin<T>,
     ctx: &mut TxContext,
 ) {
-    trader_account.balance_manager.deposit_with_cap(&trader_account.caps.deposit_cap, coin, ctx)
+    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+
+    market_maker.balance_manager.deposit_with_cap(&market_maker.caps.deposit_cap, coin, ctx)
 }
 
 /// Withdraw funds from a balance manager.
 public fun withdraw<T>(
-    trader_account: &mut TraderAccount,
-    _: &AMMAdminCap,
+    market_maker: &mut MarketMaker,
+    cap: &MarketMakerCap,
     withdraw_amount: u64,
     ctx: &mut TxContext,
 ): Coin<T> {
-    trader_account
+    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+
+    market_maker
         .balance_manager
-        .withdraw_with_cap(&trader_account.caps.withdraw_cap, withdraw_amount, ctx)
+        .withdraw_with_cap(&market_maker.caps.withdraw_cap, withdraw_amount, ctx)
 }
 
 /// Public quote refresh entrypoint for bot-driven PTBs.
@@ -124,42 +161,42 @@ public fun withdraw<T>(
 /// 3) Update balance based on all previously matched orders.
 /// 4) Re-place four fresh orders (2 bids, 2 asks) around the oracle mid.
 public fun refresh_quotes<BaseAsset, QuoteAsset>(
-    trader_account: &mut TraderAccount,
+    market_maker: &mut MarketMaker,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
-    config: &AMMConfig,
+    // TODO#q: add PriceInfoObject for base and quote asset
     price_info_object: &PriceInfoObject,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
     // Assert an input pool is valid.
-    assert!(config.has_valid_pool(pool), EInvalidPool);
+    assert!(market_maker.config.has_valid_pool(pool), EInvalidPool);
 
     // Generate trade proof.
-    let trade_proof = trader_account
+    let trade_proof = market_maker
         .balance_manager
-        .generate_proof_as_trader(&trader_account.caps.trade_cap, ctx);
+        .generate_proof_as_trader(&market_maker.caps.trade_cap, ctx);
 
     // Cancel all previous active orders.
     pool.cancel_all_orders(
-        &mut trader_account.balance_manager,
+        &mut market_maker.balance_manager,
         &trade_proof,
         clock,
         ctx,
     );
 
     // Update balance manager, to reflect previous settled limit orders in balance.
-    pool.withdraw_settled_amounts(&mut trader_account.balance_manager, &trade_proof);
+    pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
 
     // Making sure that orders are cancelled and balances are updated based on settled
     // orders before enabling pause state.
-    if (config.trading_paused()) {
+    if (market_maker.config.trading_paused()) {
         return
     };
 
     // Calculate base and volatility spread values.
-    let oracle_mid_price = deepbook_price(price_info_object, config, clock);
-    let base_spread = config.base_spread(oracle_mid_price);
-    let volatility_spread = config.volatility_spread(oracle_mid_price);
+    let oracle_mid_price = deepbook_price(price_info_object, &market_maker.config, clock);
+    let base_spread = market_maker.config.base_spread(oracle_mid_price);
+    let volatility_spread = market_maker.config.volatility_spread(oracle_mid_price);
 
     // Fetch deepbook's pool parameters.
     let (tick, lot_size, min_size) = pool.pool_book_params();
@@ -172,7 +209,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // Split bid order balance equally (almost xD) between inner and outer spread,
     // and compute quantity in base asset (for deepbook limit order).
-    let asset_balance_quote = trader_account.balance_manager.balance<QuoteAsset>();
+    let asset_balance_quote = market_maker.balance_manager.balance<QuoteAsset>();
     let bid_outer_quantity_quote = asset_balance_quote / 2;
     let bid_inner_quantity_quote = asset_balance_quote - bid_outer_quantity_quote;
     let bid_outer_quantity = compute_quantity(
@@ -187,7 +224,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     );
 
     // Split ask order balance equally between inner and outer spread.
-    let asset_balance_base = trader_account.balance_manager.balance<BaseAsset>();
+    let asset_balance_base = market_maker.balance_manager.balance<BaseAsset>();
     let ask_outer_quantity = compute_quantity(asset_balance_base / 2, lot_size, min_size);
     let ask_inner_quantity = compute_quantity(
         asset_balance_base - ask_outer_quantity,
@@ -196,7 +233,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     );
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
-    trader_account.try_place_limit_order(
+    market_maker.try_place_limit_order(
         pool,
         &trade_proof,
         1,
@@ -206,7 +243,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-    trader_account.try_place_limit_order(
+    market_maker.try_place_limit_order(
         pool,
         &trade_proof,
         2,
@@ -216,7 +253,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-    trader_account.try_place_limit_order(
+    market_maker.try_place_limit_order(
         pool,
         &trade_proof,
         3,
@@ -226,7 +263,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-    trader_account.try_place_limit_order(
+    market_maker.try_place_limit_order(
         pool,
         &trade_proof,
         4,
@@ -239,10 +276,54 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     events::emit_quote_updated(
         oracle_mid_price,
-        config.base_spread_bps(),
-        config.volatility_spread_bps(),
+        market_maker.config.base_spread_bps(),
+        market_maker.config.volatility_spread_bps(),
     );
 }
+
+// === View Functions ===
+
+/// Returns the market maker ID.
+public fun id(market_maker: &MarketMaker): ID {
+    market_maker.id.to_inner()
+}
+
+/// Returns the market maker owner.
+public fun owner(market_maker: &MarketMaker): address {
+    market_maker.balance_manager.owner()
+}
+
+/// Returns the balance manager.
+public fun balance_manager(market_maker: &MarketMaker): &BalanceManager {
+    &market_maker.balance_manager
+}
+
+/// Returns a deepbook's trade cap ID.
+public fun trade_cap_id(market_maker: &MarketMaker): ID {
+    object::id(&market_maker.caps.trade_cap)
+}
+
+/// Returns a deepbook's deposit cap ID.
+public fun deposit_cap_id(market_maker: &MarketMaker): ID {
+    object::id(&market_maker.caps.deposit_cap)
+}
+
+/// Returns a deepbook's withdraw cap ID.
+public fun withdraw_cap_id(market_maker: &MarketMaker): ID {
+    object::id(&market_maker.caps.withdraw_cap)
+}
+
+/// Returns the current market maker configuration.
+public fun config(market_maker: &MarketMaker): &MarketMakerConfig {
+    &market_maker.config
+}
+
+/// Returns the market maker capability object ID.
+public fun cap_id(amm_cap: &MarketMakerCap): ID {
+    amm_cap.id.to_inner()
+}
+
+// === Private Functions ===
 
 /// Compute bid price based on `mid_price`, `spread`
 /// to match deepbook's allowed `tick` size
@@ -292,11 +373,9 @@ fun compute_quantity(quantity: u64, lot_size: u64, min_size: u64): u64 {
     }
 }
 
-// === Private Functions ===
-
 /// Helper function to place a limit order if quantity is non-zero.
 fun try_place_limit_order<BaseAsset, QuoteAsset>(
-    trader_account: &mut TraderAccount,
+    market_maker: &mut MarketMaker,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     trade_proof: &TradeProof,
     client_order_id: u64,
@@ -319,7 +398,7 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
 
     // Place a limit order.
     pool.place_limit_order(
-        &mut trader_account.balance_manager,
+        &mut market_maker.balance_manager,
         trade_proof,
         client_order_id,
         order_type,
@@ -335,7 +414,11 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
 }
 
 /// Helper function to convert pyth price into DeepBook price format, while checking for validity and freshness.
-fun deepbook_price(price_info_object: &PriceInfoObject, config: &AMMConfig, clock: &Clock): u64 {
+fun deepbook_price(
+    price_info_object: &PriceInfoObject,
+    config: &MarketMakerConfig,
+    clock: &Clock,
+): u64 {
     assert!(config.has_valid_pyth_feed_id(price_info_object), EPythFeedIdentifierMismatch);
 
     // Get pyth price object not older than `MAX_PRICE_AGE_SECS`.
@@ -373,34 +456,14 @@ fun deepbook_price(price_info_object: &PriceInfoObject, config: &AMMConfig, cloc
     deepbook_price
 }
 
-// === View helpers ===
+// === Test-Only Helpers ===
 
-/// Returns the trader account owner.
-public fun owner(trader_account: &TraderAccount): address {
-    trader_account.balance_manager.owner()
-}
-
-/// Returns the trader account object ID.
-public fun trader_account_id(trader_account: &TraderAccount): ID {
-    trader_account.id.to_inner()
-}
-
-/// Returns the balance manager.
-public fun balance_manager(trader_account: &TraderAccount): &BalanceManager {
-    &trader_account.balance_manager
-}
-
-/// Returns a deepbook's trade cap ID.
-public fun trade_cap_id(trader_account: &TraderAccount): ID {
-    object::id(&trader_account.caps.trade_cap)
-}
-
-/// Returns a deepbook's deposit cap ID.
-public fun deposit_cap_id(trader_account: &TraderAccount): ID {
-    object::id(&trader_account.caps.deposit_cap)
-}
-
-/// Returns a deepbook's withdraw cap ID.
-public fun withdraw_cap_id(trader_account: &TraderAccount): ID {
-    object::id(&trader_account.caps.withdraw_cap)
+#[test_only]
+/// Creates the package witness and runs init for tests.
+public fun test_init(ctx: &mut TxContext) {
+    let publisher_witness = sui::test_utils::create_one_time_witness<MARKET_MAKER>();
+    init(
+        publisher_witness,
+        ctx,
+    );
 }

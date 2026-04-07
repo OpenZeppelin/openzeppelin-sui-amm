@@ -14,14 +14,14 @@ import type useResolvedTraderAccountId from "./useResolvedTraderAccountId"
 import useTraderAccountHeaderActionViewModel from "./useTraderAccountHeaderActionViewModel"
 import { type TraderAccountStatus } from "./useTraderAccountOverview"
 
-const headerTitle = "Trader account"
+const headerTitle = "Market maker"
 const headerDescription =
-  "Snapshot of the on-chain trader account for the connected wallet."
-const missingWalletMessage = "Connect a wallet to load a trader account."
+  "Snapshot of the on-chain market maker for the connected wallet."
+const missingWalletMessage = "Connect a wallet to load a market maker."
 const missingConfigMessage =
   "Contract package id is not configured for this network."
-const notFoundMessage = "No trader account found for the connected wallet."
-const defaultLoadErrorMessage = "Unable to load trader account."
+const notFoundMessage = "No market maker found for the connected wallet."
+const defaultLoadErrorMessage = "Unable to load market maker."
 
 const buildTraderAccountDetails = (
   traderAccount: TraderAccountOverview

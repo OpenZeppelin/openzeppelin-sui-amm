@@ -5,46 +5,46 @@ It is experimental and unaudited.
 
 ## What this package provides
 
-- Admin-gated AMM configuration (`manager.move`).
-- Trader account creation with embedded DeepBook caps (`executor.move`).
-- Deposit/withdraw operations through the trader account.
+- Config construction for pool-specific quoting (`config.move`).
+- Market maker creation with embedded DeepBook caps and embedded config (`market_maker.move`).
+- Deposit/withdraw operations through the market maker.
 - Quote refresh logic that reads Pyth prices, computes spreads, and places limit orders.
-- Event surface for config lifecycle, trader account creation, and quote updates (`events.move`).
+- Event surface for market maker creation and quote updates (`events.move`).
 
 ## Modules
 
-- `manager`: creates and updates `AMMConfig` objects; owns `AMMAdminCap` lifecycle.
-- `executor`: manages per-trader state and quote refresh workflow.
+- `config`: validates and builds `MarketMakerConfig` values for a DeepBook pool.
+- `market_maker`: owns the market maker object, its capability, balances, and quote refresh workflow.
 - `events`: emits typed events consumed by tests and off-chain indexers.
 
 ## Core objects
 
-- `AMMAdminCap`: capability required for privileged config and account setup operations.
-- `AMMConfig` (shared object):
+- `MarketMakerConfig` (embedded value):
   - `base_spread_bps`
   - `volatility_spread_bps`
   - `use_laser`
   - `trading_paused`
   - `pyth_price_feed_id` (must be 32 bytes)
-- `TraderAccount` (owned object):
+- `MarketMaker` (owned object):
   - DeepBook `BalanceManager`
+  - embedded `MarketMakerConfig`
   - embedded caps (`TradeCap`, `DepositCap`, `WithdrawCap`)
+- `MarketMakerCap` (owned object): capability required to update config and manage balances for a specific market maker.
 
 ## Events
 
-- `AMMConfigCreated`
-- `AMMConfigUpdated`
-- `TraderAccountCreated`
+- `MarketMakerCreated`
 - `QuoteUpdated`
 
 ## Main workflow
 
-1. Publish package (or call `manager::test_init` in tests) to initialize and transfer `AMMAdminCap` to publisher/sender.
-2. Create shared config with `manager::create_amm_config_and_share`.
-3. Ensure DeepBook registry is authorized for `executor::PropAmmApp` and balance-manager map is initialized.
-4. Create a trader account with `executor::create_trader_account` or `executor::create_trader_account_for_owner`.
-5. Fund account with `executor::deposit` and optionally withdraw with `executor::withdraw`.
-6. Call `executor::refresh_quotes` to:
+1. Publish package (or call `market_maker::test_init` in tests) to initialize package metadata.
+2. Build a pool-specific config with `config::create`.
+3. Ensure the DeepBook registry balance-manager map is initialized.
+4. Create a market maker and capability with `market_maker::create`.
+5. Fund account balances with `market_maker::deposit` and optionally withdraw with `market_maker::withdraw`.
+6. To update quoting parameters, create a new config with `config::create` and pass it to `market_maker::update_market_maker`.
+7. Call `market_maker::refresh_quotes` to:
     - validate trading is enabled,
     - validate Pyth feed ID matches config,
     - read oracle mid price,

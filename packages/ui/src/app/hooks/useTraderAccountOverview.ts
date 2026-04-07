@@ -20,7 +20,7 @@ const emptyTraderAccountState = (): TraderAccountState => ({
 })
 
 const resolveUnexpectedErrorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "Unable to load trader account."
+  error instanceof Error ? error.message : "Unable to load market maker."
 
 const useTraderAccountOverview = (
   traderAccountId?: string,

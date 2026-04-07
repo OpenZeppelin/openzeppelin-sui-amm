@@ -1,6 +1,6 @@
 /**
  * Localnet trader-account setup: authorizes PropAmm in DeepBook, initializes the
- * balance manager map, and resolves or creates a trader account.
+ * balance manager map, and resolves or creates a market maker.
  */
 import yargs from "yargs"
 

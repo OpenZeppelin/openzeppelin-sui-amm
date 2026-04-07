@@ -30,7 +30,7 @@ const InfoTile = ({
 
 const assertUnreachable = (value: never): never => {
   throw new Error(
-    `Unhandled trader account content state: ${JSON.stringify(value)}`
+    `Unhandled market maker content state: ${JSON.stringify(value)}`
   )
 }
 
@@ -155,12 +155,12 @@ const TraderAccountCardView = ({
             {traderAccountId ? (
               <CopyableId
                 value={traderAccountId}
-                label="Trader account"
+                label="Market maker"
                 explorerUrl={explorerUrl}
               />
             ) : (
               <span className="text-slate-400 dark:text-slate-200/60">
-                No trader account detected
+                No market maker detected
               </span>
             )}
           </div>

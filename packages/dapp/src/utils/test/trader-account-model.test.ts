@@ -27,7 +27,7 @@ const buildMoveObject = (fields: Record<string, unknown>) =>
     }
   }) as never
 
-describe("trader account model compatibility", () => {
+describe("market maker model compatibility", () => {
   beforeEach(() => {
     objectMocks.getSuiObject.mockReset()
     objectMocks.getAllOwnedObjectsByFilter.mockReset()

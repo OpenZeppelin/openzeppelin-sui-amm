@@ -3,22 +3,10 @@ module openzeppelin_market_maker::events;
 
 use sui::event;
 
-/// Emitted when a new configuration object is created.
-public struct AMMConfigCreated has copy, drop {
-    /// ID of the configuration object.
-    config_id: ID,
-}
-
-/// Emitted when a configuration object is updated.
-public struct AMMConfigUpdated has copy, drop {
-    /// ID of the configuration object.
-    config_id: ID,
-}
-
-/// Emitted when a trader account is created.
-public struct TraderAccountCreated has copy, drop {
-    /// ID of the trader account object.
-    trader_account_id: ID,
+/// Emitted when a market maker is created.
+public struct MarketMakerCreated has copy, drop {
+    /// ID of the market maker object.
+    market_maker_id: ID,
 }
 
 /// Emitted whenever quote levels are recomputed from oracle input.
@@ -31,19 +19,9 @@ public struct QuoteUpdated has copy, drop {
     volatility_spread_bps: u64,
 }
 
-/// Emit an `AMMConfigCreated` event.
-public(package) fun emit_amm_config_created(config_id: ID) {
-    event::emit(AMMConfigCreated { config_id });
-}
-
-/// Emit an `AMMConfigUpdated` event.
-public(package) fun emit_amm_config_updated(config_id: ID) {
-    event::emit(AMMConfigUpdated { config_id });
-}
-
-/// Emit a `TraderAccountCreated` event.
-public(package) fun emit_trader_account_created(trader_account_id: ID) {
-    event::emit(TraderAccountCreated { trader_account_id });
+/// Emit a `MarketMakerCreated` event.
+public(package) fun emit_market_maker_created(market_maker_id: ID) {
+    event::emit(MarketMakerCreated { market_maker_id });
 }
 
 /// Emit a `QuoteUpdated` event.
@@ -57,22 +35,10 @@ public(package) fun emit_quote_updated(
 
 // === Test only helpers ===
 
-/// Builds an `AMMConfigCreated` payload.
+/// Builds a `MarketMakerCreated` payload.
 #[test_only]
-public(package) fun amm_config_created(config_id: ID): AMMConfigCreated {
-    AMMConfigCreated { config_id }
-}
-
-/// Builds an `AMMConfigUpdated` payload.
-#[test_only]
-public(package) fun amm_config_updated(config_id: ID): AMMConfigUpdated {
-    AMMConfigUpdated { config_id }
-}
-
-/// Builds a `TraderAccountCreated` payload.
-#[test_only]
-public(package) fun trader_account_created(trader_account_id: ID): TraderAccountCreated {
-    TraderAccountCreated { trader_account_id }
+public(package) fun market_maker_created(market_maker_id: ID): MarketMakerCreated {
+    MarketMakerCreated { market_maker_id }
 }
 
 /// Builds a `QuoteUpdated` payload.

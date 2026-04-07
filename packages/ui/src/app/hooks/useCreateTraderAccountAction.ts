@@ -44,9 +44,9 @@ type AdminCapResolutionState =
   | { status: "error"; error: string }
 
 const networkUnsupportedMessage =
-  "Trader account creation is not configured for the active network."
+  "Market maker creation is not configured for the active network."
 const missingAdminCapMessage =
-  "Connected wallet does not own the AMM admin capability required to create trader accounts."
+  "Connected wallet does not own the AMM admin capability required to create market makers."
 
 const resolveAdminCapErrorMessage = (error: unknown) =>
   error instanceof Error
@@ -69,7 +69,7 @@ const resolveDisabledReason = ({
   adminCapResolution: AdminCapResolutionState
 }) => {
   if (!walletAddress) {
-    return "Connect a wallet to create a trader account."
+    return "Connect a wallet to create a market maker."
   }
 
   if (!ammPackageId) {
@@ -81,7 +81,7 @@ const resolveDisabledReason = ({
   }
 
   if (chainMismatch) {
-    return `Switch your wallet to ${network} before creating a trader account.`
+    return `Switch your wallet to ${network} before creating a market maker.`
   }
 
   if (adminCapResolution.status === "loading") {
@@ -221,7 +221,7 @@ const useCreateTraderAccountAction = ({
     if (!walletAddress) {
       setTransactionState({
         status: "error",
-        error: "Connect a wallet to create a trader account."
+        error: "Connect a wallet to create a market maker."
       })
       return
     }
@@ -301,7 +301,7 @@ const useCreateTraderAccountAction = ({
       if (explorerUrl) {
         notification.txSuccess(transactionUrl(explorerUrl, digest), toastId)
       } else {
-        notification.success("Trader account created.", toastId)
+        notification.success("Market maker created.", toastId)
       }
 
       reloadUi()

@@ -9,7 +9,7 @@ import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { ensureCreatedObject } from "@sui-amm/tooling-node/transactions"
 import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
 
-const CREATE_TRADER_ACCOUNT_LABEL = "create-trader-account"
+const CREATE_market_maker_LABEL = "create-trader-account"
 
 const buildSummaryLabel = (label: string): TransactionSummary => ({
   label,
@@ -73,7 +73,7 @@ const loadTraderAccountOverview = async ({
     )
   } catch (error) {
     throw buildModelError({
-      operation: "Trader account lookup",
+      operation: "Market maker lookup",
       traderAccountId,
       expectedOwner: ownerAddress,
       expectedPackageId: ammPackageId,
@@ -83,7 +83,7 @@ const loadTraderAccountOverview = async ({
 
   if (traderAccount.ownerAddress !== ownerAddress)
     throw new Error(
-      `Trader account owner mismatch for traderAccountId ${traderAccountId}. Expected owner ${ownerAddress}, found ${traderAccount.ownerAddress}, expected package ${ammPackageId}.`
+      `Market maker owner mismatch for traderAccountId ${traderAccountId}. Expected owner ${ownerAddress}, found ${traderAccount.ownerAddress}, expected package ${ammPackageId}.`
     )
 
   return traderAccount
@@ -116,13 +116,13 @@ const createTraderAccount = async ({
   const createResult = await tooling.executeTransactionWithSummary({
     transaction: createTransaction,
     signer: tooling.loadedEd25519KeyPair,
-    summaryLabel: CREATE_TRADER_ACCOUNT_LABEL,
+    summaryLabel: CREATE_market_maker_LABEL,
     devInspect,
     dryRun
   })
 
   const summary =
-    createResult.summary ?? buildSummaryLabel(CREATE_TRADER_ACCOUNT_LABEL)
+    createResult.summary ?? buildSummaryLabel(CREATE_market_maker_LABEL)
 
   if (dryRun) {
     return { summary }
@@ -130,7 +130,7 @@ const createTraderAccount = async ({
 
   const createExecution = createResult.execution?.transactionResult
   if (!createExecution)
-    throw new Error("Trader account creation did not execute.")
+    throw new Error("Market maker creation did not execute.")
 
   return {
     traderAccountId: ensureCreatedObject(
@@ -162,7 +162,7 @@ const resolveExistingTraderAccountId = async ({
 
   if (ownedTraderAccountIds.length > 1)
     throw new Error(
-      `Multiple owned trader accounts were found for the active owner (${ownedTraderAccountIds.length}). Provide --trader-account-id to choose one explicitly.`
+      `Multiple owned market makers were found for the active owner (${ownedTraderAccountIds.length}). Provide --trader-account-id to choose one explicitly.`
     )
 
   return ownedTraderAccountIds[0]
@@ -192,7 +192,7 @@ export const resolveOrCreateTraderAccount = async ({
   devInspect?: boolean
   dryRun?: boolean
 }): Promise<ResolveOrCreateTraderAccountResult> => {
-  // Kept for backward-compatible callsites; no longer needed by create_trader_account.
+  // Kept for backward-compatible callsites; no longer needed by create_market_maker.
   void deepbookRegistryId
 
   const resolvedTraderAccountId = await resolveExistingTraderAccountId({
@@ -226,7 +226,7 @@ export const resolveOrCreateTraderAccount = async ({
   if (dryRun) {
     return {
       status: "dry-run-created",
-      note: "Dry-run simulated trader account creation. Created object IDs are unavailable without execution.",
+      note: "Dry-run simulated market maker creation. Created object IDs are unavailable without execution.",
       transactionSummaries: {
         createTraderAccount: createResult.summary
       }
@@ -235,7 +235,7 @@ export const resolveOrCreateTraderAccount = async ({
 
   if (!createResult.traderAccountId)
     throw new Error(
-      "Trader account creation did not return a trader account id."
+      "Market maker creation did not return a market maker id."
     )
 
   return {

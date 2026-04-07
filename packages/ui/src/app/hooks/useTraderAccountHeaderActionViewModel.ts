@@ -18,7 +18,7 @@ const useTraderAccountHeaderActionViewModel = () => {
       label:
         createAction.transactionState.status === "processing"
           ? "Creating..."
-          : "Create trader account",
+          : "Create market maker",
       disabled: !createAction.canCreate,
       tooltip: createAction.disabledReason,
       onClick: () => {

@@ -1,5 +1,5 @@
 /**
- * Resolves or creates a trader account for shared networks.
+ * Resolves or creates a market maker for shared networks.
  */
 import yargs from "yargs"
 
@@ -101,7 +101,7 @@ runSuiScript(
         })
         if (!isBalanceManagerMapReady)
           throw new Error(
-            "DeepBook registry balance manager map is not initialized. Ask the registry admin to initialize it before creating trader accounts."
+            "DeepBook registry balance manager map is not initialized. Ask the registry admin to initialize it before creating market makers."
           )
 
         const isAuthorized = await isPropAmmAppAuthorizedInRegistry({

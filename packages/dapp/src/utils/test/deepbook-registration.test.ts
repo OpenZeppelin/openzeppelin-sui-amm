@@ -63,7 +63,7 @@ describe("resolveOrCreateTraderAccount", () => {
     transactionMocks.ensureCreatedObject.mockReset()
   })
 
-  it("reuses an owned trader account before creating a new one", async () => {
+  it("reuses an owned market maker before creating a new one", async () => {
     const tooling = createTooling()
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
@@ -149,7 +149,7 @@ describe("resolveOrCreateTraderAccount", () => {
     ).not.toHaveBeenCalled()
   })
 
-  it("fails clearly when multiple owned trader accounts exist and none is specified", async () => {
+  it("fails clearly when multiple owned market makers exist and none is specified", async () => {
     const tooling = createTooling()
     const resolveCreateDependencies = vi.fn(async () => ({
       adminCapId: "0xadmin-cap"
@@ -169,12 +169,12 @@ describe("resolveOrCreateTraderAccount", () => {
         ownerAddress: "0xowner"
       })
     ).rejects.toThrow(
-      "Multiple owned trader accounts were found for the active owner (2). Provide --trader-account-id to choose one explicitly."
+      "Multiple owned market makers were found for the active owner (2). Provide --trader-account-id to choose one explicitly."
     )
     expect(resolveCreateDependencies).not.toHaveBeenCalled()
   })
 
-  it("uses an explicit trader account id without owned-account discovery", async () => {
+  it("uses an explicit market maker id without owned-account discovery", async () => {
     const tooling = createTooling()
     const resolveCreateDependencies = vi.fn(async () => ({
       adminCapId: "0xadmin-cap"
@@ -201,7 +201,7 @@ describe("resolveOrCreateTraderAccount", () => {
     ).not.toHaveBeenCalled()
   })
 
-  it("creates and then loads the trader account when none exists", async () => {
+  it("creates and then loads the market maker when none exists", async () => {
     const tooling = createTooling()
     const executeTransactionWithSummary = vi.mocked(
       tooling.executeTransactionWithSummary
@@ -262,12 +262,12 @@ describe("resolveOrCreateTraderAccount", () => {
         traderAccountId: "0xexplicit"
       })
     ).rejects.toThrow(
-      "Trader account lookup failed for traderAccountId 0xexplicit (expected owner 0xowner, expected package 0xamm, expected type 0xamm::executor::TraderAccount). Cause: Object not found"
+      "Market maker lookup failed for traderAccountId 0xexplicit (expected owner 0xowner, expected package 0xamm, expected type 0xamm::executor::TraderAccount). Cause: Object not found"
     )
     expect(resolveCreateDependencies).not.toHaveBeenCalled()
   })
 
-  it("fails with clear context when the trader account owner mismatches", async () => {
+  it("fails with clear context when the market maker owner mismatches", async () => {
     const tooling = createTooling()
     const resolveCreateDependencies = vi.fn(async () => ({
       adminCapId: "0xadmin-cap"
@@ -288,7 +288,7 @@ describe("resolveOrCreateTraderAccount", () => {
         traderAccountId: "0xexplicit"
       })
     ).rejects.toThrow(
-      "Trader account owner mismatch for traderAccountId 0xexplicit. Expected owner 0xowner, found 0xanother-owner, expected package 0xamm."
+      "Market maker owner mismatch for traderAccountId 0xexplicit. Expected owner 0xowner, found 0xanother-owner, expected package 0xamm."
     )
     expect(resolveCreateDependencies).not.toHaveBeenCalled()
   })
