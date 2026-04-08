@@ -120,22 +120,27 @@ public fun create(config: MarketMakerConfig, ctx: &mut TxContext): (MarketMaker,
     (market_maker, market_maker_cap)
 }
 
-/// Replaces the market maker configuration. Requires the matching market maker capability.
+/// Replaces the market maker configuration, and unpause trading.
+/// Requires the matching market maker capability.
 public fun update_market_maker(
     market_maker: &mut MarketMaker,
     cap: &MarketMakerCap,
     config: MarketMakerConfig,
 ) {
     assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
-    // Should update pool when trading is paused (to settle balances properly).
+
+    // When market maker active,
     if (market_maker.config.active()) {
-        assert!(market_maker.config.pool_id() == config.pool_id(), EInvalidPoolUpdate)
+        // update pool when trading is paused (to settle balances properly).
+        assert!(market_maker.config.pool_id() == config.pool_id(), EInvalidPoolUpdate);
+    } else {
+        // Otherwise emit unpaused event, since `MarketMakerConfig` can be created active only.
+        events::emit_market_maker_unpaused(market_maker.id.to_inner());
     };
 
-    // TODO#q: think what we can do when dropping old value.
     market_maker.config = config;
     // TODO#q: nullify timestamp updates.
-    // TODO#q: emit event on update.
+    // TODO#q: market maker updated event
 }
 
 /// Pauses trading by cancelling all existing orders and preventing new orders until next activation.
@@ -166,6 +171,9 @@ public fun pause<BaseAsset, QuoteAsset>(
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
 
+    // Emit paused event.
+    events::emit_market_maker_paused(market_maker.id.to_inner());
+
     // Pause config.
     market_maker.config.pause();
 }
@@ -174,6 +182,9 @@ public fun pause<BaseAsset, QuoteAsset>(
 public fun unpause(market_maker: &mut MarketMaker, cap: &MarketMakerCap) {
     assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
     assert!(!market_maker.config.active(), ENotPaused);
+
+    // Emit unpaused event.
+    events::emit_market_maker_unpaused(market_maker.id.to_inner());
 
     // Unpause config.
     market_maker.config.unpause();

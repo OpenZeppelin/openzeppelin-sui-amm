@@ -8,7 +8,12 @@ use deepbook::order_info::{OrderFilled, OrderFullyFilled};
 use deepbook::pool::{Self, Pool};
 use deepbook::registry::{Self, Registry};
 use openzeppelin_market_maker::config;
-use openzeppelin_market_maker::events::{market_maker_created, quote_updated};
+use openzeppelin_market_maker::events::{
+    market_maker_created,
+    market_maker_paused,
+    market_maker_unpaused,
+    quote_updated
+};
 use openzeppelin_market_maker::market_maker::{Self, MarketMaker, MarketMakerCap};
 use openzeppelin_market_maker::test_helpers::{assert_emitted, build_pyth_price_feed_id};
 use std::unit_test::{assert_eq, destroy};
@@ -336,6 +341,161 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
+    test_scenario::return_shared(clock);
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+    scenario.end();
+}
+
+#[test]
+fun pause_and_unpause_emit_events_and_toggle_market_maker_activity() {
+    let sender = @0x16;
+    let feed_id_byte = 12;
+    let mut scenario = test_scenario::begin(sender);
+
+    market_maker::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+        &mut scenario,
+        pool_id,
+        100,
+        200,
+        false,
+        feed_id_byte,
+    );
+
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+
+    market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
+    assert_emitted!(market_maker_paused(market_maker_object.id()));
+    assert!(!market_maker_object.config().active());
+
+    market_maker_object.unpause(&market_maker_cap);
+    assert_emitted!(market_maker_unpaused(market_maker_object.id()));
+    assert!(market_maker_object.config().active());
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(clock);
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+    scenario.end();
+}
+
+#[test]
+fun unpause_emits_event_in_followup_transaction() {
+    let sender = @0x17;
+    let feed_id_byte = 13;
+    let mut scenario = test_scenario::begin(sender);
+
+    market_maker::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+        &mut scenario,
+        pool_id,
+        100,
+        200,
+        false,
+        feed_id_byte,
+    );
+
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+
+    market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
+    assert_emitted!(market_maker_paused(market_maker_object.id()));
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(clock);
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    market_maker_object.unpause(&market_maker_cap);
+
+    assert_emitted!(market_maker_unpaused(market_maker_object.id()));
+    assert!(market_maker_object.config().active());
+
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+    scenario.end();
+}
+
+#[test]
+fun update_market_maker_from_paused_emits_unpaused_event() {
+    let sender = @0x18;
+    let feed_id_byte = 14;
+    let mut scenario = test_scenario::begin(sender);
+
+    market_maker::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+        &mut scenario,
+        pool_id,
+        100,
+        200,
+        false,
+        feed_id_byte,
+    );
+
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+
+    market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
+    assert_emitted!(market_maker_paused(market_maker_object.id()));
+
+    let updated_config = config::create(
+        &pool,
+        120,
+        240,
+        false,
+        build_pyth_price_feed_id(feed_id_byte),
+    );
+    market_maker_object.update_market_maker(&market_maker_cap, updated_config);
+
+    assert_emitted!(market_maker_unpaused(market_maker_object.id()));
+    assert!(market_maker_object.config().active());
+
+    test_scenario::return_shared(pool);
     test_scenario::return_shared(clock);
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);

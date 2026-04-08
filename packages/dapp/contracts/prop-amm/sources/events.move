@@ -19,6 +19,18 @@ public struct QuoteUpdated has copy, drop {
     volatility_spread_bps: u64,
 }
 
+/// Emitted when market maker trading is paused.
+public struct MarketMakerPaused has copy, drop {
+    /// ID of the market maker object.
+    market_maker_id: ID,
+}
+
+/// Emitted when market maker trading is unpaused.
+public struct MarketMakerUnpaused has copy, drop {
+    /// ID of the market maker object.
+    market_maker_id: ID,
+}
+
 /// Emit a `MarketMakerCreated` event.
 public(package) fun emit_market_maker_created(market_maker_id: ID) {
     event::emit(MarketMakerCreated { market_maker_id });
@@ -31,6 +43,16 @@ public(package) fun emit_quote_updated(
     volatility_spread_bps: u64,
 ) {
     event::emit(QuoteUpdated { price, base_spread_bps, volatility_spread_bps });
+}
+
+/// Emit a `MarketMakerPaused` event.
+public(package) fun emit_market_maker_paused(market_maker_id: ID) {
+    event::emit(MarketMakerPaused { market_maker_id });
+}
+
+/// Emit a `MarketMakerUnpaused` event.
+public(package) fun emit_market_maker_unpaused(market_maker_id: ID) {
+    event::emit(MarketMakerUnpaused { market_maker_id });
 }
 
 // === Test only helpers ===
@@ -49,4 +71,16 @@ public(package) fun quote_updated(
     volatility_spread_bps: u64,
 ): QuoteUpdated {
     QuoteUpdated { price, base_spread_bps, volatility_spread_bps }
+}
+
+/// Builds a `MarketMakerPaused` payload.
+#[test_only]
+public(package) fun market_maker_paused(market_maker_id: ID): MarketMakerPaused {
+    MarketMakerPaused { market_maker_id }
+}
+
+/// Builds a `MarketMakerUnpaused` payload.
+#[test_only]
+public(package) fun market_maker_unpaused(market_maker_id: ID): MarketMakerUnpaused {
+    MarketMakerUnpaused { market_maker_id }
 }
