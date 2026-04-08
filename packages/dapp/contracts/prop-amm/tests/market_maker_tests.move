@@ -9,6 +9,7 @@ use deepbook::pool::{Self, Pool};
 use deepbook::registry::{Self, Registry};
 use openzeppelin_market_maker::config;
 use openzeppelin_market_maker::events::{
+    market_maker_config_updated,
     market_maker_created,
     market_maker_paused,
     market_maker_unpaused,
@@ -343,6 +344,7 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
         build_pyth_price_feed_id(feed_id_byte),
     );
     market_maker_object.update_market_maker(&market_maker_cap, updated_config);
+    assert_emitted!(market_maker_config_updated(market_maker_object.id()));
     market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
 
     assert_emitted!(
@@ -506,6 +508,7 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
     );
     market_maker_object.update_market_maker(&market_maker_cap, updated_config);
 
+    assert_emitted!(market_maker_config_updated(market_maker_object.id()));
     assert_emitted!(market_maker_unpaused(market_maker_object.id()));
     assert!(market_maker_object.config().active());
 

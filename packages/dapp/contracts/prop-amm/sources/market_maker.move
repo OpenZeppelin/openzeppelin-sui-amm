@@ -127,20 +127,20 @@ public fun update_market_maker(
     cap: &MarketMakerCap,
     config: MarketMakerConfig,
 ) {
-    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
 
     // When market maker active,
     if (market_maker.config.active()) {
-        // update pool when trading is paused (to settle balances properly).
+        // assert we don't update pool (to settle balances properly).
         assert!(market_maker.config.pool_id() == config.pool_id(), EInvalidPoolUpdate);
     } else {
         // Otherwise emit unpaused event, since `MarketMakerConfig` can be created active only.
-        events::emit_market_maker_unpaused(market_maker.id.to_inner());
+        events::emit_market_maker_unpaused(market_maker.id());
     };
 
+    events::emit_market_maker_config_updated(market_maker.id());
+
     market_maker.config = config;
-    // TODO#q: nullify timestamp updates.
-    // TODO#q: market maker updated event
 }
 
 /// Pauses trading by cancelling all existing orders and preventing new orders until next activation.
@@ -151,7 +151,7 @@ public fun pause<BaseAsset, QuoteAsset>(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
     assert!(market_maker.config.active(), EPaused);
     assert!(market_maker.config.has_valid_pool(pool), EInvalidPool);
 
@@ -172,7 +172,7 @@ public fun pause<BaseAsset, QuoteAsset>(
     pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
 
     // Emit paused event.
-    events::emit_market_maker_paused(market_maker.id.to_inner());
+    events::emit_market_maker_paused(market_maker.id());
 
     // Pause config.
     market_maker.config.pause();
@@ -180,11 +180,11 @@ public fun pause<BaseAsset, QuoteAsset>(
 
 /// Unpauses trading, allowing new orders to be placed.
 public fun unpause(market_maker: &mut MarketMaker, cap: &MarketMakerCap) {
-    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
     assert!(!market_maker.config.active(), ENotPaused);
 
     // Emit unpaused event.
-    events::emit_market_maker_unpaused(market_maker.id.to_inner());
+    events::emit_market_maker_unpaused(market_maker.id());
 
     // Unpause config.
     market_maker.config.unpause();
@@ -197,7 +197,7 @@ public fun deposit<T>(
     coin: Coin<T>,
     ctx: &mut TxContext,
 ) {
-    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
 
     market_maker.balance_manager.deposit_with_cap(&market_maker.caps.deposit_cap, coin, ctx)
 }
@@ -210,7 +210,7 @@ public fun withdraw<T>(
     withdraw_amount: u64,
     ctx: &mut TxContext,
 ): Coin<T> {
-    assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
     assert!(!market_maker.config.active(), ENotPaused);
 
     market_maker

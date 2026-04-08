@@ -64,6 +64,7 @@ public fun create<BaseAsset, QuoteAsset>(
         active: true,
         pyth_price_feed_id,
         pool_id: object::id(pool),
+        // TODO#q: nullify timestamp updates.
     }
 }
 

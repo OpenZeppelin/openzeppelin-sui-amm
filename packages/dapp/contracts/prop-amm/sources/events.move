@@ -31,6 +31,14 @@ public struct MarketMakerUnpaused has copy, drop {
     market_maker_id: ID,
 }
 
+/// Emitted when market maker configuration is updated.
+/// 
+/// NOTE: Can be emitted when update triggered even without actual changes to config.
+public struct MarketMakerConfigUpdated has copy, drop {
+    /// ID of the market maker object.
+    market_maker_id: ID,
+}
+
 /// Emit a `MarketMakerCreated` event.
 public(package) fun emit_market_maker_created(market_maker_id: ID) {
     event::emit(MarketMakerCreated { market_maker_id });
@@ -53,6 +61,11 @@ public(package) fun emit_market_maker_paused(market_maker_id: ID) {
 /// Emit a `MarketMakerUnpaused` event.
 public(package) fun emit_market_maker_unpaused(market_maker_id: ID) {
     event::emit(MarketMakerUnpaused { market_maker_id });
+}
+
+/// Emit a `MarketMakerConfigUpdated` event.
+public(package) fun emit_market_maker_config_updated(market_maker_id: ID) {
+    event::emit(MarketMakerConfigUpdated { market_maker_id });
 }
 
 // === Test only helpers ===
@@ -83,4 +96,10 @@ public(package) fun market_maker_paused(market_maker_id: ID): MarketMakerPaused 
 #[test_only]
 public(package) fun market_maker_unpaused(market_maker_id: ID): MarketMakerUnpaused {
     MarketMakerUnpaused { market_maker_id }
+}
+
+/// Builds a `MarketMakerConfigUpdated` payload.
+#[test_only]
+public(package) fun market_maker_config_updated(market_maker_id: ID): MarketMakerConfigUpdated {
+    MarketMakerConfigUpdated { market_maker_id }
 }
