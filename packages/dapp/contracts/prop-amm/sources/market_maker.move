@@ -203,6 +203,7 @@ public fun deposit<T>(
 }
 
 /// Withdraw funds from a balance manager.
+/// Fails if `MarketMaker` wasn't paused.
 public fun withdraw<T>(
     market_maker: &mut MarketMaker,
     cap: &MarketMakerCap,
@@ -210,6 +211,7 @@ public fun withdraw<T>(
     ctx: &mut TxContext,
 ): Coin<T> {
     assert!(market_maker.id.to_inner() == cap.market_maker_id, EInvalidCap);
+    assert!(!market_maker.config.active(), ENotPaused);
 
     market_maker
         .balance_manager

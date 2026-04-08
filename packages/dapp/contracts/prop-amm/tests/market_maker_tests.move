@@ -62,11 +62,7 @@ fun create_pool(scenario: &mut test_scenario::Scenario, sender: address): ID {
     pool_id
 }
 
-fun publish_price_feed(
-    scenario: &mut test_scenario::Scenario,
-    sender: address,
-    feed_id_byte: u8,
-) {
+fun publish_price_feed(scenario: &mut test_scenario::Scenario, sender: address, feed_id_byte: u8) {
     scenario.next_tx(sender);
     clock::create_for_testing(scenario.ctx()).share_for_testing();
 
@@ -234,12 +230,14 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
 #[test]
 fun deposit_and_withdraw_updates_market_maker_balance() {
     let sender = @0x14;
+    let feed_id_byte = 5;
     let deposit_amount = 50 * constants::float_scaling();
     let withdraw_amount = 15 * constants::float_scaling();
     let mut scenario = test_scenario::begin(sender);
 
     market_maker::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
@@ -250,7 +248,7 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
         100,
         200,
         false,
-        5,
+        feed_id_byte,
     );
 
     market_maker_object.deposit(
@@ -258,6 +256,18 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
         mint_for_testing<SUI>(deposit_amount, scenario.ctx()),
         scenario.ctx(),
     );
+
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+
+    market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
     let withdrawn_coin = market_maker_object.withdraw<SUI>(
         &market_maker_cap,
         withdraw_amount,
@@ -270,6 +280,8 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
         deposit_amount - withdraw_amount,
     );
 
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(clock);
     coin::burn_for_testing(withdrawn_coin);
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
@@ -333,11 +345,13 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     market_maker_object.update_market_maker(&market_maker_cap, updated_config);
     market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
 
-    assert_emitted!(quote_updated(
-        oracle_price,
-        updated_base_spread_bps,
-        updated_volatility_spread_bps,
-    ));
+    assert_emitted!(
+        quote_updated(
+            oracle_price,
+            updated_base_spread_bps,
+            updated_volatility_spread_bps,
+        ),
+    );
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
