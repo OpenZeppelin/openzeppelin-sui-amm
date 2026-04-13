@@ -9,6 +9,7 @@ use deepbook::pool::{Self, Pool};
 use deepbook::registry::{Self, Registry};
 use openzeppelin_market_maker::config;
 use openzeppelin_market_maker::events::{
+    QuoteUpdated,
     market_maker_config_updated,
     market_maker_created,
     market_maker_paused,
@@ -570,6 +571,67 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     assert_emitted!(quote_updated(oracle_price, base_spread_bps, volatility_spread_bps));
     assert_eq!(event::events_by_type<OrderFilled>().length(), 0);
     assert_eq!(event::events_by_type<OrderFullyFilled>().length(), 0);
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(price_info_object);
+    test_scenario::return_shared(clock);
+    transfer::public_transfer(market_maker_object, sender);
+    scenario.end();
+}
+
+#[test]
+fun refresh_quotes_ignores_replayed_publish_time() {
+    let sender = @0x2a;
+    let base_spread_bps = 100;
+    let volatility_spread_bps = 200;
+    let quote_balance = 19_404_002 * constants::float_scaling();
+    let feed_id_byte = 12;
+    let mut scenario = test_scenario::begin(sender);
+
+    market_maker::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let (mut market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+        &mut scenario,
+        pool_id,
+        base_spread_bps,
+        volatility_spread_bps,
+        false,
+        feed_id_byte,
+    );
+    market_maker_object.deposit(
+        &market_maker_cap,
+        mint_for_testing<SUI>(1_000_000 * constants::float_scaling(), scenario.ctx()),
+        scenario.ctx(),
+    );
+    market_maker_object.deposit(
+        &market_maker_cap,
+        mint_for_testing<USDC>(quote_balance, scenario.ctx()),
+        scenario.ctx(),
+    );
+
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
+    let clock: Clock = scenario.take_shared();
+
+    assert_eq!(event::events_by_type<QuoteUpdated>().length(), 0);
+
+    market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
+    assert_eq!(event::events_by_type<QuoteUpdated>().length(), 1);
+
+    // Same oracle publish timestamp should be treated as stale and skip quote refresh.
+    market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
+    assert_eq!(event::events_by_type<QuoteUpdated>().length(), 1);
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);

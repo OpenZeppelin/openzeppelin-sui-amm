@@ -13,6 +13,7 @@ use deepbook::constants;
 use deepbook::pool::Pool;
 use openzeppelin_market_maker::config::MarketMakerConfig;
 use openzeppelin_market_maker::events;
+use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
 use pyth::pyth;
 use sui::clock::Clock;
@@ -237,25 +238,30 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     assert!(market_maker.config.has_valid_pool(pool), EInvalidPool);
     // Assert trading is active.
     assert!(market_maker.config.active(), EPaused);
-
-    // Generate trade proof.
-    let trade_proof = market_maker
-        .balance_manager
-        .generate_proof_as_trader(&market_maker.caps.trade_cap, ctx);
-
-    // Cancel all previous active orders.
-    pool.cancel_all_orders(
-        &mut market_maker.balance_manager,
-        &trade_proof,
-        clock,
-        ctx,
+    // Assert Pyth Price info object has valid pth id.
+    assert!(
+        market_maker.config.has_valid_pyth_feed_id(price_info_object),
+        EPythFeedIdentifierMismatch,
     );
+    // Get pyth price object not older than `MAX_PRICE_AGE_SECS`.
+    let pyth_price = pyth::get_price_no_older_than(
+        price_info_object,
+        clock,
+        MAX_PRICE_AGE_SECS,
+    );
+    // Do not update limit orders, when pyth price timestamp is stale.
+    let is_price_stale = market_maker
+        .config
+        .last_price_publish_time()
+        .map!(|publish_time| publish_time >= pyth_price.get_timestamp())
+        .destroy_or!(false);
+    if (is_price_stale) {
+        return
+    };
+    market_maker.config.set_last_price_publish_time(pyth_price.get_timestamp());
 
-    // Update balance manager, to reflect previous settled limit orders in balance.
-    pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
-
-    // Calculate base and volatility spread values.
-    let oracle_mid_price = deepbook_price(price_info_object, &market_maker.config, clock);
+    // Calculate precise spreads.
+    let oracle_mid_price = deepbook_price(pyth_price);
     let base_spread = market_maker.config.base_spread(oracle_mid_price);
     let volatility_spread = market_maker.config.volatility_spread(oracle_mid_price);
 
@@ -292,6 +298,22 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         lot_size,
         min_size,
     );
+
+    // Generate trade proof.
+    let trade_proof = market_maker
+        .balance_manager
+        .generate_proof_as_trader(&market_maker.caps.trade_cap, ctx);
+
+    // Cancel all previous active orders.
+    pool.cancel_all_orders(
+        &mut market_maker.balance_manager,
+        &trade_proof,
+        clock,
+        ctx,
+    );
+
+    // Update balance manager, to reflect previous settled limit orders in balance.
+    pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
     market_maker.try_place_limit_order(
@@ -475,20 +497,7 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
 }
 
 /// Helper function to convert pyth price into DeepBook price format, while checking for validity and freshness.
-fun deepbook_price(
-    price_info_object: &PriceInfoObject,
-    config: &MarketMakerConfig,
-    clock: &Clock,
-): u64 {
-    assert!(config.has_valid_pyth_feed_id(price_info_object), EPythFeedIdentifierMismatch);
-
-    // Get pyth price object not older than `MAX_PRICE_AGE_SECS`.
-    let price = pyth::get_price_no_older_than(
-        price_info_object,
-        clock,
-        MAX_PRICE_AGE_SECS,
-    );
-
+fun deepbook_price(price: Price): u64 {
     // Retrieve positive mantissa.
     let price_i64 = price.get_price();
     assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);

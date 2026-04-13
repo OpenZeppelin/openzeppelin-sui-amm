@@ -39,6 +39,8 @@ public struct MarketMakerConfig has drop, store {
     use_laser: bool,
     /// ID of the associated pool.
     pool_id: ID,
+    /// Last Pyth publish timestamp.
+    last_price_publish_time: Option<u64>,
 }
 
 // === Public Functions ===
@@ -64,7 +66,7 @@ public fun create<BaseAsset, QuoteAsset>(
         active: true,
         pyth_price_feed_id,
         pool_id: object::id(pool),
-        // TODO#q: nullify timestamp updates.
+        last_price_publish_time: option::none(),
     }
 }
 
@@ -118,6 +120,11 @@ public fun has_valid_pool<BaseAsset, QuoteAsset>(
     config.pool_id == object::id(pool)
 }
 
+/// Returns the last price publish time in seconds, if any.
+public fun last_price_publish_time(config: &MarketMakerConfig): Option<u64> {
+    config.last_price_publish_time
+}
+
 // === Package Functions ===
 
 /// Compute the base spread in price terms for a given mid price.
@@ -144,6 +151,14 @@ public(package) fun pause(config: &mut MarketMakerConfig) {
 /// Activate trading by setting `active` to true.
 public(package) fun unpause(config: &mut MarketMakerConfig) {
     config.active = true
+}
+
+/// Sets new `publish_time` and return the last price publish time in seconds, if any.
+public(package) fun set_last_price_publish_time(
+    config: &mut MarketMakerConfig,
+    publish_time: u64,
+): Option<u64> {
+    config.last_price_publish_time.swap_or_fill(publish_time)
 }
 
 // === Private Functions ===
