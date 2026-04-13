@@ -222,15 +222,15 @@ public fun withdraw<T>(
 /// Public quote refresh entrypoint for bot-driven PTBs.
 ///
 /// Flow:
-/// 1) Read latest cached oracle price from `price_info_object`.
+/// 1) Read latest cached oracle prices from base and quote `PriceInfoObject`s.
 /// 2) Cancel all stale orders for this account in the pool.
 /// 3) Update balance based on all previously matched orders.
 /// 4) Re-place four fresh orders (2 bids, 2 asks) around the oracle mid.
 public fun refresh_quotes<BaseAsset, QuoteAsset>(
     market_maker: &mut MarketMaker,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
-    // TODO#q: add PriceInfoObject for base and quote asset
-    price_info_object: &PriceInfoObject,
+    base_price_info_object: &PriceInfoObject,
+    quote_price_info_object: &PriceInfoObject,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
@@ -238,30 +238,52 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     assert!(market_maker.config.has_valid_pool(pool), EInvalidPool);
     // Assert trading is active.
     assert!(market_maker.config.active(), EPaused);
-    // Assert Pyth Price info object has valid pth id.
+    // Assert Pyth price info objects have valid configured feed ids.
     assert!(
-        market_maker.config.has_valid_pyth_feed_id(price_info_object),
+        market_maker.config.has_valid_base_pyth_feed_id(base_price_info_object),
         EPythFeedIdentifierMismatch,
     );
-    // Get pyth price object not older than `MAX_PRICE_AGE_SECS`.
-    let pyth_price = pyth::get_price_no_older_than(
-        price_info_object,
+    assert!(
+        market_maker.config.has_valid_quote_pyth_feed_id(quote_price_info_object),
+        EPythFeedIdentifierMismatch,
+    );
+
+    // TODO#q: create function helpers
+    // Get base and quote pyth prices not older than `MAX_PRICE_AGE_SECS`.
+    let base_pyth_price = pyth::get_price_no_older_than(
+        base_price_info_object,
         clock,
         MAX_PRICE_AGE_SECS,
     );
-    // Do not update limit orders, when pyth price timestamp is stale.
-    let is_price_stale = market_maker
+    let quote_pyth_price = pyth::get_price_no_older_than(
+        quote_price_info_object,
+        clock,
+        MAX_PRICE_AGE_SECS,
+    );
+    // Skip refresh only when both feeds are stale (neither feed timestamp advanced).
+    let is_base_price_stale = market_maker
         .config
-        .last_price_publish_time()
-        .map!(|publish_time| publish_time >= pyth_price.get_timestamp())
+        .base_price_publish_time()
+        .map!(|publish_time| publish_time >= base_pyth_price.get_timestamp())
         .destroy_or!(false);
+    let is_quote_price_stale = market_maker
+        .config
+        .quote_price_publish_time()
+        .map!(|publish_time| publish_time >= quote_pyth_price.get_timestamp())
+        .destroy_or!(false);
+    let is_price_stale = is_base_price_stale && is_quote_price_stale;
     if (is_price_stale) {
         return
     };
-    market_maker.config.set_last_price_publish_time(pyth_price.get_timestamp());
+    market_maker
+        .config
+        .set_base_price_publish_time(base_pyth_price.get_timestamp());
+    market_maker
+        .config
+        .set_quote_price_publish_time(quote_pyth_price.get_timestamp());
 
-    // Calculate precise spreads.
-    let oracle_mid_price = deepbook_price(pyth_price);
+    // Calculate precise spreads using Base/Quote = (Base/USD) / (Quote/USD).
+    let oracle_mid_price = deepbook_price(base_pyth_price, quote_pyth_price);
     let base_spread = market_maker.config.base_spread(oracle_mid_price);
     let volatility_spread = market_maker.config.volatility_spread(oracle_mid_price);
 
@@ -276,9 +298,9 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // Split bid order balance equally (almost xD) between inner and outer spread,
     // and compute quantity in base asset (for deepbook limit order).
-    let asset_balance_quote = market_maker.balance_manager.balance<QuoteAsset>();
-    let bid_outer_quantity_quote = asset_balance_quote / 2;
-    let bid_inner_quantity_quote = asset_balance_quote - bid_outer_quantity_quote;
+    let quote_balance = market_maker.balance_manager.balance<QuoteAsset>();
+    let bid_outer_quantity_quote = quote_balance / 2;
+    let bid_inner_quantity_quote = quote_balance - bid_outer_quantity_quote;
     let bid_outer_quantity = compute_quantity(
         bid_outer_quantity_quote / bid_outer,
         lot_size,
@@ -291,10 +313,10 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     );
 
     // Split ask order balance equally between inner and outer spread.
-    let asset_balance_base = market_maker.balance_manager.balance<BaseAsset>();
-    let ask_outer_quantity = compute_quantity(asset_balance_base / 2, lot_size, min_size);
+    let base_balance = market_maker.balance_manager.balance<BaseAsset>();
+    let ask_outer_quantity = compute_quantity(base_balance / 2, lot_size, min_size);
     let ask_inner_quantity = compute_quantity(
-        asset_balance_base - ask_outer_quantity,
+        base_balance - ask_outer_quantity,
         lot_size,
         min_size,
     );
@@ -496,28 +518,36 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
     );
 }
 
-/// Helper function to convert pyth price into DeepBook price format, while checking for validity and freshness.
-fun deepbook_price(price: Price): u64 {
+/// Helper function to extract positive USD mantissa and negative exponent from a Pyth price.
+fun deepbook_usd_price(price: Price): (u128, u8) {
     // Retrieve positive mantissa.
     let price_i64 = price.get_price();
     assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
-    let mantissa_u128 = price_i64.get_magnitude_if_positive() as u128;
-    assert!(mantissa_u128 != 0, EPythPriceNonPositive);
+    let mantissa = price_i64.get_magnitude_if_positive() as u128;
+    assert!(mantissa != 0, EPythPriceNonPositive);
 
     // Retrieve negative exponent.
     let expo_i64 = price.get_expo();
     assert!(expo_i64.get_is_negative(), EPythExponentNonNegative);
-    let exponent_u8 = expo_i64
+    let exponent = expo_i64
         .get_magnitude_if_negative()
         .try_as_u8()
         .destroy_or!(abort EPythExponentTooLarge);
-    assert!(exponent_u8 <= MAX_DECIMAL_POWER, EPythExponentTooLarge);
+    assert!(exponent <= MAX_DECIMAL_POWER, EPythExponentTooLarge);
 
-    // Compute deepbook price based on deepbook float scaling.
-    // NOTE: mantissa (converted from u64) and float scaling multiplication
-    // (can be represented in u64) should not overflow.
+    (mantissa, exponent)
+}
+
+/// Helper function to derive the DeepBook base/quote price from base and quote USD prices.
+fun deepbook_price(base_price: Price, quote_price: Price): u64 {
+    let (base_mantissa, base_exponent) = deepbook_usd_price(base_price);
+    let (quote_mantissa, quote_exponent) = deepbook_usd_price(quote_price);
+
+    let base_scale = 10u128.pow(base_exponent);
+    let quote_scale = 10u128.pow(quote_exponent);
     let deepbook_price_u128 =
-        mantissa_u128 * constants::float_scaling_u128() / 10u128.pow(exponent_u8);
+        base_mantissa * constants::float_scaling_u128() * quote_scale /
+            (quote_mantissa * base_scale);
     let deepbook_price = deepbook_price_u128.try_as_u64().destroy_or!(abort EPythInvalidPriceValue);
 
     assert!(deepbook_price >= constants::min_price(), EPythInvalidPriceValue);

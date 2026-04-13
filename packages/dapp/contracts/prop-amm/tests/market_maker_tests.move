@@ -99,6 +99,7 @@ fun create_market_maker_for_pool(
         volatility_spread_bps,
         use_laser,
         build_pyth_price_feed_id(feed_id_byte),
+        build_pyth_price_feed_id(feed_id_byte),
     );
     let (market_maker, market_maker_cap) = market_maker::create(
         market_maker_config,
@@ -197,12 +198,14 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
         200,
         false,
         build_pyth_price_feed_id(3),
+        build_pyth_price_feed_id(3),
     );
     let market_maker_config_b = config::create(
         &pool,
         125,
         250,
         true,
+        build_pyth_price_feed_id(4),
         build_pyth_price_feed_id(4),
     );
     let (market_maker_a, market_maker_cap_a) = market_maker::create(
@@ -295,7 +298,7 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     let sender = @0x15;
     let updated_base_spread_bps = 150;
     let updated_volatility_spread_bps = 300;
-    let oracle_price = 100 * constants::float_scaling();
+    let oracle_price = constants::float_scaling();
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 6;
     let mut scenario = test_scenario::begin(sender);
@@ -343,10 +346,17 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
         updated_volatility_spread_bps,
         false,
         build_pyth_price_feed_id(feed_id_byte),
+        build_pyth_price_feed_id(feed_id_byte),
     );
     market_maker_object.update_market_maker(&market_maker_cap, updated_config);
     assert_emitted!(market_maker_config_updated(market_maker_object.id()));
-    market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
+    market_maker_object.refresh_quotes(
+        &mut pool,
+        &price_info_object,
+        &price_info_object,
+        &clock,
+        scenario.ctx(),
+    );
 
     assert_emitted!(
         quote_updated(
@@ -506,6 +516,7 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
         240,
         false,
         build_pyth_price_feed_id(feed_id_byte),
+        build_pyth_price_feed_id(feed_id_byte),
     );
     market_maker_object.update_market_maker(&market_maker_cap, updated_config);
 
@@ -525,7 +536,7 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     let sender = @0x20;
     let base_spread_bps = 100;
     let volatility_spread_bps = 200;
-    let oracle_price = 100 * constants::float_scaling();
+    let oracle_price = constants::float_scaling();
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 7;
     let mut scenario = test_scenario::begin(sender);
@@ -566,7 +577,13 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
 
-    market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
+    market_maker_object.refresh_quotes(
+        &mut pool,
+        &price_info_object,
+        &price_info_object,
+        &clock,
+        scenario.ctx(),
+    );
 
     assert_emitted!(quote_updated(oracle_price, base_spread_bps, volatility_spread_bps));
     assert_eq!(event::events_by_type<OrderFilled>().length(), 0);
@@ -626,11 +643,23 @@ fun refresh_quotes_ignores_replayed_publish_time() {
 
     assert_eq!(event::events_by_type<QuoteUpdated>().length(), 0);
 
-    market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
+    market_maker_object.refresh_quotes(
+        &mut pool,
+        &price_info_object,
+        &price_info_object,
+        &clock,
+        scenario.ctx(),
+    );
     assert_eq!(event::events_by_type<QuoteUpdated>().length(), 1);
 
     // Same oracle publish timestamp should be treated as stale and skip quote refresh.
-    market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
+    market_maker_object.refresh_quotes(
+        &mut pool,
+        &price_info_object,
+        &price_info_object,
+        &clock,
+        scenario.ctx(),
+    );
     assert_eq!(event::events_by_type<QuoteUpdated>().length(), 1);
 
     test_scenario::return_shared(pool);
@@ -684,7 +713,13 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
 
-    market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
+    market_maker_object.refresh_quotes(
+        &mut pool,
+        &price_info_object,
+        &price_info_object,
+        &clock,
+        scenario.ctx(),
+    );
 
     abort
 }
@@ -738,7 +773,13 @@ fun refresh_quotes_rejects_when_pool_mismatch() {
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
 
-    market_maker_object.refresh_quotes(&mut other_pool, &price_info_object, &clock, scenario.ctx());
+    market_maker_object.refresh_quotes(
+        &mut other_pool,
+        &price_info_object,
+        &price_info_object,
+        &clock,
+        scenario.ctx(),
+    );
 
     abort
 }
@@ -749,7 +790,7 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     let maker = @0x24;
     let base_spread_bps = 100;
     let volatility_spread_bps = 200;
-    let oracle_price = 100 * constants::float_scaling();
+    let oracle_price = constants::float_scaling();
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 11;
     let mut scenario = test_scenario::begin(sender);
@@ -790,7 +831,13 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
 
-    market_maker_object.refresh_quotes(&mut pool, &price_info_object, &clock, scenario.ctx());
+    market_maker_object.refresh_quotes(
+        &mut pool,
+        &price_info_object,
+        &price_info_object,
+        &clock,
+        scenario.ctx(),
+    );
 
     assert_emitted!(quote_updated(oracle_price, base_spread_bps, volatility_spread_bps));
 

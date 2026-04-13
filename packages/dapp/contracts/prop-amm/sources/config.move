@@ -33,14 +33,18 @@ public struct MarketMakerConfig has drop, store {
     base_spread_bps: u64,
     /// Volatility spread in basis points.
     volatility_spread_bps: u64,
-    /// Pyth price feed identifier bytes.
-    pyth_price_feed_id: vector<u8>,
+    /// Pyth price feed identifier bytes for the base asset.
+    base_pyth_price_feed_id: vector<u8>,
+    /// Pyth price feed identifier bytes for the quote asset.
+    quote_pyth_price_feed_id: vector<u8>,
     /// Whether LASER pricing is enabled.
     use_laser: bool,
     /// ID of the associated pool.
     pool_id: ID,
-    /// Last Pyth publish timestamp.
-    last_price_publish_time: Option<u64>,
+    /// Latest observed base asset publish timestamp.
+    base_price_publish_time: Option<u64>,
+    /// Latest observed quote asset publish timestamp.
+    quote_price_publish_time: Option<u64>,
 }
 
 // === Public Functions ===
@@ -55,18 +59,26 @@ public fun create<BaseAsset, QuoteAsset>(
     base_spread_bps: u64,
     volatility_spread_bps: u64,
     use_laser: bool,
-    pyth_price_feed_id: vector<u8>,
+    base_pyth_price_feed_id: vector<u8>,
+    quote_pyth_price_feed_id: vector<u8>,
 ): MarketMakerConfig {
-    assert_valid_amm_config_inputs!(base_spread_bps, volatility_spread_bps, pyth_price_feed_id);
+    assert_valid_amm_config_inputs!(
+        base_spread_bps,
+        volatility_spread_bps,
+        base_pyth_price_feed_id,
+        quote_pyth_price_feed_id,
+    );
 
     MarketMakerConfig {
         base_spread_bps,
         volatility_spread_bps,
         use_laser,
         active: true,
-        pyth_price_feed_id,
+        base_pyth_price_feed_id,
+        quote_pyth_price_feed_id,
         pool_id: object::id(pool),
-        last_price_publish_time: option::none(),
+        base_price_publish_time: option::none(),
+        quote_price_publish_time: option::none(),
     }
 }
 
@@ -92,19 +104,34 @@ public fun active(config: &MarketMakerConfig): bool {
     config.active
 }
 
-/// Returns the Pyth price feed ID bytes.
-public fun pyth_price_feed_id(config: &MarketMakerConfig): vector<u8> {
-    config.pyth_price_feed_id
+/// Returns the Pyth base asset price feed ID bytes.
+public fun base_pyth_price_feed_id(config: &MarketMakerConfig): vector<u8> {
+    config.base_pyth_price_feed_id
 }
 
-/// Checks whether the price info object contains a valid Pyth price feed ID matching the config.
-public fun has_valid_pyth_feed_id(
+/// Returns the Pyth quote asset price feed ID bytes.
+public fun quote_pyth_price_feed_id(config: &MarketMakerConfig): vector<u8> {
+    config.quote_pyth_price_feed_id
+}
+
+/// Checks whether the price info object contains a valid Pyth base asset price feed ID matching the config.
+public fun has_valid_base_pyth_feed_id(
     config: &MarketMakerConfig,
     price_info_object: &PriceInfoObject,
 ): bool {
     let price_info = price_info_object.get_price_info_from_price_info_object();
     let actual_price_feed_id = price_info.get_price_identifier().get_bytes();
-    actual_price_feed_id == config.pyth_price_feed_id
+    actual_price_feed_id == config.base_pyth_price_feed_id
+}
+
+/// Checks whether the price info object contains a valid Pyth quote asset price feed ID matching the config.
+public fun has_valid_quote_pyth_feed_id(
+    config: &MarketMakerConfig,
+    price_info_object: &PriceInfoObject,
+): bool {
+    let price_info = price_info_object.get_price_info_from_price_info_object();
+    let actual_price_feed_id = price_info.get_price_identifier().get_bytes();
+    actual_price_feed_id == config.quote_pyth_price_feed_id
 }
 
 /// Returns the associated pool's object ID.
@@ -120,9 +147,14 @@ public fun has_valid_pool<BaseAsset, QuoteAsset>(
     config.pool_id == object::id(pool)
 }
 
-/// Returns the last price publish time in seconds, if any.
-public fun last_price_publish_time(config: &MarketMakerConfig): Option<u64> {
-    config.last_price_publish_time
+/// Returns the latest base price publish time in seconds, if any.
+public fun base_price_publish_time(config: &MarketMakerConfig): Option<u64> {
+    config.base_price_publish_time
+}
+
+/// Returns the latest quote price publish time in seconds, if any.
+public fun quote_price_publish_time(config: &MarketMakerConfig): Option<u64> {
+    config.quote_price_publish_time
 }
 
 // === Package Functions ===
@@ -153,12 +185,20 @@ public(package) fun unpause(config: &mut MarketMakerConfig) {
     config.active = true
 }
 
-/// Sets new `publish_time` and return the last price publish time in seconds, if any.
-public(package) fun set_last_price_publish_time(
+/// Sets new base `publish_time` and returns the latest base price publish time in seconds, if any.
+public(package) fun set_base_price_publish_time(
     config: &mut MarketMakerConfig,
     publish_time: u64,
 ): Option<u64> {
-    config.last_price_publish_time.swap_or_fill(publish_time)
+    config.base_price_publish_time.swap_or_fill(publish_time)
+}
+
+/// Sets new quote `publish_time` and returns the latest quote price publish time in seconds, if any.
+public(package) fun set_quote_price_publish_time(
+    config: &mut MarketMakerConfig,
+    publish_time: u64,
+): Option<u64> {
+    config.quote_price_publish_time.swap_or_fill(publish_time)
 }
 
 // === Private Functions ===
@@ -167,11 +207,13 @@ public(package) fun set_last_price_publish_time(
 macro fun assert_valid_amm_config_inputs(
     $base_spread_bps: u64,
     $volatility_spread_bps: u64,
-    $pyth_price_feed_id: vector<u8>,
+    $base_pyth_price_feed_id: vector<u8>,
+    $quote_pyth_price_feed_id: vector<u8>,
 ) {
     let base_spread_bps = $base_spread_bps;
     let volatility_spread_bps = $volatility_spread_bps;
-    let pyth_price_feed_id = $pyth_price_feed_id;
+    let base_pyth_price_feed_id = $base_pyth_price_feed_id;
+    let quote_pyth_price_feed_id = $quote_pyth_price_feed_id;
     assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
     assert!(base_spread_bps <= volatility_spread_bps, EBaseSpreadBpsExceedsVolatilitySpread);
     assert!(
@@ -179,7 +221,11 @@ macro fun assert_valid_amm_config_inputs(
         EVolatilitySpreadBpsExceedsMaxBasisPoints,
     );
     assert!(
-        pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
+        base_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
+        EInvalidPythPriceFeedIdLength,
+    );
+    assert!(
+        quote_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
     );
 }

@@ -24,7 +24,8 @@ It is experimental and unaudited.
   - `volatility_spread_bps`
   - `use_laser`
   - `trading_paused`
-  - `pyth_price_feed_id` (must be 32 bytes)
+  - `base_pyth_price_feed_id` (must be 32 bytes)
+  - `quote_pyth_price_feed_id` (must be 32 bytes)
 - `MarketMaker` (owned object):
   - DeepBook `BalanceManager`
   - embedded `MarketMakerConfig`
@@ -46,8 +47,9 @@ It is experimental and unaudited.
 6. To update quoting parameters, create a new config with `config::create` and pass it to `market_maker::update_market_maker`.
 7. Call `market_maker::refresh_quotes` to:
     - validate trading is enabled,
-    - validate Pyth feed ID matches config,
-    - read oracle mid price,
+    - validate base and quote Pyth feed IDs match config,
+    - read base/USD and quote/USD prices and derive base/quote mid price,
+    - skip refresh only when both feed publish times are stale/replayed,
     - cancel stale orders and settle filled amounts,
     - place four new limit orders (2 bids + 2 asks) around mid using base/volatility spreads,
     - emit `QuoteUpdated`.
