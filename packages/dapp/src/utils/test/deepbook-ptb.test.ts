@@ -16,7 +16,7 @@ const expectMoveCall = (
 }
 
 describe("deepbook PTB builders", () => {
-  it("builds trader-account creation against the executor entrypoint and includes only the admin cap", () => {
+  it("builds market maker creation against the market_maker module", () => {
     const transaction = buildCreateTraderAccountTransaction({
       ammPackageId: "0x123",
       adminCapId: "0x456"
@@ -29,7 +29,7 @@ describe("deepbook PTB builders", () => {
     expect(moveCall).toMatchObject({
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
-      module: "executor",
+      module: "market_maker",
       function: "create"
     })
     expect(moveCall.arguments).toHaveLength(1)

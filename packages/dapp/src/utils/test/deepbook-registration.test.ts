@@ -57,7 +57,7 @@ describe("resolveOrCreateTraderAccount", () => {
     traderAccountModelMocks.getTraderAccountOverview.mockReset()
     traderAccountModelMocks.resolveTraderAccountType.mockReset()
     traderAccountModelMocks.resolveTraderAccountType.mockImplementation(
-      (packageId: string) => `${packageId}::executor::TraderAccount`
+      (packageId: string) => `${packageId}::market_maker::MarketMaker`
     )
     deepbookPtbMocks.buildCreateTraderAccountTransaction.mockReset()
     transactionMocks.ensureCreatedObject.mockReset()
@@ -141,7 +141,7 @@ describe("resolveOrCreateTraderAccount", () => {
     expect(result.status).toBe("dry-run-created")
     expect(result.note).toContain("Created object IDs are unavailable")
     expect(result.transactionSummaries.createTraderAccount?.label).toBe(
-      "create-trader-account"
+      "create-market-maker"
     )
     expect(executeTransactionWithSummary).toHaveBeenCalledTimes(1)
     expect(
@@ -222,7 +222,7 @@ describe("resolveOrCreateTraderAccount", () => {
     })
     executeTransactionWithSummary.mockResolvedValue({
       execution: { transactionResult: {} } as never,
-      summary: { label: "create-trader-account" } as never
+      summary: { label: "create-market-maker" } as never
     })
 
     const result = await resolveOrCreateTraderAccount({
@@ -237,7 +237,7 @@ describe("resolveOrCreateTraderAccount", () => {
     expect(result.traderAccount?.traderAccountId).toBe("0xcreated-trader")
     expect(resolveCreateDependencies).toHaveBeenCalledTimes(1)
     expect(result.transactionSummaries.createTraderAccount?.label).toBe(
-      "create-trader-account"
+      "create-market-maker"
     )
     expect(executeTransactionWithSummary).toHaveBeenCalledTimes(1)
   })
@@ -262,7 +262,7 @@ describe("resolveOrCreateTraderAccount", () => {
         traderAccountId: "0xexplicit"
       })
     ).rejects.toThrow(
-      "Market maker lookup failed for traderAccountId 0xexplicit (expected owner 0xowner, expected package 0xamm, expected type 0xamm::executor::TraderAccount). Cause: Object not found"
+      "Market maker lookup failed for traderAccountId 0xexplicit (expected owner 0xowner, expected package 0xamm, expected type 0xamm::market_maker::MarketMaker). Cause: Object not found"
     )
     expect(resolveCreateDependencies).not.toHaveBeenCalled()
   })

@@ -5,8 +5,8 @@ const AMM_PACKAGE_ID_DESCRIPTION =
 const OWNER_ADDRESS_DESCRIPTION =
   "Owner address that will receive the market maker; defaults to the active signer."
 const ADMIN_CAP_ID_DESCRIPTION =
-  "AMM admin cap id required for trader-account creation; defaults to an AMM admin cap owned by the active signer."
-const market_maker_ID_DESCRIPTION =
+  "AMM admin cap id required for market maker creation; defaults to an AMM admin cap owned by the active signer."
+const MARKET_MAKER_ID_DESCRIPTION =
   "Existing market maker id; when omitted the flow reuses an owned market maker first and only creates one if none exists."
 const DEV_INSPECT_DESCRIPTION = "Run a dev-inspect and log VM error details."
 const DRY_RUN_DESCRIPTION =
@@ -43,7 +43,7 @@ export const withCommonRegistrationOptions = <T>(
     .option("traderAccountId", {
       alias: ["trader-account-id"],
       type: "string",
-      description: market_maker_ID_DESCRIPTION,
+      description: MARKET_MAKER_ID_DESCRIPTION,
       demandOption: false
     })
     .option("devInspect", {

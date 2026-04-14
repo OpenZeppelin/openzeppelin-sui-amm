@@ -58,7 +58,7 @@ export const buildCreateTraderAccountTransaction = ({
   const transaction = newTransaction()
 
   transaction.moveCall({
-    target: `${ammPackageId}::executor::create`,
+    target: `${ammPackageId}::market_maker::create`,
     arguments: [transaction.object(adminCapId)]
   })
 

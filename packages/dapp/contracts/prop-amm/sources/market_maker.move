@@ -53,6 +53,7 @@ const EPythPriceConfidenceTooWide: vector<u8> = "pyth price confidence interval 
 // === Constants ===
 
 const MAX_DECIMAL_POWER: u8 = 38;
+const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 
 // === Structs ===
 
@@ -209,7 +210,7 @@ public fun deposit<T>(
 /// Withdraw funds from a balance manager.
 /// Fails if `MarketMaker` is not paused.
 /// Deepbook's `BalanceEvent` emitted after successful withdrawal.
-/// 
+///
 /// NOTE: Pause step let us settle all the balances before making withdrawal.
 /// Otherwise there is a high chance there is nothing to withdraw.
 public fun withdraw<T>(
@@ -542,17 +543,19 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
     );
 }
 
-/// Extract positive USD mantissa and negative exponent from a Pyth price.
-fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u64, u8) {
+/// Extract positive USD mantissa (can be safely cast to u64) and negative exponent from a Pyth price.
+fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8) {
     // Retrieve positive mantissa.
     let price_i64 = price.get_price();
     assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
-    let mantissa = price_i64.get_magnitude_if_positive();
+    let mantissa = price_i64.get_magnitude_if_positive() as u128;
     assert!(mantissa != 0, EPythPriceNonPositive);
 
     // Reject prices whose confidence interval is too wide relative to the price.
+    let max_conf_ratio_bps = max_conf_ratio_bps as u128;
+    let price_conf = price.get_conf() as u128;
     assert!(
-        (price.get_conf() as u128) * 10_000 <= (mantissa as u128) * (max_conf_ratio_bps as u128),
+        price_conf * HUNDRED_PERCENT_BPS_U128 <= mantissa * max_conf_ratio_bps,
         EPythPriceConfidenceTooWide,
     );
 
@@ -584,8 +587,8 @@ fun deepbook_price(
 
     // Convert (Base/USD)/(Quote/USD) to DeepBook price units (quote atoms per base atom),
     // including decimal adjustment for token atom precision mismatch.
-    let mut numerator = (base_mantissa as u128) * constants::float_scaling_u128();
-    let mut denominator = (quote_mantissa as u128);
+    let mut numerator = base_mantissa * constants::float_scaling_u128();
+    let mut denominator = quote_mantissa;
     let quote_total = quote_exponent + quote_decimals;
     let base_total = base_exponent + base_decimals;
     if (quote_total >= base_total) {
@@ -604,7 +607,7 @@ fun deepbook_price(
 }
 
 /// Converts a quote asset quantity to a base asset quantity using the given deepbook's price.
-/// 
+///
 /// NOTE:
 /// deepbook_price = deepbook_price_mantissa / FLOAT_SCALING
 /// quantity_base = quantity_quote / deepbook_price

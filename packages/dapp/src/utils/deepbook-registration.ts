@@ -9,7 +9,7 @@ import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { ensureCreatedObject } from "@sui-amm/tooling-node/transactions"
 import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
 
-const CREATE_market_maker_LABEL = "create-trader-account"
+const CREATE_MARKET_MAKER_LABEL = "create-market-maker"
 
 const buildSummaryLabel = (label: string): TransactionSummary => ({
   label,
@@ -116,13 +116,13 @@ const createTraderAccount = async ({
   const createResult = await tooling.executeTransactionWithSummary({
     transaction: createTransaction,
     signer: tooling.loadedEd25519KeyPair,
-    summaryLabel: CREATE_market_maker_LABEL,
+    summaryLabel: CREATE_MARKET_MAKER_LABEL,
     devInspect,
     dryRun
   })
 
   const summary =
-    createResult.summary ?? buildSummaryLabel(CREATE_market_maker_LABEL)
+    createResult.summary ?? buildSummaryLabel(CREATE_MARKET_MAKER_LABEL)
 
   if (dryRun) {
     return { summary }
@@ -134,7 +134,7 @@ const createTraderAccount = async ({
 
   return {
     traderAccountId: ensureCreatedObject(
-      "::executor::TraderAccount",
+      "::market_maker::MarketMaker",
       createExecution
     ).objectId,
     summary
@@ -180,9 +180,7 @@ export const resolveOrCreateTraderAccount = async ({
 }: {
   tooling: Pick<
     Tooling,
-    | "executeTransactionWithSummary"
-    | "loadedEd25519KeyPair"
-    | "suiClient"
+    "executeTransactionWithSummary" | "loadedEd25519KeyPair" | "suiClient"
   >
   ammPackageId: string
   resolveCreateDependencies: ResolveCreateDependencies
@@ -234,9 +232,7 @@ export const resolveOrCreateTraderAccount = async ({
   }
 
   if (!createResult.traderAccountId)
-    throw new Error(
-      "Market maker creation did not return a market maker id."
-    )
+    throw new Error("Market maker creation did not return a market maker id.")
 
   return {
     status: "created",

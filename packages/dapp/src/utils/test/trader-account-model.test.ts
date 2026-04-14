@@ -33,7 +33,7 @@ describe("market maker model compatibility", () => {
     objectMocks.getAllOwnedObjectsByFilter.mockReset()
   })
 
-  it("parses the current executor trader-account layout", async () => {
+  it("parses the current market maker layout", async () => {
     objectMocks.getSuiObject.mockResolvedValue({
       owner: { AddressOwner: "0xowner" },
       object: buildMoveObject({
