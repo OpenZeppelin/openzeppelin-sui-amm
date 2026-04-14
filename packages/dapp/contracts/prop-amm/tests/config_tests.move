@@ -2,43 +2,23 @@
 #[test_only]
 module openzeppelin_market_maker::config_tests;
 
-use deepbook::constants;
-use deepbook::pool::{Self, Pool};
-use deepbook::registry::{Self, Registry};
+use deepbook::pool::Pool;
+use deepbook::registry;
 use openzeppelin_market_maker::config;
 use openzeppelin_market_maker::test_helpers::{
+    USDC,
     build_invalid_pyth_price_feed_id,
-    build_pyth_price_feed_id
+    build_pyth_price_feed_id,
+    create_pool
 };
-use std::unit_test::{assert_eq, destroy};
+use std::unit_test::assert_eq;
 use sui::sui::SUI;
 use sui::test_scenario;
 
-public struct USDC has store {}
-
-fun create_pool(scenario: &mut test_scenario::Scenario, sender: address): ID {
+fun create_registry_and_pool(scenario: &mut test_scenario::Scenario, sender: address): ID {
     scenario.next_tx(sender);
     registry::test_registry(scenario.ctx());
-
-    scenario.next_tx(sender);
-
-    let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
-    let mut deepbook_registry: Registry = scenario.take_shared();
-    let pool_id = pool::create_pool_admin<SUI, USDC>(
-        &mut deepbook_registry,
-        constants::tick_size(),
-        constants::lot_size(),
-        constants::min_size(),
-        true,
-        false,
-        &deepbook_admin_cap,
-        scenario.ctx(),
-    );
-
-    test_scenario::return_shared(deepbook_registry);
-    destroy(deepbook_admin_cap);
-
-    pool_id
+    create_pool(scenario, sender)
 }
 
 #[test]
@@ -50,7 +30,7 @@ fun create_amm_config_builds_expected_config() {
     let base_pyth_price_feed_id = build_pyth_price_feed_id(0);
     let quote_pyth_price_feed_id = build_pyth_price_feed_id(1);
     let mut scenario = test_scenario::begin(sender);
-    let pool_id = create_pool(&mut scenario, sender);
+    let pool_id = create_registry_and_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
@@ -80,7 +60,7 @@ fun create_amm_config_builds_expected_config() {
 fun create_amm_config_rejects_zero_base_spread_bps() {
     let sender = @0xB;
     let mut scenario = test_scenario::begin(sender);
-    let pool_id = create_pool(&mut scenario, sender);
+    let pool_id = create_registry_and_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
@@ -101,7 +81,7 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
 fun create_amm_config_rejects_base_spread_above_volatility_spread() {
     let sender = @0xC;
     let mut scenario = test_scenario::begin(sender);
-    let pool_id = create_pool(&mut scenario, sender);
+    let pool_id = create_registry_and_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
@@ -122,7 +102,7 @@ fun create_amm_config_rejects_base_spread_above_volatility_spread() {
 fun create_amm_config_rejects_volatility_spread_above_max_basis_points() {
     let sender = @0xD;
     let mut scenario = test_scenario::begin(sender);
-    let pool_id = create_pool(&mut scenario, sender);
+    let pool_id = create_registry_and_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
@@ -143,7 +123,7 @@ fun create_amm_config_rejects_volatility_spread_above_max_basis_points() {
 fun create_amm_config_rejects_empty_feed_id() {
     let sender = @0xE;
     let mut scenario = test_scenario::begin(sender);
-    let pool_id = create_pool(&mut scenario, sender);
+    let pool_id = create_registry_and_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
@@ -164,7 +144,7 @@ fun create_amm_config_rejects_empty_feed_id() {
 fun create_amm_config_rejects_invalid_feed_id_length() {
     let sender = @0xF;
     let mut scenario = test_scenario::begin(sender);
-    let pool_id = create_pool(&mut scenario, sender);
+    let pool_id = create_registry_and_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 

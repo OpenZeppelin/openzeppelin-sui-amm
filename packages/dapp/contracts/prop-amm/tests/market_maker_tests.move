@@ -4,7 +4,7 @@ module openzeppelin_market_maker::market_maker_tests;
 
 use deepbook::balance_manager;
 use deepbook::constants;
-use deepbook::order_info::{OrderFilled, OrderFullyFilled};
+use deepbook::order_info::{OrderFilled, OrderFullyFilled, OrderPlaced};
 use deepbook::pool::{Self, Pool};
 use deepbook::registry::{Self, Registry};
 use openzeppelin_market_maker::config;
@@ -17,16 +17,22 @@ use openzeppelin_market_maker::events::{
     quote_updated
 };
 use openzeppelin_market_maker::market_maker::{Self, MarketMaker, MarketMakerCap};
-use openzeppelin_market_maker::test_helpers::{assert_emitted, build_pyth_price_feed_id};
+use openzeppelin_market_maker::test_helpers::{
+    USDC,
+    USDT,
+    assert_emitted,
+    build_pyth_price_feed_id,
+    create_pool,
+    create_sui_currency,
+    create_usdc_currency,
+    create_usdt_currency
+};
 use std::unit_test::{assert_eq, destroy};
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, mint_for_testing};
 use sui::event;
 use sui::sui::SUI;
 use sui::test_scenario;
-
-public struct USDC has store {}
-public struct USDT has store {}
 
 fun create_registry(scenario: &mut test_scenario::Scenario, sender: address) {
     scenario.next_tx(sender);
@@ -40,28 +46,6 @@ fun create_registry(scenario: &mut test_scenario::Scenario, sender: address) {
 
     test_scenario::return_shared(deepbook_registry);
     destroy(admin_cap);
-}
-
-fun create_pool(scenario: &mut test_scenario::Scenario, sender: address): ID {
-    scenario.next_tx(sender);
-
-    let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
-    let mut deepbook_registry: Registry = scenario.take_shared();
-    let pool_id = pool::create_pool_admin<SUI, USDC>(
-        &mut deepbook_registry,
-        constants::tick_size(),
-        constants::lot_size(),
-        constants::min_size(),
-        true,
-        false,
-        &deepbook_admin_cap,
-        scenario.ctx(),
-    );
-
-    test_scenario::return_shared(deepbook_registry);
-    destroy(deepbook_admin_cap);
-
-    pool_id
 }
 
 fun publish_price_feed(scenario: &mut test_scenario::Scenario, sender: address, feed_id_byte: u8) {
@@ -298,7 +282,7 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     let sender = @0x15;
     let updated_base_spread_bps = 150;
     let updated_volatility_spread_bps = 300;
-    let oracle_price = constants::float_scaling();
+    let oracle_price = constants::float_scaling() / 1_000;
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 6;
     let mut scenario = test_scenario::begin(sender);
@@ -339,6 +323,8 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
 
     let updated_config = config::create(
         &pool,
@@ -352,6 +338,8 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     assert_emitted!(market_maker_config_updated(market_maker_object.id()));
     market_maker_object.refresh_quotes(
         &mut pool,
+        &sui_currency,
+        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -369,6 +357,8 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
     test_scenario::return_shared(clock);
+    destroy(sui_currency);
+    destroy(usdc_currency);
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
     scenario.end();
@@ -536,7 +526,7 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     let sender = @0x20;
     let base_spread_bps = 100;
     let volatility_spread_bps = 200;
-    let oracle_price = constants::float_scaling();
+    let oracle_price = constants::float_scaling() / 1_000;
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 7;
     let mut scenario = test_scenario::begin(sender);
@@ -576,9 +566,13 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
 
     market_maker_object.refresh_quotes(
         &mut pool,
+        &sui_currency,
+        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -586,12 +580,19 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     );
 
     assert_emitted!(quote_updated(oracle_price, base_spread_bps, volatility_spread_bps));
+
+    // Verify all 4 limit orders were placed (2 bids + 2 asks),
+    // and assert on their actual placed_quantity.
+    assert_eq!(event::events_by_type<OrderPlaced>().length(), 4);
+
     assert_eq!(event::events_by_type<OrderFilled>().length(), 0);
     assert_eq!(event::events_by_type<OrderFullyFilled>().length(), 0);
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
     test_scenario::return_shared(clock);
+    destroy(sui_currency);
+    destroy(usdc_currency);
     transfer::public_transfer(market_maker_object, sender);
     scenario.end();
 }
@@ -640,11 +641,15 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
 
     assert_eq!(event::events_by_type<QuoteUpdated>().length(), 0);
 
     market_maker_object.refresh_quotes(
         &mut pool,
+        &sui_currency,
+        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -655,6 +660,8 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     // Same oracle publish timestamp should be treated as stale and skip quote refresh.
     market_maker_object.refresh_quotes(
         &mut pool,
+        &sui_currency,
+        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -665,6 +672,8 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
     test_scenario::return_shared(clock);
+    destroy(sui_currency);
+    destroy(usdc_currency);
     transfer::public_transfer(market_maker_object, sender);
     scenario.end();
 }
@@ -712,9 +721,13 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
 
     market_maker_object.refresh_quotes(
         &mut pool,
+        &sui_currency,
+        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -738,6 +751,7 @@ fun refresh_quotes_rejects_when_pool_mismatch() {
 
     scenario.next_tx(sender);
 
+    // Create a second pool with a different quote type so DeepBook allows it.
     let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
     let mut deepbook_registry: Registry = scenario.take_shared();
     let other_pool_id = pool::create_pool_admin<SUI, USDT>(
@@ -772,9 +786,13 @@ fun refresh_quotes_rejects_when_pool_mismatch() {
     let mut other_pool: Pool<SUI, USDT> = scenario.take_shared_by_id(other_pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
+    let sui_currency = create_sui_currency();
+    let usdt_currency = create_usdt_currency();
 
     market_maker_object.refresh_quotes(
         &mut other_pool,
+        &sui_currency,
+        &usdt_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -790,7 +808,7 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     let maker = @0x24;
     let base_spread_bps = 100;
     let volatility_spread_bps = 200;
-    let oracle_price = constants::float_scaling();
+    let oracle_price = constants::float_scaling() / 1_000;
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 11;
     let mut scenario = test_scenario::begin(sender);
@@ -830,9 +848,13 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
 
     market_maker_object.refresh_quotes(
         &mut pool,
+        &sui_currency,
+        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -844,6 +866,8 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
     test_scenario::return_shared(clock);
+    destroy(sui_currency);
+    destroy(usdc_currency);
     transfer::public_transfer(market_maker_object, sender);
 
     scenario.next_tx(maker);
