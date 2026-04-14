@@ -2,7 +2,7 @@
 #[test_only]
 module openzeppelin_market_maker::market_maker_tests;
 
-use deepbook::balance_manager;
+use deepbook::balance_manager::{Self, BalanceEvent};
 use deepbook::constants;
 use deepbook::order_info::{OrderFilled, OrderFullyFilled, OrderPlaced};
 use deepbook::pool::{Self, Pool};
@@ -73,7 +73,6 @@ fun create_market_maker_for_pool(
     pool_id: ID,
     base_spread_bps: u64,
     volatility_spread_bps: u64,
-    use_laser: bool,
     feed_id_byte: u8,
 ): (MarketMaker, MarketMakerCap) {
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
@@ -81,7 +80,6 @@ fun create_market_maker_for_pool(
         &pool,
         base_spread_bps,
         volatility_spread_bps,
-        use_laser,
         build_pyth_price_feed_id(feed_id_byte),
         build_pyth_price_feed_id(feed_id_byte),
         30_000,
@@ -113,7 +111,6 @@ fun create_market_maker_sets_owner_and_emits_created_event() {
         pool_id,
         100,
         200,
-        false,
         1,
     );
 
@@ -144,7 +141,6 @@ fun create_market_maker_and_transfer_moves_objects_to_owner() {
         pool_id,
         100,
         200,
-        false,
         2,
     );
     let market_maker_id = market_maker_object.id();
@@ -183,7 +179,6 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
         &pool,
         100,
         200,
-        false,
         build_pyth_price_feed_id(3),
         build_pyth_price_feed_id(3),
         30_000,
@@ -194,7 +189,6 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
         &pool,
         125,
         250,
-        true,
         build_pyth_price_feed_id(4),
         build_pyth_price_feed_id(4),
         30_000,
@@ -245,7 +239,6 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
         pool_id,
         100,
         200,
-        false,
         feed_id_byte,
     );
 
@@ -254,6 +247,7 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
         mint_for_testing<SUI>(deposit_amount, scenario.ctx()),
         scenario.ctx(),
     );
+    assert_eq!(event::events_by_type<BalanceEvent>().length(), 1);
 
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
@@ -271,6 +265,7 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
         withdraw_amount,
         scenario.ctx(),
     );
+    assert_eq!(event::events_by_type<BalanceEvent>().length(), 1);
 
     assert_eq!(withdrawn_coin.value(), withdraw_amount);
     assert_eq!(
@@ -308,7 +303,6 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
         pool_id,
         100,
         200,
-        false,
         feed_id_byte,
     );
     market_maker_object.deposit(
@@ -321,6 +315,7 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
         mint_for_testing<USDC>(quote_balance, scenario.ctx()),
         scenario.ctx(),
     );
+    assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
@@ -339,7 +334,6 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
         &pool,
         updated_base_spread_bps,
         updated_volatility_spread_bps,
-        false,
         build_pyth_price_feed_id(feed_id_byte),
         build_pyth_price_feed_id(feed_id_byte),
         30_000,
@@ -394,7 +388,6 @@ fun pause_and_unpause_emit_events_and_toggle_market_maker_activity() {
         pool_id,
         100,
         200,
-        false,
         feed_id_byte,
     );
 
@@ -441,7 +434,6 @@ fun unpause_emits_event_in_followup_transaction() {
         pool_id,
         100,
         200,
-        false,
         feed_id_byte,
     );
 
@@ -495,7 +487,6 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
         pool_id,
         100,
         200,
-        false,
         feed_id_byte,
     );
 
@@ -516,7 +507,6 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
         &pool,
         120,
         240,
-        false,
         build_pyth_price_feed_id(feed_id_byte),
         build_pyth_price_feed_id(feed_id_byte),
         30_000,
@@ -558,7 +548,6 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
         pool_id,
         base_spread_bps,
         volatility_spread_bps,
-        false,
         feed_id_byte,
     );
     market_maker_object.deposit(
@@ -571,6 +560,7 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
         mint_for_testing<USDC>(quote_balance, scenario.ctx()),
         scenario.ctx(),
     );
+    assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
@@ -633,7 +623,6 @@ fun refresh_quotes_ignores_replayed_publish_time() {
         pool_id,
         base_spread_bps,
         volatility_spread_bps,
-        false,
         feed_id_byte,
     );
     market_maker_object.deposit(
@@ -646,6 +635,7 @@ fun refresh_quotes_ignores_replayed_publish_time() {
         mint_for_testing<USDC>(quote_balance, scenario.ctx()),
         scenario.ctx(),
     );
+    assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
@@ -713,7 +703,6 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
         pool_id,
         100,
         200,
-        false,
         config_feed_id_byte,
     );
     market_maker_object.deposit(
@@ -789,7 +778,6 @@ fun refresh_quotes_rejects_when_pool_mismatch() {
         configured_pool_id,
         100,
         200,
-        false,
         feed_id_byte,
     );
     transfer::public_transfer(market_maker_object, sender);
@@ -840,7 +828,6 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
         pool_id,
         base_spread_bps,
         volatility_spread_bps,
-        false,
         feed_id_byte,
     );
     market_maker_object.deposit(
@@ -853,6 +840,7 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
         mint_for_testing<USDC>(quote_balance, scenario.ctx()),
         scenario.ctx(),
     );
+    assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
@@ -894,6 +882,7 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
         mint_for_testing<USDC>(100_000_000 * constants::float_scaling(), scenario.ctx()),
         scenario.ctx(),
     );
+    assert_eq!(event::events_by_type<BalanceEvent>().length(), 1);
     let taker_trade_proof = taker_balance_manager.generate_proof_as_owner(scenario.ctx());
 
     pool.place_market_order(

@@ -28,7 +28,7 @@ const EPythPriceNonPositive: vector<u8> = "pyth price must be positive";
 #[error(code = 1)]
 const EPythExponentNonNegative: vector<u8> = "pyth price exponent_u128 must be negative";
 #[error(code = 2)]
-const EPythExponentTooLarge: vector<u8> = "pyth price exponent_u128 should fit in u8";
+const ExponentTooLarge: vector<u8> = "price exponent too large";
 #[error(code = 3)]
 const EPythInvalidPriceValue: vector<u8> = "pyth price must be of valid size";
 #[error(code = 4)]
@@ -194,6 +194,7 @@ public fun unpause(market_maker: &mut MarketMaker, cap: &MarketMakerCap) {
 }
 
 /// Deposit funds into a balance manager.
+/// Deepbook's `BalanceEvent` emitted after successful deposit.
 public fun deposit<T>(
     market_maker: &mut MarketMaker,
     cap: &MarketMakerCap,
@@ -206,7 +207,11 @@ public fun deposit<T>(
 }
 
 /// Withdraw funds from a balance manager.
-/// Fails if `MarketMaker` wasn't paused.
+/// Fails if `MarketMaker` is not paused.
+/// Deepbook's `BalanceEvent` emitted after successful withdrawal.
+/// 
+/// NOTE: Pause step let us settle all the balances before making withdrawal.
+/// Otherwise there is a high chance there is nothing to withdraw.
 public fun withdraw<T>(
     market_maker: &mut MarketMaker,
     cap: &MarketMakerCap,
@@ -266,6 +271,8 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     );
 
     // Skip refresh only when both feeds are stale (neither feed timestamp advanced).
+    // Protects from calling permissionless quote refresh with old pricing,
+    // that will force market maker resubmit orders and loose priority.
     let is_price_stale =
         market_maker.is_base_price_stale(base_pyth_price) 
         && market_maker.is_quote_price_stale(quote_pyth_price);
@@ -557,8 +564,8 @@ fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u64, u8) {
     let exponent = expo_i64
         .get_magnitude_if_negative()
         .try_as_u8()
-        .destroy_or!(abort EPythExponentTooLarge);
-    assert!(exponent <= MAX_DECIMAL_POWER, EPythExponentTooLarge);
+        .destroy_or!(abort ExponentTooLarge);
+    assert!(exponent <= MAX_DECIMAL_POWER, ExponentTooLarge);
 
     (mantissa, exponent)
 }
@@ -571,20 +578,22 @@ fun deepbook_price(
     quote_decimals: u8,
     max_conf_ratio_bps: u64,
 ): u64 {
+    assert!(base_decimals <= MAX_DECIMAL_POWER, ExponentTooLarge);
+    assert!(quote_decimals <= MAX_DECIMAL_POWER, ExponentTooLarge);
+
     let (base_mantissa, base_exponent) = deepbook_usd_price(base_price, max_conf_ratio_bps);
     let (quote_mantissa, quote_exponent) = deepbook_usd_price(quote_price, max_conf_ratio_bps);
 
     // Convert (Base/USD)/(Quote/USD) to DeepBook price units (quote atoms per base atom),
     // including decimal adjustment for token atom precision mismatch.
-    let mut numerator =
-        (base_mantissa as u128)
-        * constants::float_scaling_u128()
-        * 10_u128.pow(quote_exponent);
-    let mut denominator = (quote_mantissa as u128) * 10_u128.pow(base_exponent);
-    if (quote_decimals >= base_decimals) {
-        numerator = numerator * 10_u128.pow(quote_decimals - base_decimals);
+    let mut numerator = (base_mantissa as u128) * constants::float_scaling_u128();
+    let mut denominator = (quote_mantissa as u128);
+    let quote_total = quote_exponent + quote_decimals;
+    let base_total = base_exponent + base_decimals;
+    if (quote_total >= base_total) {
+        numerator = numerator * 10_u128.pow(quote_total - base_total);
     } else {
-        denominator = denominator * 10_u128.pow(base_decimals - quote_decimals);
+        denominator = denominator * 10_u128.pow(base_total - quote_total);
     };
     let deepbook_price = (numerator / denominator)
         .try_as_u64()
@@ -597,6 +606,7 @@ fun deepbook_price(
 }
 
 /// Converts a quote asset quantity to a base asset quantity using the given deepbook's price.
+/// 
 /// NOTE:
 /// deepbook_price = deepbook_price_mantissa / FLOAT_SCALING
 /// quantity_base = quantity_quote / deepbook_price

@@ -22,7 +22,6 @@ It is experimental and unaudited.
 - `MarketMakerConfig` (embedded value):
   - `base_spread_bps`
   - `volatility_spread_bps`
-  - `use_laser`
   - `trading_paused`
   - `base_pyth_price_feed_id` (must be 32 bytes)
   - `quote_pyth_price_feed_id` (must be 32 bytes)

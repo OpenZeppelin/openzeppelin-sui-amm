@@ -26,7 +26,6 @@ fun create_amm_config_builds_expected_config() {
     let sender = @0xA;
     let base_spread_bps = 25;
     let volatility_spread_bps = 200;
-    let use_laser = true;
     let base_pyth_price_feed_id = build_pyth_price_feed_id(0);
     let quote_pyth_price_feed_id = build_pyth_price_feed_id(1);
     let mut scenario = test_scenario::begin(sender);
@@ -39,7 +38,6 @@ fun create_amm_config_builds_expected_config() {
         &pool,
         base_spread_bps,
         volatility_spread_bps,
-        use_laser,
         base_pyth_price_feed_id,
         quote_pyth_price_feed_id,
         30_000,
@@ -49,7 +47,6 @@ fun create_amm_config_builds_expected_config() {
 
     assert_eq!(market_maker_config.base_spread_bps(), base_spread_bps);
     assert_eq!(market_maker_config.volatility_spread_bps(), volatility_spread_bps);
-    assert_eq!(market_maker_config.use_laser(), use_laser);
     assert_eq!(market_maker_config.active(), true);
     assert_eq!(market_maker_config.base_pyth_price_feed_id(), base_pyth_price_feed_id);
     assert_eq!(market_maker_config.quote_pyth_price_feed_id(), quote_pyth_price_feed_id);
@@ -73,7 +70,6 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
         &pool,
         0,
         1,
-        false,
         build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
         30_000,
@@ -97,7 +93,6 @@ fun create_amm_config_rejects_base_spread_above_volatility_spread() {
         &pool,
         150,
         100,
-        false,
         build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
         30_000,
@@ -121,7 +116,6 @@ fun create_amm_config_rejects_volatility_spread_above_max_basis_points() {
         &pool,
         100,
         10_001,
-        false,
         build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
         30_000,
@@ -145,7 +139,6 @@ fun create_amm_config_rejects_empty_feed_id() {
         &pool,
         100,
         200,
-        false,
         vector[],
         build_pyth_price_feed_id(1),
         30_000,
@@ -169,7 +162,6 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
         &pool,
         100,
         200,
-        false,
         build_invalid_pyth_price_feed_id(),
         build_pyth_price_feed_id(1),
         30_000,
@@ -193,7 +185,6 @@ fun create_amm_config_rejects_zero_max_conf_ratio_bps() {
         &pool,
         100,
         200,
-        false,
         build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
         30_000,
@@ -217,7 +208,6 @@ fun create_amm_config_rejects_max_conf_ratio_bps_above_ten_thousand() {
         &pool,
         100,
         200,
-        false,
         build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
         30_000,

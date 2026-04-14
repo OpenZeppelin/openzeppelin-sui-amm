@@ -39,8 +39,6 @@ public struct MarketMakerConfig has drop, store {
     base_pyth_price_feed_id: vector<u8>,
     /// Pyth price feed identifier bytes for the quote asset.
     quote_pyth_price_feed_id: vector<u8>,
-    /// Whether LASER pricing is enabled.
-    use_laser: bool,
     /// ID of the associated pool.
     pool_id: ID,
     /// Latest observed base asset publish timestamp.
@@ -66,7 +64,6 @@ public fun create<BaseAsset, QuoteAsset>(
     pool: &Pool<BaseAsset, QuoteAsset>,
     base_spread_bps: u64,
     volatility_spread_bps: u64,
-    use_laser: bool,
     base_pyth_price_feed_id: vector<u8>,
     quote_pyth_price_feed_id: vector<u8>,
     order_expiration_time_ms: u64,
@@ -84,7 +81,6 @@ public fun create<BaseAsset, QuoteAsset>(
     MarketMakerConfig {
         base_spread_bps,
         volatility_spread_bps,
-        use_laser,
         active: true,
         base_pyth_price_feed_id,
         quote_pyth_price_feed_id,
@@ -107,11 +103,6 @@ public fun base_spread_bps(config: &MarketMakerConfig): u64 {
 /// Returns the volatility spread in basis points.
 public fun volatility_spread_bps(config: &MarketMakerConfig): u64 {
     config.volatility_spread_bps
-}
-
-/// Returns whether LASER pricing is enabled.
-public fun use_laser(config: &MarketMakerConfig): bool {
-    config.use_laser
 }
 
 /// Returns whether trading is paused.
@@ -206,7 +197,6 @@ public(package) fun pyth_price_identifier_length(): u64 {
 
 /// Pauses trading by setting `active` to false.
 public(package) fun pause(config: &mut MarketMakerConfig) {
-    // TODO#q: emit trading paused.
     config.active = false
 }
 
