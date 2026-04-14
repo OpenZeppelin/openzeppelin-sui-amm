@@ -50,9 +50,6 @@ const EInvalidQuantity: vector<u8> = "can't place order due to invalid quantity"
 
 // === Constants ===
 
-// TODO#q: move to configuration
-const ORDER_EXPIRATION_TIME_MS: u64 = 30_000;
-const MAX_PRICE_AGE_SECS: u64 = 30;
 const MAX_DECIMAL_POWER: u8 = 38;
 
 // === Structs ===
@@ -253,17 +250,17 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         EPythFeedIdentifierMismatch,
     );
 
-    // TODO#q: create function helpers
-    // Get base and quote pyth prices not older than `MAX_PRICE_AGE_SECS`.
+    // Get base and quote pyth prices not older than `max_price_age_secs`.
+    let max_price_age_secs = market_maker.config.max_price_age_secs();
     let base_pyth_price = pyth::get_price_no_older_than(
         base_price_info_object,
         clock,
-        MAX_PRICE_AGE_SECS,
+        max_price_age_secs,
     );
     let quote_pyth_price = pyth::get_price_no_older_than(
         quote_price_info_object,
         clock,
-        MAX_PRICE_AGE_SECS,
+        max_price_age_secs,
     );
     // Skip refresh only when both feeds are stale (neither feed timestamp advanced).
     let is_base_price_stale = market_maker
@@ -505,7 +502,7 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
 
     // Self matching should not happen (if happens due to logic error abort taker order).
     let self_matching_option = constants::cancel_taker();
-    let expire_timestamp = clock.timestamp_ms() + ORDER_EXPIRATION_TIME_MS;
+    let expire_timestamp = clock.timestamp_ms() + market_maker.config.order_expiration_time_ms();
     let pay_with_deep = false;
     let order_type = constants::no_restriction();
 

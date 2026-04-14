@@ -45,6 +45,10 @@ public struct MarketMakerConfig has drop, store {
     base_price_publish_time: Option<u64>,
     /// Latest observed quote asset publish timestamp.
     quote_price_publish_time: Option<u64>,
+    /// Duration in milliseconds after which a placed limit order expires.
+    order_expiration_time_ms: u64,
+    /// Maximum acceptable age in seconds for a Pyth price feed update.
+    max_price_age_secs: u64,
 }
 
 // === Public Functions ===
@@ -61,6 +65,8 @@ public fun create<BaseAsset, QuoteAsset>(
     use_laser: bool,
     base_pyth_price_feed_id: vector<u8>,
     quote_pyth_price_feed_id: vector<u8>,
+    order_expiration_time_ms: u64,
+    max_price_age_secs: u64,
 ): MarketMakerConfig {
     assert_valid_amm_config_inputs!(
         base_spread_bps,
@@ -79,6 +85,8 @@ public fun create<BaseAsset, QuoteAsset>(
         pool_id: object::id(pool),
         base_price_publish_time: option::none(),
         quote_price_publish_time: option::none(),
+        order_expiration_time_ms,
+        max_price_age_secs,
     }
 }
 
@@ -155,6 +163,16 @@ public fun base_price_publish_time(config: &MarketMakerConfig): Option<u64> {
 /// Returns the latest quote price publish time in seconds, if any.
 public fun quote_price_publish_time(config: &MarketMakerConfig): Option<u64> {
     config.quote_price_publish_time
+}
+
+/// Returns the order expiration duration in milliseconds.
+public fun order_expiration_time_ms(config: &MarketMakerConfig): u64 {
+    config.order_expiration_time_ms
+}
+
+/// Returns the maximum acceptable Pyth price age in seconds.
+public fun max_price_age_secs(config: &MarketMakerConfig): u64 {
+    config.max_price_age_secs
 }
 
 // === Package Functions ===

@@ -42,6 +42,8 @@ fun create_amm_config_builds_expected_config() {
         use_laser,
         base_pyth_price_feed_id,
         quote_pyth_price_feed_id,
+        30_000,
+        30,
     );
 
     assert_eq!(market_maker_config.base_spread_bps(), base_spread_bps);
@@ -72,6 +74,8 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
         false,
         build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
+        30_000,
+        30,
     );
 
     abort
@@ -93,6 +97,8 @@ fun create_amm_config_rejects_base_spread_above_volatility_spread() {
         false,
         build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
+        30_000,
+        30,
     );
 
     abort
@@ -114,6 +120,8 @@ fun create_amm_config_rejects_volatility_spread_above_max_basis_points() {
         false,
         build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
+        30_000,
+        30,
     );
 
     abort
@@ -135,6 +143,8 @@ fun create_amm_config_rejects_empty_feed_id() {
         false,
         vector[],
         build_pyth_price_feed_id(1),
+        30_000,
+        30,
     );
 
     abort
@@ -156,6 +166,8 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
         false,
         build_invalid_pyth_price_feed_id(),
         build_pyth_price_feed_id(1),
+        30_000,
+        30,
     );
 
     abort
