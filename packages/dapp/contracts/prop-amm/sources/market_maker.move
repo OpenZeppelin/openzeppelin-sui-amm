@@ -262,18 +262,11 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         max_price_age_secs,
     );
+
     // Skip refresh only when both feeds are stale (neither feed timestamp advanced).
-    let is_base_price_stale = market_maker
-        .config
-        .base_price_publish_time()
-        .map!(|publish_time| publish_time >= base_pyth_price.get_timestamp())
-        .destroy_or!(false);
-    let is_quote_price_stale = market_maker
-        .config
-        .quote_price_publish_time()
-        .map!(|publish_time| publish_time >= quote_pyth_price.get_timestamp())
-        .destroy_or!(false);
-    let is_price_stale = is_base_price_stale && is_quote_price_stale;
+    let is_price_stale =
+        market_maker.is_base_price_stale(base_pyth_price) 
+        && market_maker.is_quote_price_stale(quote_pyth_price);
     if (is_price_stale) {
         return
     };
@@ -281,13 +274,11 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     market_maker.config.set_quote_price_publish_time(quote_pyth_price.get_timestamp());
 
     // Calculate precise spreads using Base/Quote = (Base/USD) / (Quote/USD).
-    let base_decimals = base_currency.decimals();
-    let quote_decimals = quote_currency.decimals();
     let oracle_mid_price = deepbook_price(
         base_pyth_price,
         quote_pyth_price,
-        base_decimals,
-        quote_decimals,
+        base_currency.decimals(),
+        quote_currency.decimals(),
     );
     let base_spread = market_maker.config.base_spread(oracle_mid_price);
     let volatility_spread = market_maker.config.volatility_spread(oracle_mid_price);
@@ -434,6 +425,26 @@ public fun cap_id(amm_cap: &MarketMakerCap): ID {
 }
 
 // === Private Functions ===
+
+/// Returns true when the cached base price publish time is at least as recent as the incoming
+/// price timestamp, meaning the base feed has not advanced.
+fun is_base_price_stale(market_maker: &MarketMaker, price: Price): bool {
+    market_maker
+        .config
+        .base_price_publish_time()
+        .map!(|publish_time| publish_time >= price.get_timestamp())
+        .destroy_or!(false)
+}
+
+/// Returns true when the cached quote price publish time is at least as recent as the incoming
+/// price timestamp, meaning the quote feed has not advanced.
+fun is_quote_price_stale(market_maker: &MarketMaker, price: Price): bool {
+    market_maker
+        .config
+        .quote_price_publish_time()
+        .map!(|publish_time| publish_time >= price.get_timestamp())
+        .destroy_or!(false)
+}
 
 /// Compute bid price based on `mid_price`, `spread`
 /// to match deepbook's allowed `tick` size
