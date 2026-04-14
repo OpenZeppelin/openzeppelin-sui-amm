@@ -86,6 +86,7 @@ fun create_market_maker_for_pool(
         build_pyth_price_feed_id(feed_id_byte),
         30_000,
         30,
+        1000,
     );
     let (market_maker, market_maker_cap) = market_maker::create(
         market_maker_config,
@@ -187,6 +188,7 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
         build_pyth_price_feed_id(3),
         30_000,
         30,
+        1000,
     );
     let market_maker_config_b = config::create(
         &pool,
@@ -197,6 +199,7 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
         build_pyth_price_feed_id(4),
         30_000,
         30,
+        1000,
     );
     let (market_maker_a, market_maker_cap_a) = market_maker::create(
         market_maker_config_a,
@@ -341,6 +344,7 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
         build_pyth_price_feed_id(feed_id_byte),
         30_000,
         30,
+        1000,
     );
     market_maker_object.update_market_maker(&market_maker_cap, updated_config);
     assert_emitted!(market_maker_config_updated(market_maker_object.id()));
@@ -517,6 +521,7 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
         build_pyth_price_feed_id(feed_id_byte),
         30_000,
         30,
+        1000,
     );
     market_maker_object.update_market_maker(&market_maker_cap, updated_config);
 

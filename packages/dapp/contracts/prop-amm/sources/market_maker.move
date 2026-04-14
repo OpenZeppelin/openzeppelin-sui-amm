@@ -47,6 +47,8 @@ const ENotPaused: vector<u8> = "trading not paused";
 const EInvalidPoolUpdate: vector<u8> = "should update pool while trading paused";
 #[error(code = 11)]
 const EInvalidQuantity: vector<u8> = "can't place order due to invalid quantity";
+#[error(code = 12)]
+const EPythPriceConfidenceTooWide: vector<u8> = "pyth price confidence interval is too wide";
 
 // === Constants ===
 
@@ -279,6 +281,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         quote_pyth_price,
         base_currency.decimals(),
         quote_currency.decimals(),
+        market_maker.config.max_conf_ratio_bps(),
     );
     let base_spread = market_maker.config.base_spread(oracle_mid_price);
     let volatility_spread = market_maker.config.volatility_spread(oracle_mid_price);
@@ -534,13 +537,19 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
     );
 }
 
-/// Helper function to extract positive USD mantissa and negative exponent from a Pyth price.
-fun deepbook_usd_price(price: Price): (u64, u8) {
+/// Extract positive USD mantissa and negative exponent from a Pyth price.
+fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u64, u8) {
     // Retrieve positive mantissa.
     let price_i64 = price.get_price();
     assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
     let mantissa = price_i64.get_magnitude_if_positive();
     assert!(mantissa != 0, EPythPriceNonPositive);
+
+    // Reject prices whose confidence interval is too wide relative to the price.
+    assert!(
+        (price.get_conf() as u128) * 10_000 <= (mantissa as u128) * (max_conf_ratio_bps as u128),
+        EPythPriceConfidenceTooWide,
+    );
 
     // Retrieve negative exponent.
     let expo_i64 = price.get_expo();
@@ -554,15 +563,16 @@ fun deepbook_usd_price(price: Price): (u64, u8) {
     (mantissa, exponent)
 }
 
-/// Helper function to derive the DeepBook base/quote price from base and quote USD prices.
+/// Derive the DeepBook base/quote price from base and quote USD prices.
 fun deepbook_price(
     base_price: Price,
     quote_price: Price,
     base_decimals: u8,
     quote_decimals: u8,
+    max_conf_ratio_bps: u64,
 ): u64 {
-    let (base_mantissa, base_exponent) = deepbook_usd_price(base_price);
-    let (quote_mantissa, quote_exponent) = deepbook_usd_price(quote_price);
+    let (base_mantissa, base_exponent) = deepbook_usd_price(base_price, max_conf_ratio_bps);
+    let (quote_mantissa, quote_exponent) = deepbook_usd_price(quote_price, max_conf_ratio_bps);
 
     // Convert (Base/USD)/(Quote/USD) to DeepBook price units (quote atoms per base atom),
     // including decimal adjustment for token atom precision mismatch.

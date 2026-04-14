@@ -16,6 +16,8 @@ const EVolatilitySpreadBpsExceedsMaxBasisPoints: vector<u8> =
     "volatility spread bps must be at most 10000";
 #[error(code = 3)]
 const EInvalidPythPriceFeedIdLength: vector<u8> = "pyth price feed id must be 32 bytes";
+#[error(code = 4)]
+const EInvalidMaxConfRatioBps: vector<u8> = "max conf ratio bps must be greater than zero and at most 10000";
 
 // === Constants ===
 
@@ -49,6 +51,8 @@ public struct MarketMakerConfig has drop, store {
     order_expiration_time_ms: u64,
     /// Maximum acceptable age in seconds for a Pyth price feed update.
     max_price_age_secs: u64,
+    /// Maximum acceptable confidence-to-price ratio in basis points (e.g. 1000 = 10%).
+    max_conf_ratio_bps: u64,
 }
 
 // === Public Functions ===
@@ -67,12 +71,14 @@ public fun create<BaseAsset, QuoteAsset>(
     quote_pyth_price_feed_id: vector<u8>,
     order_expiration_time_ms: u64,
     max_price_age_secs: u64,
+    max_conf_ratio_bps: u64,
 ): MarketMakerConfig {
     assert_valid_amm_config_inputs!(
         base_spread_bps,
         volatility_spread_bps,
         base_pyth_price_feed_id,
         quote_pyth_price_feed_id,
+        max_conf_ratio_bps,
     );
 
     MarketMakerConfig {
@@ -87,6 +93,7 @@ public fun create<BaseAsset, QuoteAsset>(
         quote_price_publish_time: option::none(),
         order_expiration_time_ms,
         max_price_age_secs,
+        max_conf_ratio_bps,
     }
 }
 
@@ -175,6 +182,11 @@ public fun max_price_age_secs(config: &MarketMakerConfig): u64 {
     config.max_price_age_secs
 }
 
+/// Returns the maximum acceptable confidence-to-price ratio in basis points.
+public fun max_conf_ratio_bps(config: &MarketMakerConfig): u64 {
+    config.max_conf_ratio_bps
+}
+
 // === Package Functions ===
 
 /// Compute the base spread in price terms for a given mid price.
@@ -227,11 +239,13 @@ macro fun assert_valid_amm_config_inputs(
     $volatility_spread_bps: u64,
     $base_pyth_price_feed_id: vector<u8>,
     $quote_pyth_price_feed_id: vector<u8>,
+    $max_conf_ratio_bps: u64,
 ) {
     let base_spread_bps = $base_spread_bps;
     let volatility_spread_bps = $volatility_spread_bps;
     let base_pyth_price_feed_id = $base_pyth_price_feed_id;
     let quote_pyth_price_feed_id = $quote_pyth_price_feed_id;
+    let max_conf_ratio_bps = $max_conf_ratio_bps;
     assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
     assert!(base_spread_bps <= volatility_spread_bps, EBaseSpreadBpsExceedsVolatilitySpread);
     assert!(
@@ -245,5 +259,9 @@ macro fun assert_valid_amm_config_inputs(
     assert!(
         quote_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
+    );
+    assert!(
+        max_conf_ratio_bps > 0 && max_conf_ratio_bps <= HUNDRED_PERCENT_BPS,
+        EInvalidMaxConfRatioBps,
     );
 }
