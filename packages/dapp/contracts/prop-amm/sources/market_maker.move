@@ -320,12 +320,10 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // Split ask order balance equally between inner and outer spread.
     let base_balance = market_maker.balance_manager.balance<BaseAsset>();
-    let ask_outer_quantity = compute_quantity(base_balance / 2, lot_size, min_size);
-    let ask_inner_quantity = compute_quantity(
-        base_balance - ask_outer_quantity,
-        lot_size,
-        min_size,
-    );
+    let ask_outer_raw = base_balance / 2;
+    let ask_inner_raw = base_balance - ask_outer_raw;
+    let ask_outer_quantity = compute_quantity(ask_outer_raw, lot_size, min_size);
+    let ask_inner_quantity = compute_quantity(ask_inner_raw, lot_size, min_size);
 
     // Generate trade proof.
     let trade_proof = market_maker
