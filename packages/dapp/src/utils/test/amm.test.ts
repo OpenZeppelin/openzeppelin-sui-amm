@@ -173,7 +173,7 @@ describe("resolveAmmAdminCapIdFromArtifacts", () => {
         packageId: "0x1",
         signer: "0x2",
         objectId: "0xabc",
-        objectType: "0x1::manager::AMMAdminCap",
+        objectType: "0x1::executor::AdminCap",
         digest: "digest-123"
       }
     ])
@@ -198,7 +198,7 @@ describe("resolveAmmAdminCapIdFromArtifacts", () => {
         signer: "0x2",
         objectId: "0xdef",
         objectType:
-          "0x0000000000000000000000000000000000000000000000000000000000000001::manager::AMMAdminCap"
+          "0x0000000000000000000000000000000000000000000000000000000000000001::executor::AdminCap"
       }
     ])
 
@@ -289,7 +289,7 @@ describe("resolveSignerAmmAdminCapId", () => {
         signerAddress: "0x2"
       })
     ).rejects.toThrow(
-      "No AMM admin capability found for signer 0x2. Provide --admin-cap-id or use a signer that owns 0x0000000000000000000000000000000000000000000000000000000000000001::manager::AMMAdminCap."
+      "No AMM admin capability found for signer 0x2. Provide --admin-cap-id or use a signer that owns 0x0000000000000000000000000000000000000000000000000000000000000001::executor::AdminCap."
     )
   })
 })

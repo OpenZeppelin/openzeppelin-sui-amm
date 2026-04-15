@@ -32,7 +32,7 @@ public struct MarketMakerUnpaused has copy, drop {
 }
 
 /// Emitted when market maker configuration is updated.
-/// 
+///
 /// NOTE: Can be emitted when update triggered even without actual changes to config.
 public struct MarketMakerConfigUpdated has copy, drop {
     /// ID of the market maker object.

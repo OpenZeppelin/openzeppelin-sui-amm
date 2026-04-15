@@ -1,5 +1,5 @@
-/// AMM logic.
-module openzeppelin_market_maker::market_maker;
+/// Market making execution logic.
+module openzeppelin_market_maker::executor;
 
 use deepbook::balance_manager::{
     Self,
@@ -11,7 +11,7 @@ use deepbook::balance_manager::{
 };
 use deepbook::constants;
 use deepbook::pool::Pool;
-use openzeppelin_market_maker::config::MarketMakerConfig;
+use openzeppelin_market_maker::config::AMMConfig;
 use openzeppelin_market_maker::events;
 use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
@@ -58,11 +58,11 @@ const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 // === Structs ===
 
 /// Capability required to update configuration.
-public struct MarketMakerCap has key, store {
+public struct AdminCap has key, store {
     /// Unique ID for the market maker capability object.
     id: UID,
     /// ID of the associated market maker.
-    market_maker_id: ID,
+    executor_id: ID,
 }
 
 /// Per-market maker state.
@@ -74,7 +74,7 @@ public struct MarketMaker has key, store {
     /// Balance manager linked to the market maker.
     balance_manager: BalanceManager,
     /// Pool onchain configuration.
-    config: MarketMakerConfig,
+    config: AMMConfig,
 }
 
 /// Balance manager caps owned by the market maker owner.
@@ -90,17 +90,17 @@ public struct Caps has store {
 // === Init ===
 
 /// One-time publisher witness created at publish time.
-public struct MARKET_MAKER has drop {}
+public struct EXECUTOR has drop {}
 
 /// Initializes publish-time metadata by claiming and keeping the package publisher object.
-fun init(publisher_witness: MARKET_MAKER, ctx: &mut TxContext) {
-    package::claim_and_keep<MARKET_MAKER>(publisher_witness, ctx);
+fun init(publisher_witness: EXECUTOR, ctx: &mut TxContext) {
+    package::claim_and_keep<EXECUTOR>(publisher_witness, ctx);
 }
 
 // === Public Functions ===
 
 /// Creates a market maker for sender.
-public fun create(config: MarketMakerConfig, ctx: &mut TxContext): (MarketMaker, MarketMakerCap) {
+public fun create(config: AMMConfig, ctx: &mut TxContext): (MarketMaker, AdminCap) {
     let mut balance_manager = balance_manager::new(ctx);
     let deposit_cap = balance_manager.mint_deposit_cap(ctx);
     let withdraw_cap = balance_manager.mint_withdraw_cap(ctx);
@@ -109,7 +109,7 @@ public fun create(config: MarketMakerConfig, ctx: &mut TxContext): (MarketMaker,
 
     events::emit_market_maker_created(id.to_inner());
 
-    let market_maker_cap = MarketMakerCap { id: object::new(ctx), market_maker_id: id.to_inner() };
+    let market_maker_cap = AdminCap { id: object::new(ctx), executor_id: id.to_inner() };
     let market_maker = MarketMaker {
         id,
         caps: Caps {
@@ -126,19 +126,15 @@ public fun create(config: MarketMakerConfig, ctx: &mut TxContext): (MarketMaker,
 
 /// Replaces the market maker configuration, and unpause trading.
 /// Requires the matching market maker capability.
-public fun update_market_maker(
-    market_maker: &mut MarketMaker,
-    cap: &MarketMakerCap,
-    config: MarketMakerConfig,
-) {
-    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
+public fun update_market_maker(market_maker: &mut MarketMaker, cap: &AdminCap, config: AMMConfig) {
+    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
 
     // When market maker active,
     if (market_maker.config.active()) {
         // assert we don't update pool (to settle balances properly).
         assert!(market_maker.config.pool_id() == config.pool_id(), EInvalidPoolUpdate);
     } else {
-        // Otherwise emit unpaused event, since `MarketMakerConfig` can be created active only.
+        // Otherwise emit unpaused event, since `AMMConfig` can be created active only.
         events::emit_market_maker_unpaused(market_maker.id());
     };
 
@@ -150,12 +146,12 @@ public fun update_market_maker(
 /// Pauses trading by cancelling all existing orders and preventing new orders until next activation.
 public fun pause<BaseAsset, QuoteAsset>(
     market_maker: &mut MarketMaker,
-    cap: &MarketMakerCap,
+    cap: &AdminCap,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
+    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
     assert!(market_maker.config.active(), EPaused);
     assert!(market_maker.config.has_valid_pool(pool), EInvalidPool);
 
@@ -183,8 +179,8 @@ public fun pause<BaseAsset, QuoteAsset>(
 }
 
 /// Unpauses trading, allowing new orders to be placed.
-public fun unpause(market_maker: &mut MarketMaker, cap: &MarketMakerCap) {
-    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
+public fun unpause(market_maker: &mut MarketMaker, cap: &AdminCap) {
+    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
     assert!(!market_maker.config.active(), ENotPaused);
 
     // Emit unpaused event.
@@ -198,11 +194,11 @@ public fun unpause(market_maker: &mut MarketMaker, cap: &MarketMakerCap) {
 /// Deepbook's `BalanceEvent` emitted after successful deposit.
 public fun deposit<T>(
     market_maker: &mut MarketMaker,
-    cap: &MarketMakerCap,
+    cap: &AdminCap,
     coin: Coin<T>,
     ctx: &mut TxContext,
 ) {
-    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
+    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
 
     market_maker.balance_manager.deposit_with_cap(&market_maker.caps.deposit_cap, coin, ctx)
 }
@@ -215,11 +211,11 @@ public fun deposit<T>(
 /// Otherwise there is a high chance there is nothing to withdraw.
 public fun withdraw<T>(
     market_maker: &mut MarketMaker,
-    cap: &MarketMakerCap,
+    cap: &AdminCap,
     withdraw_amount: u64,
     ctx: &mut TxContext,
 ): Coin<T> {
-    assert!(market_maker.id() == cap.market_maker_id, EInvalidCap);
+    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
     assert!(!market_maker.config.active(), ENotPaused);
 
     market_maker
@@ -424,12 +420,12 @@ public fun withdraw_cap_id(market_maker: &MarketMaker): ID {
 }
 
 /// Returns the current market maker configuration.
-public fun config(market_maker: &MarketMaker): &MarketMakerConfig {
+public fun config(market_maker: &MarketMaker): &AMMConfig {
     &market_maker.config
 }
 
 /// Returns the market maker capability object ID.
-public fun cap_id(amm_cap: &MarketMakerCap): ID {
+public fun cap_id(amm_cap: &AdminCap): ID {
     amm_cap.id.to_inner()
 }
 
@@ -623,7 +619,7 @@ fun quote_to_base_quantity(quote_quantity: u64, deepbook_price: u64): u64 {
 #[test_only]
 /// Creates the package witness and runs init for tests.
 public fun test_init(ctx: &mut TxContext) {
-    let publisher_witness = sui::test_utils::create_one_time_witness<MARKET_MAKER>();
+    let publisher_witness = sui::test_utils::create_one_time_witness<EXECUTOR>();
     init(
         publisher_witness,
         ctx,

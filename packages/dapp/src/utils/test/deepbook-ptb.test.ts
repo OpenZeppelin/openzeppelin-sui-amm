@@ -29,7 +29,7 @@ describe("deepbook PTB builders", () => {
     expect(moveCall).toMatchObject({
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
-      module: "market_maker",
+      module: "executor",
       function: "create"
     })
     expect(moveCall.arguments).toHaveLength(1)

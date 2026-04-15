@@ -13,7 +13,7 @@ import {
   unwrapMoveFields
 } from "@sui-amm/tooling-core/utils/move-values"
 
-export const MARKET_MAKER_TYPE_SUFFIX = "::market_maker::MarketMaker"
+export const MARKET_MAKER_TYPE_SUFFIX = "::executor::MarketMaker"
 
 export const resolveTraderAccountType = (packageId: string) =>
   `${packageId}${MARKET_MAKER_TYPE_SUFFIX}`

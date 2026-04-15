@@ -1,6 +1,6 @@
 /// Tests for market maker behavior.
 #[test_only]
-module openzeppelin_market_maker::market_maker_tests;
+module openzeppelin_market_maker::executor_tests;
 
 use deepbook::balance_manager::{Self, BalanceEvent};
 use deepbook::constants;
@@ -16,7 +16,7 @@ use openzeppelin_market_maker::events::{
     market_maker_unpaused,
     quote_updated
 };
-use openzeppelin_market_maker::market_maker::{Self, MarketMaker, MarketMakerCap};
+use openzeppelin_market_maker::executor::{Self, MarketMaker, AdminCap};
 use openzeppelin_market_maker::test_helpers::{
     USDC,
     USDT,
@@ -74,9 +74,9 @@ fun create_market_maker_for_pool(
     base_spread_bps: u64,
     volatility_spread_bps: u64,
     feed_id_byte: u8,
-): (MarketMaker, MarketMakerCap) {
+): (MarketMaker, AdminCap) {
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let market_maker_config = config::create(
+    let amm_config = config::create(
         &pool,
         base_spread_bps,
         volatility_spread_bps,
@@ -86,8 +86,8 @@ fun create_market_maker_for_pool(
         30,
         1000,
     );
-    let (market_maker, market_maker_cap) = market_maker::create(
-        market_maker_config,
+    let (market_maker, market_maker_cap) = executor::create(
+        amm_config,
         scenario.ctx(),
     );
     test_scenario::return_shared(pool);
@@ -100,7 +100,7 @@ fun create_market_maker_sets_owner_and_emits_created_event() {
     let sender = @0x10;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
@@ -130,7 +130,7 @@ fun create_market_maker_and_transfer_moves_objects_to_owner() {
     let owner = @0x12;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
@@ -152,7 +152,7 @@ fun create_market_maker_and_transfer_moves_objects_to_owner() {
     scenario.next_tx(owner);
 
     let market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let market_maker_cap: AdminCap = scenario.take_from_sender();
 
     assert_eq!(market_maker_object.owner(), sender);
     assert_eq!(market_maker_object.id(), market_maker_id);
@@ -168,14 +168,14 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
     let sender = @0x13;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let market_maker_config_a = config::create(
+    let amm_config_a = config::create(
         &pool,
         100,
         200,
@@ -185,7 +185,7 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
         30,
         1000,
     );
-    let market_maker_config_b = config::create(
+    let amm_config_b = config::create(
         &pool,
         125,
         250,
@@ -195,12 +195,12 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
         30,
         1000,
     );
-    let (market_maker_a, market_maker_cap_a) = market_maker::create(
-        market_maker_config_a,
+    let (market_maker_a, market_maker_cap_a) = executor::create(
+        amm_config_a,
         scenario.ctx(),
     );
-    let (market_maker_b, market_maker_cap_b) = market_maker::create(
-        market_maker_config_b,
+    let (market_maker_b, market_maker_cap_b) = executor::create(
+        amm_config_b,
         scenario.ctx(),
     );
 
@@ -227,7 +227,7 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
     let withdraw_amount = 15 * constants::float_scaling();
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);
@@ -255,7 +255,7 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
     scenario.next_tx(sender);
 
     let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let market_maker_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let clock: Clock = scenario.take_shared();
 
@@ -291,7 +291,7 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     let feed_id_byte = 6;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);
@@ -323,7 +323,7 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     scenario.next_tx(sender);
 
     let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let market_maker_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
@@ -376,7 +376,7 @@ fun pause_and_unpause_emit_events_and_toggle_market_maker_activity() {
     let feed_id_byte = 12;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);
@@ -397,7 +397,7 @@ fun pause_and_unpause_emit_events_and_toggle_market_maker_activity() {
     scenario.next_tx(sender);
 
     let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let market_maker_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let clock: Clock = scenario.take_shared();
 
@@ -422,7 +422,7 @@ fun unpause_emits_event_in_followup_transaction() {
     let feed_id_byte = 13;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);
@@ -443,7 +443,7 @@ fun unpause_emits_event_in_followup_transaction() {
     scenario.next_tx(sender);
 
     let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let market_maker_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let clock: Clock = scenario.take_shared();
 
@@ -458,7 +458,7 @@ fun unpause_emits_event_in_followup_transaction() {
     scenario.next_tx(sender);
 
     let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let market_maker_cap: AdminCap = scenario.take_from_sender();
     market_maker_object.unpause(&market_maker_cap);
 
     assert_emitted!(market_maker_unpaused(market_maker_object.id()));
@@ -475,7 +475,7 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
     let feed_id_byte = 14;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);
@@ -496,7 +496,7 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
     scenario.next_tx(sender);
 
     let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: MarketMakerCap = scenario.take_from_sender();
+    let market_maker_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let clock: Clock = scenario.take_shared();
 
@@ -536,7 +536,7 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     let feed_id_byte = 7;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);
@@ -611,7 +611,7 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     let feed_id_byte = 12;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);
@@ -683,7 +683,7 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     scenario.end();
 }
 
-#[test, expected_failure(abort_code = market_maker::EPythFeedIdentifierMismatch)]
+#[test, expected_failure(abort_code = executor::EPythFeedIdentifierMismatch)]
 fun refresh_quotes_rejects_when_feed_mismatch() {
     let sender = @0x21;
     let config_feed_id_byte = 8;
@@ -691,7 +691,7 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
     let quote_balance = 19_404_002 * constants::float_scaling();
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, oracle_feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);
@@ -741,13 +741,13 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
     abort
 }
 
-#[test, expected_failure(abort_code = market_maker::EInvalidPool)]
+#[test, expected_failure(abort_code = executor::EInvalidPool)]
 fun refresh_quotes_rejects_when_pool_mismatch() {
     let sender = @0x22;
     let feed_id_byte = 10;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, feed_id_byte);
 
@@ -816,7 +816,7 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     let feed_id_byte = 11;
     let mut scenario = test_scenario::begin(sender);
 
-    market_maker::test_init(scenario.ctx());
+    executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
     publish_price_feed(&mut scenario, sender, feed_id_byte);
     let pool_id = create_pool(&mut scenario, sender);

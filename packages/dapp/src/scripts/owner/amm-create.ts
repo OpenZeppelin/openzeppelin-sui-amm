@@ -101,7 +101,7 @@ runSuiScript(
     const createdArtifacts = execution.objectArtifacts.created
     const createdAmmConfig = findCreatedArtifactBySuffix(
       createdArtifacts,
-      "::manager::AMMConfig"
+      "::config::AMMConfig"
     )
 
     if (!createdAmmConfig) {

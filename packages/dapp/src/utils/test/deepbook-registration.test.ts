@@ -57,7 +57,7 @@ describe("resolveOrCreateTraderAccount", () => {
     traderAccountModelMocks.getTraderAccountOverview.mockReset()
     traderAccountModelMocks.resolveTraderAccountType.mockReset()
     traderAccountModelMocks.resolveTraderAccountType.mockImplementation(
-      (packageId: string) => `${packageId}::market_maker::MarketMaker`
+      (packageId: string) => `${packageId}::executor::MarketMaker`
     )
     deepbookPtbMocks.buildCreateTraderAccountTransaction.mockReset()
     transactionMocks.ensureCreatedObject.mockReset()
@@ -262,7 +262,7 @@ describe("resolveOrCreateTraderAccount", () => {
         traderAccountId: "0xexplicit"
       })
     ).rejects.toThrow(
-      "Market maker lookup failed for traderAccountId 0xexplicit (expected owner 0xowner, expected package 0xamm, expected type 0xamm::market_maker::MarketMaker). Cause: Object not found"
+      "Market maker lookup failed for traderAccountId 0xexplicit (expected owner 0xowner, expected package 0xamm, expected type 0xamm::executor::MarketMaker). Cause: Object not found"
     )
     expect(resolveCreateDependencies).not.toHaveBeenCalled()
   })

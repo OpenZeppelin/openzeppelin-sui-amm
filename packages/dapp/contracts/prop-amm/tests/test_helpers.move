@@ -1,10 +1,10 @@
 #[test_only]
 module openzeppelin_market_maker::test_helpers;
 
-use openzeppelin_market_maker::config;
 use deepbook::constants;
 use deepbook::pool;
 use deepbook::registry;
+use openzeppelin_market_maker::config;
 use sui::coin;
 use sui::coin_registry::{Self, Currency};
 use sui::sui::SUI;
@@ -26,8 +26,13 @@ public(package) fun create_usdc_currency(): Currency<USDC> {
     let ctx = &mut tx_context::dummy();
     let mut registry = coin_registry::create_coin_data_registry_for_testing(ctx);
     let (init, treasury_cap) = coin_registry::new_currency<USDC>(
-        &mut registry, 6, b"USDC".to_string(),
-        b"".to_string(), b"".to_string(), b"".to_string(), ctx,
+        &mut registry,
+        6,
+        b"USDC".to_string(),
+        b"".to_string(),
+        b"".to_string(),
+        b"".to_string(),
+        ctx,
     );
     let currency = coin_registry::unwrap_for_testing(init);
     std::unit_test::destroy(registry);
@@ -40,8 +45,13 @@ public(package) fun create_usdt_currency(): Currency<USDT> {
     let ctx = &mut tx_context::dummy();
     let mut registry = coin_registry::create_coin_data_registry_for_testing(ctx);
     let (init, treasury_cap) = coin_registry::new_currency<USDT>(
-        &mut registry, 6, b"USDT".to_string(),
-        b"".to_string(), b"".to_string(), b"".to_string(), ctx,
+        &mut registry,
+        6,
+        b"USDT".to_string(),
+        b"".to_string(),
+        b"".to_string(),
+        b"".to_string(),
+        ctx,
     );
     let currency = coin_registry::unwrap_for_testing(init);
     std::unit_test::destroy(registry);

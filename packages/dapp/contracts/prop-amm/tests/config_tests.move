@@ -34,7 +34,7 @@ fun create_amm_config_builds_expected_config() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let market_maker_config = config::create(
+    let amm_config = config::create(
         &pool,
         base_spread_bps,
         volatility_spread_bps,
@@ -45,13 +45,13 @@ fun create_amm_config_builds_expected_config() {
         1000,
     );
 
-    assert_eq!(market_maker_config.base_spread_bps(), base_spread_bps);
-    assert_eq!(market_maker_config.volatility_spread_bps(), volatility_spread_bps);
-    assert_eq!(market_maker_config.active(), true);
-    assert_eq!(market_maker_config.base_pyth_price_feed_id(), base_pyth_price_feed_id);
-    assert_eq!(market_maker_config.quote_pyth_price_feed_id(), quote_pyth_price_feed_id);
-    assert_eq!(market_maker_config.max_conf_ratio_bps(), 1000);
-    assert!(market_maker_config.has_valid_pool(&pool));
+    assert_eq!(amm_config.base_spread_bps(), base_spread_bps);
+    assert_eq!(amm_config.volatility_spread_bps(), volatility_spread_bps);
+    assert_eq!(amm_config.active(), true);
+    assert_eq!(amm_config.base_pyth_price_feed_id(), base_pyth_price_feed_id);
+    assert_eq!(amm_config.quote_pyth_price_feed_id(), quote_pyth_price_feed_id);
+    assert_eq!(amm_config.max_conf_ratio_bps(), 1000);
+    assert!(amm_config.has_valid_pool(&pool));
 
     test_scenario::return_shared(pool);
     scenario.end();
@@ -66,7 +66,7 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _market_maker_config = config::create(
+    let _amm_config = config::create(
         &pool,
         0,
         1,
@@ -89,7 +89,7 @@ fun create_amm_config_rejects_base_spread_above_volatility_spread() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _market_maker_config = config::create(
+    let _amm_config = config::create(
         &pool,
         150,
         100,
@@ -112,7 +112,7 @@ fun create_amm_config_rejects_volatility_spread_above_max_basis_points() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _market_maker_config = config::create(
+    let _amm_config = config::create(
         &pool,
         100,
         10_001,
@@ -135,7 +135,7 @@ fun create_amm_config_rejects_empty_feed_id() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _market_maker_config = config::create(
+    let _amm_config = config::create(
         &pool,
         100,
         200,
@@ -158,7 +158,7 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _market_maker_config = config::create(
+    let _amm_config = config::create(
         &pool,
         100,
         200,
@@ -181,7 +181,7 @@ fun create_amm_config_rejects_zero_max_conf_ratio_bps() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _market_maker_config = config::create(
+    let _amm_config = config::create(
         &pool,
         100,
         200,
@@ -204,7 +204,7 @@ fun create_amm_config_rejects_max_conf_ratio_bps_above_ten_thousand() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _market_maker_config = config::create(
+    let _amm_config = config::create(
         &pool,
         100,
         200,

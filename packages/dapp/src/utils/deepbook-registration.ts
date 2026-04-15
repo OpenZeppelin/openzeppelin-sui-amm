@@ -134,7 +134,7 @@ const createTraderAccount = async ({
 
   return {
     traderAccountId: ensureCreatedObject(
-      "::market_maker::MarketMaker",
+      "::executor::MarketMaker",
       createExecution
     ).objectId,
     summary

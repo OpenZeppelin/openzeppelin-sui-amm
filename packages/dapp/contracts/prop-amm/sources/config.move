@@ -17,7 +17,8 @@ const EVolatilitySpreadBpsExceedsMaxBasisPoints: vector<u8> =
 #[error(code = 3)]
 const EInvalidPythPriceFeedIdLength: vector<u8> = "pyth price feed id must be 32 bytes";
 #[error(code = 4)]
-const EInvalidMaxConfRatioBps: vector<u8> = "max conf ratio bps must be greater than zero and at most 10000";
+const EInvalidMaxConfRatioBps: vector<u8> =
+    "max conf ratio bps must be greater than zero and at most 10000";
 
 // === Constants ===
 
@@ -28,7 +29,7 @@ const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 // === Structs ===
 
 /// AMM configuration shared across pools.
-public struct MarketMakerConfig has drop, store {
+public struct AMMConfig has drop, store {
     /// Whether trading is active.
     active: bool,
     /// Base spread in basis points.
@@ -57,8 +58,8 @@ public struct MarketMakerConfig has drop, store {
 
 /// Creates a new AMM configuration object with validated inputs.
 ///
-/// Pass the returned value into `market_maker::create` when
-/// creating a new market maker or into `market_maker::update_market_maker`
+/// Pass the returned value into `executor::create` when
+/// creating a new executor or into `executor::update_market_maker`
 /// when replacing an existing market maker configuration.
 public fun create<BaseAsset, QuoteAsset>(
     pool: &Pool<BaseAsset, QuoteAsset>,
@@ -69,7 +70,7 @@ public fun create<BaseAsset, QuoteAsset>(
     order_expiration_time_ms: u64,
     max_price_age_secs: u64,
     max_conf_ratio_bps: u64,
-): MarketMakerConfig {
+): AMMConfig {
     assert_valid_amm_config_inputs!(
         base_spread_bps,
         volatility_spread_bps,
@@ -78,7 +79,7 @@ public fun create<BaseAsset, QuoteAsset>(
         max_conf_ratio_bps,
     );
 
-    MarketMakerConfig {
+    AMMConfig {
         base_spread_bps,
         volatility_spread_bps,
         active: true,
@@ -96,33 +97,33 @@ public fun create<BaseAsset, QuoteAsset>(
 // === View Functions ===
 
 /// Returns the base spread in basis points.
-public fun base_spread_bps(config: &MarketMakerConfig): u64 {
+public fun base_spread_bps(config: &AMMConfig): u64 {
     config.base_spread_bps
 }
 
 /// Returns the volatility spread in basis points.
-public fun volatility_spread_bps(config: &MarketMakerConfig): u64 {
+public fun volatility_spread_bps(config: &AMMConfig): u64 {
     config.volatility_spread_bps
 }
 
 /// Returns whether trading is paused.
-public fun active(config: &MarketMakerConfig): bool {
+public fun active(config: &AMMConfig): bool {
     config.active
 }
 
 /// Returns the Pyth base asset price feed ID bytes.
-public fun base_pyth_price_feed_id(config: &MarketMakerConfig): vector<u8> {
+public fun base_pyth_price_feed_id(config: &AMMConfig): vector<u8> {
     config.base_pyth_price_feed_id
 }
 
 /// Returns the Pyth quote asset price feed ID bytes.
-public fun quote_pyth_price_feed_id(config: &MarketMakerConfig): vector<u8> {
+public fun quote_pyth_price_feed_id(config: &AMMConfig): vector<u8> {
     config.quote_pyth_price_feed_id
 }
 
 /// Checks whether the price info object contains a valid Pyth base asset price feed ID matching the config.
 public fun has_valid_base_pyth_feed_id(
-    config: &MarketMakerConfig,
+    config: &AMMConfig,
     price_info_object: &PriceInfoObject,
 ): bool {
     let price_info = price_info_object.get_price_info_from_price_info_object();
@@ -132,7 +133,7 @@ public fun has_valid_base_pyth_feed_id(
 
 /// Checks whether the price info object contains a valid Pyth quote asset price feed ID matching the config.
 public fun has_valid_quote_pyth_feed_id(
-    config: &MarketMakerConfig,
+    config: &AMMConfig,
     price_info_object: &PriceInfoObject,
 ): bool {
     let price_info = price_info_object.get_price_info_from_price_info_object();
@@ -141,52 +142,52 @@ public fun has_valid_quote_pyth_feed_id(
 }
 
 /// Returns the associated pool's object ID.
-public fun pool_id(config: &MarketMakerConfig): ID {
+public fun pool_id(config: &AMMConfig): ID {
     config.pool_id
 }
 
 /// Checks whether the given pool matches the config's associated pool ID.
 public fun has_valid_pool<BaseAsset, QuoteAsset>(
-    config: &MarketMakerConfig,
+    config: &AMMConfig,
     pool: &Pool<BaseAsset, QuoteAsset>,
 ): bool {
     config.pool_id == object::id(pool)
 }
 
 /// Returns the latest base price publish time in seconds, if any.
-public fun base_price_publish_time(config: &MarketMakerConfig): Option<u64> {
+public fun base_price_publish_time(config: &AMMConfig): Option<u64> {
     config.base_price_publish_time
 }
 
 /// Returns the latest quote price publish time in seconds, if any.
-public fun quote_price_publish_time(config: &MarketMakerConfig): Option<u64> {
+public fun quote_price_publish_time(config: &AMMConfig): Option<u64> {
     config.quote_price_publish_time
 }
 
 /// Returns the order expiration duration in milliseconds.
-public fun order_expiration_time_ms(config: &MarketMakerConfig): u64 {
+public fun order_expiration_time_ms(config: &AMMConfig): u64 {
     config.order_expiration_time_ms
 }
 
 /// Returns the maximum acceptable Pyth price age in seconds.
-public fun max_price_age_secs(config: &MarketMakerConfig): u64 {
+public fun max_price_age_secs(config: &AMMConfig): u64 {
     config.max_price_age_secs
 }
 
 /// Returns the maximum acceptable confidence-to-price ratio in basis points.
-public fun max_conf_ratio_bps(config: &MarketMakerConfig): u64 {
+public fun max_conf_ratio_bps(config: &AMMConfig): u64 {
     config.max_conf_ratio_bps
 }
 
 // === Package Functions ===
 
 /// Compute the base spread in price terms for a given mid price.
-public(package) fun base_spread(config: &MarketMakerConfig, mid_price: u64): u64 {
+public(package) fun base_spread(config: &AMMConfig, mid_price: u64): u64 {
     ((mid_price as u128) * (config.base_spread_bps as u128) / HUNDRED_PERCENT_BPS_U128) as u64
 }
 
 /// Compute the volatility spread in price terms for a given mid price.
-public(package) fun volatility_spread(config: &MarketMakerConfig, mid_price: u64): u64 {
+public(package) fun volatility_spread(config: &AMMConfig, mid_price: u64): u64 {
     ((mid_price as u128) * (config.volatility_spread_bps as u128) / HUNDRED_PERCENT_BPS_U128) as u64
 }
 
@@ -196,18 +197,18 @@ public(package) fun pyth_price_identifier_length(): u64 {
 }
 
 /// Pauses trading by setting `active` to false.
-public(package) fun pause(config: &mut MarketMakerConfig) {
+public(package) fun pause(config: &mut AMMConfig) {
     config.active = false
 }
 
 /// Activate trading by setting `active` to true.
-public(package) fun unpause(config: &mut MarketMakerConfig) {
+public(package) fun unpause(config: &mut AMMConfig) {
     config.active = true
 }
 
 /// Sets new base `publish_time` and returns the latest base price publish time in seconds, if any.
 public(package) fun set_base_price_publish_time(
-    config: &mut MarketMakerConfig,
+    config: &mut AMMConfig,
     publish_time: u64,
 ): Option<u64> {
     config.base_price_publish_time.swap_or_fill(publish_time)
@@ -215,7 +216,7 @@ public(package) fun set_base_price_publish_time(
 
 /// Sets new quote `publish_time` and returns the latest quote price publish time in seconds, if any.
 public(package) fun set_quote_price_publish_time(
-    config: &mut MarketMakerConfig,
+    config: &mut AMMConfig,
     publish_time: u64,
 ): Option<u64> {
     config.quote_price_publish_time.swap_or_fill(publish_time)

@@ -14,8 +14,8 @@ import {
 } from "@sui-amm/tooling-core/utils/utility"
 import { parsePythPriceFeedIdBytes } from "../ptb/amm.ts"
 
-export const AMM_CONFIG_TYPE_SUFFIX = "::manager::AMMConfig"
-export const AMM_ADMIN_CAP_TYPE_SUFFIX = "::manager::AMMAdminCap"
+export const AMM_CONFIG_TYPE_SUFFIX = "::config::AMMConfig"
+export const AMM_ADMIN_CAP_TYPE_SUFFIX = "::executor::AdminCap"
 export const PROP_AMM_EXECUTOR_SUFFIX = "::executor::PropAmmApp"
 
 export const MAX_BASE_SPREAD_BPS = "10000"
