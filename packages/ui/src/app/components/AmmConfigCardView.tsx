@@ -59,21 +59,32 @@ const renderContent = (content: TAmmConfigCardContent) => {
               {details.volatilitySpreadBps}
             </span>
           </ConfigTile>
-          <ConfigTile label="Laser">
-            <span className={details.laserBadge.className}>
-              {details.laserBadge.label}
-            </span>
-          </ConfigTile>
-          <ConfigTile label="Trading status">
-            <span className={details.tradingBadge.className}>
-              {details.tradingBadge.label}
-            </span>
-          </ConfigTile>
           <div className="md:col-span-2">
-            <ConfigTile label="Pyth price feed id">
-              {details.pythPriceFeedIdHex ? (
+            <ConfigTile label="Trading status">
+              <span className={details.tradingBadge.className}>
+                {details.tradingBadge.label}
+              </span>
+            </ConfigTile>
+          </div>
+          <div className="md:col-span-2">
+            <ConfigTile label="Base Pyth price feed id">
+              {details.basePythPriceFeedIdHex ? (
                 <CopyableId
-                  value={details.pythPriceFeedIdHex}
+                  value={details.basePythPriceFeedIdHex}
+                  label="Feed"
+                  showExplorer={false}
+                  className="w-full"
+                />
+              ) : (
+                "Unknown"
+              )}
+            </ConfigTile>
+          </div>
+          <div className="md:col-span-2">
+            <ConfigTile label="Quote Pyth price feed id">
+              {details.quotePythPriceFeedIdHex ? (
+                <CopyableId
+                  value={details.quotePythPriceFeedIdHex}
                   label="Feed"
                   showExplorer={false}
                   className="w-full"

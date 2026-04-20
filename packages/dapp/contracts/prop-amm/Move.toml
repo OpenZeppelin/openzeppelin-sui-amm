@@ -24,4 +24,4 @@ override = true
 addr_substitutions = { pyth = "0x2" }
 
 [environments]
-test-publish = "9947f38b"
+test-publish = "e2c3d887"

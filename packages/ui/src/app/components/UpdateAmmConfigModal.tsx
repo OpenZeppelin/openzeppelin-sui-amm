@@ -1,7 +1,6 @@
 "use client"
 
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
-import clsx from "clsx"
 import { shortenId } from "../helpers/format"
 import {
   useUpdateAmmConfigModalState,
@@ -31,55 +30,6 @@ const inputClassName = (error?: string) =>
   [modalFieldInputClassName, error ? modalFieldInputErrorClassName : ""]
     .filter(Boolean)
     .join(" ")
-
-const toggleButtonClassName = (active: boolean) =>
-  clsx(
-    "rounded-full border px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] transition",
-    active
-      ? "border-sds-blue/70 bg-sds-blue/15 dark:border-sds-blue/40 dark:bg-sds-blue/20 text-sds-dark dark:text-sds-light"
-      : "border-slate-200/70 text-slate-500 hover:border-slate-300/70 dark:border-slate-50/15 dark:text-slate-200/70 dark:hover:border-slate-50/30"
-  )
-
-const ToggleField = ({
-  title,
-  description,
-  value,
-  activeLabel,
-  inactiveLabel,
-  onChange
-}: {
-  title: string
-  description?: string
-  value: boolean
-  activeLabel: string
-  inactiveLabel: string
-  onChange: (nextValue: boolean) => void
-}) => (
-  <label className={modalFieldLabelClassName}>
-    <span className={modalFieldTitleClassName}>{title}</span>
-    {description ? (
-      <span className={modalFieldDescriptionClassName}>{description}</span>
-    ) : undefined}
-    <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={title}>
-      <button
-        type="button"
-        className={toggleButtonClassName(value)}
-        onClick={() => onChange(true)}
-        aria-pressed={value}
-      >
-        {activeLabel}
-      </button>
-      <button
-        type="button"
-        className={toggleButtonClassName(!value)}
-        onClick={() => onChange(false)}
-        aria-pressed={!value}
-      >
-        {inactiveLabel}
-      </button>
-    </div>
-  </label>
-)
 
 const ConfigValueCard = ({
   label,
@@ -126,18 +76,21 @@ const AmmConfigSummarySection = ({
         value={summary.ammConfig.volatilitySpreadBps}
       />
       <ConfigValueCard
-        label="Laser"
-        value={summary.ammConfig.useLaser ? "Enabled" : "Disabled"}
-      />
-      <ConfigValueCard
         label="Trading status"
-        value={summary.ammConfig.tradingPaused ? "Paused" : "Live"}
+        value={summary.ammConfig.active ? "Live" : "Paused"}
       />
       <div className="sm:col-span-2">
         <ConfigValueCard
-          label="Pyth price feed id"
-          value={shortenId(summary.ammConfig.pythPriceFeedIdHex, 10, 8)}
-          detail={summary.ammConfig.pythPriceFeedIdHex}
+          label="Base Pyth price feed id"
+          value={shortenId(summary.ammConfig.basePythPriceFeedIdHex, 10, 8)}
+          detail={summary.ammConfig.basePythPriceFeedIdHex}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <ConfigValueCard
+          label="Quote Pyth price feed id"
+          value={shortenId(summary.ammConfig.quotePythPriceFeedIdHex, 10, 8)}
+          detail={summary.ammConfig.quotePythPriceFeedIdHex}
         />
       </div>
     </div>
@@ -312,7 +265,7 @@ const UpdateAmmConfigModal = ({
 
         <ModalSection
           title="Configuration updates"
-          subtitle="Adjust spreads, trading flags, and oracle feed settings."
+          subtitle="Adjust spreads and oracle feed settings."
         >
           <div className="grid gap-4 md:grid-cols-2">
             <label className={modalFieldLabelClassName}>
@@ -382,52 +335,68 @@ const UpdateAmmConfigModal = ({
             </label>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <ToggleField
-              title="Laser pricing"
-              description="Enable or disable the laser pricing path."
-              value={formState.useLaser}
-              activeLabel="Enabled"
-              inactiveLabel="Disabled"
-              onChange={(value) => handleInputChange("useLaser", value)}
-            />
-            <ToggleField
-              title="Trading status"
-              description="Pause trading without changing spreads."
-              value={!formState.tradingPaused}
-              activeLabel="Live"
-              inactiveLabel="Paused"
-              onChange={(value) => handleInputChange("tradingPaused", !value)}
-            />
-          </div>
-
           <label className={modalFieldLabelClassName}>
-            <span className={modalFieldTitleClassName}>Pyth price feed id</span>
+            <span className={modalFieldTitleClassName}>
+              Base Pyth price feed id
+            </span>
             <span className={modalFieldDescriptionClassName}>
               32-byte hex string (0x...).
             </span>
             <input
-              value={formState.pythPriceFeedIdHex}
+              value={formState.basePythPriceFeedIdHex}
               onChange={(event) =>
-                handleInputChange("pythPriceFeedIdHex", event.target.value)
+                handleInputChange("basePythPriceFeedIdHex", event.target.value)
               }
-              onBlur={() => markFieldBlur("pythPriceFeedIdHex")}
+              onBlur={() => markFieldBlur("basePythPriceFeedIdHex")}
               className={inputClassName(
                 shouldShowFieldError(
-                  "pythPriceFeedIdHex",
-                  fieldErrors.pythPriceFeedIdHex
+                  "basePythPriceFeedIdHex",
+                  fieldErrors.basePythPriceFeedIdHex
                 )
-                  ? fieldErrors.pythPriceFeedIdHex
+                  ? fieldErrors.basePythPriceFeedIdHex
                   : undefined
               )}
               placeholder="0x..."
             />
             {shouldShowFieldError(
-              "pythPriceFeedIdHex",
-              fieldErrors.pythPriceFeedIdHex
+              "basePythPriceFeedIdHex",
+              fieldErrors.basePythPriceFeedIdHex
             ) ? (
               <span className={modalFieldErrorTextClassName}>
-                {fieldErrors.pythPriceFeedIdHex}
+                {fieldErrors.basePythPriceFeedIdHex}
+              </span>
+            ) : undefined}
+          </label>
+
+          <label className={modalFieldLabelClassName}>
+            <span className={modalFieldTitleClassName}>
+              Quote Pyth price feed id
+            </span>
+            <span className={modalFieldDescriptionClassName}>
+              32-byte hex string (0x...).
+            </span>
+            <input
+              value={formState.quotePythPriceFeedIdHex}
+              onChange={(event) =>
+                handleInputChange("quotePythPriceFeedIdHex", event.target.value)
+              }
+              onBlur={() => markFieldBlur("quotePythPriceFeedIdHex")}
+              className={inputClassName(
+                shouldShowFieldError(
+                  "quotePythPriceFeedIdHex",
+                  fieldErrors.quotePythPriceFeedIdHex
+                )
+                  ? fieldErrors.quotePythPriceFeedIdHex
+                  : undefined
+              )}
+              placeholder="0x..."
+            />
+            {shouldShowFieldError(
+              "quotePythPriceFeedIdHex",
+              fieldErrors.quotePythPriceFeedIdHex
+            ) ? (
+              <span className={modalFieldErrorTextClassName}>
+                {fieldErrors.quotePythPriceFeedIdHex}
               </span>
             ) : undefined}
           </label>

@@ -1,6 +1,5 @@
 import path from "node:path"
 
-import type { SuiClient } from "@mysten/sui/client"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
@@ -13,11 +12,7 @@ import {
   resolveOwnedAmmAdminCapId
 } from "@sui-amm/domain-node/amm"
 import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
-import { ensureCreatedObject } from "@sui-amm/tooling-core/transactions"
-import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import {
-  findLatestArtifactThat,
-  loadDeploymentArtifacts,
   loadObjectArtifacts,
   readArtifact
 } from "@sui-amm/tooling-node/artifacts"
@@ -88,72 +83,34 @@ export const syncAmmDeepbookDependencyLocalReplacement = async ({
   })
 }
 
-const resolveAmmPublishArtifact = async ({
-  networkName,
-  ammPackageId
-}: {
-  networkName: string
-  ammPackageId: string
-}): Promise<PublishArtifact | undefined> => {
-  const deploymentArtifacts = await loadDeploymentArtifacts(networkName)
-
-  return findLatestArtifactThat(
-    (artifact) => artifact.packageId === ammPackageId,
-    deploymentArtifacts
-  )
-}
-
 const isAmmAdminCapArtifact = (artifact: ObjectArtifact) =>
   artifact.objectType?.endsWith(AMM_ADMIN_CAP_TYPE_SUFFIX)
 
-const findLatestAmmAdminCapArtifact = ({
-  objectArtifacts,
-  predicate
-}: {
-  objectArtifacts: ObjectArtifact[]
-  predicate: (artifact: ObjectArtifact) => boolean
-}) =>
-  objectArtifacts.reduceRight<ObjectArtifact | undefined>(
-    (latest, artifact) => {
-      if (latest) return latest
-      if (!isAmmAdminCapArtifact(artifact)) return undefined
-      return predicate(artifact) ? artifact : undefined
-    },
-    undefined
-  )
-
 const resolveAmmAdminCapIdFromObjectArtifacts = async ({
   networkName,
-  publishDigest,
   ammPackageId
 }: {
   networkName: string
-  publishDigest?: string
   ammPackageId: string
 }): Promise<string | undefined> => {
   const objectArtifacts = await loadObjectArtifacts(networkName)
   const normalizedPackageId = normalizeSuiObjectId(ammPackageId)
 
-  const adminCapFromPublishDigest = publishDigest
-    ? findLatestAmmAdminCapArtifact({
-        objectArtifacts,
-        predicate: (artifact) => artifact.digest === publishDigest
-      })
-    : undefined
-
-  if (adminCapFromPublishDigest?.objectId) {
-    return adminCapFromPublishDigest.objectId
-  }
-
-  return findLatestAmmAdminCapArtifact({
-    objectArtifacts,
-    predicate: (artifact) => artifact.packageId === normalizedPackageId
-  })?.objectId
+  return objectArtifacts.reduceRight<ObjectArtifact | undefined>(
+    (latest, artifact) => {
+      if (latest) return latest
+      if (!isAmmAdminCapArtifact(artifact)) return undefined
+      return normalizeSuiObjectId(artifact.packageId) === normalizedPackageId
+        ? artifact
+        : undefined
+    },
+    undefined
+  )?.objectId
 }
 
 const createAdminCapResolutionError = () =>
   new Error(
-    "Unable to resolve the AMM admin cap from the latest publish transaction or object artifacts; provide --admin-cap-id or re-run publish to refresh deployments."
+    "Unable to resolve the AMM admin cap from object artifacts; provide --admin-cap-id or re-run amm-create to refresh deployments."
   )
 
 const buildMissingSignerAdminCapError = ({
@@ -198,38 +155,16 @@ export const resolveSignerAmmAdminCapId = async ({
   throw buildMissingSignerAdminCapError({ signerAddress, ammPackageId })
 }
 
-export const resolveAmmAdminCapIdFromPublishDigest = async ({
-  publishDigest,
-  suiClient
-}: {
-  publishDigest: string
-  suiClient: SuiClient
-}): Promise<string> => {
-  const publishTransaction = await suiClient.getTransactionBlock({
-    digest: publishDigest,
-    options: { showObjectChanges: true }
-  })
-
-  return ensureCreatedObject(AMM_ADMIN_CAP_TYPE_SUFFIX, publishTransaction)
-    .objectId
-}
-
 export const resolveAmmAdminCapIdFromArtifacts = async ({
   tooling,
   ammPackageId
 }: {
-  tooling: Pick<Tooling, "suiClient" | "network">
+  tooling: Pick<Tooling, "network">
   ammPackageId: string
 }): Promise<string> => {
-  const publishArtifact = await resolveAmmPublishArtifact({
-    networkName: tooling.network.networkName,
-    ammPackageId
-  })
-
   const adminCapIdFromObjectArtifacts =
     await resolveAmmAdminCapIdFromObjectArtifacts({
       networkName: tooling.network.networkName,
-      publishDigest: publishArtifact?.digest,
       ammPackageId
     })
 
@@ -237,21 +172,7 @@ export const resolveAmmAdminCapIdFromArtifacts = async ({
     return adminCapIdFromObjectArtifacts
   }
 
-  if (!publishArtifact?.digest) {
-    throw createAdminCapResolutionError()
-  }
-
-  try {
-    return await resolveAmmAdminCapIdFromPublishDigest({
-      publishDigest: publishArtifact.digest,
-      suiClient: tooling.suiClient
-    })
-  } catch (error) {
-    logWarning(
-      `Unable to recover the AMM admin cap from publish digest ${publishArtifact.digest}: ${error instanceof Error ? error.message : String(error)}`
-    )
-    throw createAdminCapResolutionError()
-  }
+  throw createAdminCapResolutionError()
 }
 
 const findPriceFeedIdFromMockArtifact = (
@@ -332,9 +253,13 @@ export const logAmmConfigOverview = (
   logKeyValueGreen("Config")(overview.configId)
   logKeyValueGreen("Spread-bps")(overview.baseSpreadBps)
   logKeyValueGreen("Vol-bps")(overview.volatilitySpreadBps)
-  logKeyValueGreen("Use-laser")(overview.useLaser ? "Yes" : "No")
-  logKeyValueGreen("Paused")(overview.tradingPaused ? "Yes" : "No")
-  logKeyValueGreen("Feed-id")(overview.pythPriceFeedIdHex)
+  logKeyValueGreen("Active")(overview.active ? "Yes" : "No")
+  logKeyValueGreen("Base-feed")(overview.basePythPriceFeedIdHex)
+  logKeyValueGreen("Quote-feed")(overview.quotePythPriceFeedIdHex)
+  logKeyValueGreen("Pool")(overview.poolId)
+  logKeyValueGreen("Order-expiry-ms")(overview.orderExpirationTimeMs)
+  logKeyValueGreen("Max-age-secs")(overview.maxPriceAgeSecs)
+  logKeyValueGreen("Max-conf-bps")(overview.maxConfRatioBps)
   if (options?.initialSharedVersion) {
     logKeyValueGreen("Shared-ver")(options.initialSharedVersion)
   }

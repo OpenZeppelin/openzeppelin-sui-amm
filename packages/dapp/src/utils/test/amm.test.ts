@@ -42,7 +42,7 @@ import {
 } from "../amm.ts"
 
 type AdminCapTooling = Parameters<
-  typeof resolveAmmAdminCapIdFromArtifacts
+  typeof resolveSignerAmmAdminCapId
 >[0]["tooling"]
 
 const createAdminCapTooling = ({
@@ -210,29 +210,16 @@ describe("resolveAmmAdminCapIdFromArtifacts", () => {
     expect(resolved).toBe("0xdef")
   })
 
-  it("logs and fails clearly when neither transaction lookup nor object artifacts can resolve the admin cap", async () => {
-    artifactMocks.loadDeploymentArtifacts.mockResolvedValue([
-      {
-        packageId: "0x1",
-        digest: "digest-123"
-      }
-    ])
+  it("fails clearly when object artifacts cannot resolve the admin cap", async () => {
     artifactMocks.loadObjectArtifacts.mockResolvedValue([])
-    const getTransactionBlock = vi
-      .fn()
-      .mockRejectedValue(new Error("transaction lookup failed"))
 
     await expect(
       resolveAmmAdminCapIdFromArtifacts({
-        tooling: createAdminCapTooling({ getTransactionBlock }),
+        tooling: createAdminCapTooling(),
         ammPackageId: "0x1"
       })
     ).rejects.toThrow(
-      "Unable to resolve the AMM admin cap from the latest publish transaction or object artifacts; provide --admin-cap-id or re-run publish to refresh deployments."
-    )
-
-    expect(logMocks.logWarning).toHaveBeenCalledWith(
-      "Unable to recover the AMM admin cap from publish digest digest-123: transaction lookup failed"
+      "Unable to resolve the AMM admin cap from object artifacts; provide --admin-cap-id or re-run amm-create to refresh deployments."
     )
   })
 })

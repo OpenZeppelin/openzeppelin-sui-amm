@@ -5,7 +5,7 @@ export const MINIMUM_GAS_COIN_BALANCE = ONE_SUI
 export const MINIMUM_GAS_COIN_OBJECTS = 3
 export const MINIMUM_ACCOUNT_BALANCE = MINIMUM_GAS_COIN_BALANCE * 5n
 export const DEFAULT_TX_GAS_BUDGET = 100_000_000
-export const DEFAULT_PUBLISH_GAS_BUDGET = 700_000_000
+export const DEFAULT_PUBLISH_GAS_BUDGET = 1_500_000_000
 export const SUI_COIN_TYPE = "0x2::sui::SUI"
 export const NORMALIZED_SUI_COIN_TYPE = `${normalizeSuiObjectId(
   "0x2"

@@ -1,14 +1,17 @@
 /**
- * Updates an existing shared AMM config for the target network.
+ * Updates an existing shared AMM market maker for the target network.
  */
 import yargs from "yargs"
 
 import {
+  DEFAULT_MAX_CONF_RATIO_BPS,
+  DEFAULT_MAX_PRICE_AGE_SECS,
+  DEFAULT_ORDER_EXPIRATION_TIME_MS,
   type AmmConfigOverview,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { buildUpdateAmmConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { buildUpdateMarketMakerTransaction } from "@sui-amm/domain-core/ptb/amm"
 import {
   resolveAmmConfigId,
   resolveAmmPackageId
@@ -29,10 +32,12 @@ type UpdateAmmArguments = {
   ammPackageId?: string
   baseSpreadBps?: string
   volatilitySpreadBps?: string
-  useLaser?: boolean
-  tradingPaused?: boolean
-  pythPriceFeedId?: string
+  basePythPriceFeedId?: string
+  quotePythPriceFeedId?: string
   pythPriceFeedLabel?: string
+  orderExpirationTimeMs?: string
+  maxPriceAgeSecs?: string
+  maxConfRatioBps?: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
@@ -41,10 +46,13 @@ type UpdateAmmArguments = {
 type ResolvedAmmUpdateInputs = {
   baseSpreadBps: bigint
   volatilitySpreadBps: bigint
-  useLaser: boolean
-  tradingPaused: boolean
-  pythPriceFeedIdHex: string
-  pythPriceFeedIdBytes: number[]
+  basePythPriceFeedIdHex: string
+  basePythPriceFeedIdBytes: number[]
+  quotePythPriceFeedIdHex: string
+  quotePythPriceFeedIdBytes: number[]
+  orderExpirationTimeMs: bigint
+  maxPriceAgeSecs: bigint
+  maxConfRatioBps: bigint
 }
 
 const resolveExplicitAdminCapId = (adminCapId?: string): string | undefined => {
@@ -64,7 +72,7 @@ const resolveAdminCapId = async ({
   cliArguments,
   ammPackageId
 }: {
-  tooling: Pick<Tooling, "network" | "suiClient">
+  tooling: Pick<Tooling, "network">
   cliArguments: UpdateAmmArguments
   ammPackageId: string
 }): Promise<string> => {
@@ -79,11 +87,13 @@ const resolveAdminCapId = async ({
   })
 }
 
-const shouldResolveNewPythPriceFeedId = (cliArguments: UpdateAmmArguments) =>
-  Boolean(cliArguments.pythPriceFeedId?.trim()) ||
+const shouldResolveNewBasePythPriceFeedId = (
+  cliArguments: UpdateAmmArguments
+) =>
+  Boolean(cliArguments.basePythPriceFeedId?.trim()) ||
   Boolean(cliArguments.pythPriceFeedLabel?.trim())
 
-const resolvePythPriceFeedIdHexForUpdate = async ({
+const resolveBasePythPriceFeedIdHexForUpdate = async ({
   networkName,
   cliArguments,
   currentOverview
@@ -92,24 +102,16 @@ const resolvePythPriceFeedIdHexForUpdate = async ({
   cliArguments: UpdateAmmArguments
   currentOverview: AmmConfigOverview
 }) => {
-  if (!shouldResolveNewPythPriceFeedId(cliArguments)) {
-    return currentOverview.pythPriceFeedIdHex
+  if (!shouldResolveNewBasePythPriceFeedId(cliArguments)) {
+    return currentOverview.basePythPriceFeedIdHex
   }
 
   return resolvePythPriceFeedIdHex({
     networkName,
-    pythPriceFeedId: cliArguments.pythPriceFeedId,
+    pythPriceFeedId: cliArguments.basePythPriceFeedId,
     pythPriceFeedLabel: cliArguments.pythPriceFeedLabel
   })
 }
-
-const resolveTradingPausedForUpdate = ({
-  cliArguments,
-  currentOverview
-}: {
-  cliArguments: UpdateAmmArguments
-  currentOverview: AmmConfigOverview
-}) => cliArguments.tradingPaused ?? currentOverview.tradingPaused
 
 const resolveAmmUpdateInputs = async ({
   networkName,
@@ -120,27 +122,30 @@ const resolveAmmUpdateInputs = async ({
   cliArguments: UpdateAmmArguments
   currentOverview: AmmConfigOverview
 }): Promise<ResolvedAmmUpdateInputs> => {
-  const pythPriceFeedIdHex = await resolvePythPriceFeedIdHexForUpdate({
+  const basePythPriceFeedIdHex = await resolveBasePythPriceFeedIdHexForUpdate({
     networkName,
     cliArguments,
     currentOverview
   })
 
-  const resolvedAmmConfigInputs = resolveAmmConfigInputs({
+  const quotePythPriceFeedIdHex =
+    cliArguments.quotePythPriceFeedId?.trim() ||
+    currentOverview.quotePythPriceFeedIdHex
+
+  return resolveAmmConfigInputs({
     baseSpreadBps: cliArguments.baseSpreadBps ?? currentOverview.baseSpreadBps,
     volatilitySpreadBps:
       cliArguments.volatilitySpreadBps ?? currentOverview.volatilitySpreadBps,
-    useLaser: cliArguments.useLaser ?? currentOverview.useLaser,
-    pythPriceFeedIdHex
+    basePythPriceFeedIdHex,
+    quotePythPriceFeedIdHex,
+    orderExpirationTimeMs:
+      cliArguments.orderExpirationTimeMs ??
+      currentOverview.orderExpirationTimeMs,
+    maxPriceAgeSecs:
+      cliArguments.maxPriceAgeSecs ?? currentOverview.maxPriceAgeSecs,
+    maxConfRatioBps:
+      cliArguments.maxConfRatioBps ?? currentOverview.maxConfRatioBps
   })
-
-  return {
-    ...resolvedAmmConfigInputs,
-    tradingPaused: resolveTradingPausedForUpdate({
-      cliArguments,
-      currentOverview
-    })
-  }
 }
 
 runSuiScript(
@@ -170,19 +175,22 @@ runSuiScript(
       currentOverview
     })
 
-    const updateAmmTransaction = buildUpdateAmmConfigTransaction({
+    const updateMarketMakerTransaction = buildUpdateMarketMakerTransaction({
       packageId: ammPackageId,
+      marketMaker: ammConfigSharedObject,
       adminCapId,
-      config: ammConfigSharedObject,
+      poolId: currentOverview.poolId,
       baseSpreadBps: updateInputs.baseSpreadBps,
       volatilitySpreadBps: updateInputs.volatilitySpreadBps,
-      useLaser: updateInputs.useLaser,
-      tradingPaused: updateInputs.tradingPaused,
-      pythPriceFeedIdBytes: updateInputs.pythPriceFeedIdBytes
+      basePythPriceFeedIdBytes: updateInputs.basePythPriceFeedIdBytes,
+      quotePythPriceFeedIdBytes: updateInputs.quotePythPriceFeedIdBytes,
+      orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
+      maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
+      maxConfRatioBps: updateInputs.maxConfRatioBps
     })
 
     const { execution, summary } = await tooling.executeTransactionWithSummary({
-      transaction: updateAmmTransaction,
+      transaction: updateMarketMakerTransaction,
       signer: tooling.loadedEd25519KeyPair,
       summaryLabel: "update-amm",
       devInspect: cliArguments.devInspect,
@@ -204,7 +212,8 @@ runSuiScript(
           ammConfig: updatedOverview,
           ammConfigId,
           adminCapId,
-          pythPriceFeedIdHex: updateInputs.pythPriceFeedIdHex,
+          basePythPriceFeedIdHex: updateInputs.basePythPriceFeedIdHex,
+          quotePythPriceFeedIdHex: updateInputs.quotePythPriceFeedIdHex,
           transactionSummary: summary
         },
         cliArguments.json
@@ -222,14 +231,14 @@ runSuiScript(
       alias: ["amm-config-id", "config-id"],
       type: "string",
       description:
-        "AMM config object id; inferred from the latest objects artifact when omitted.",
+        "AMM market maker object id; inferred from the latest objects artifact when omitted.",
       demandOption: false
     })
     .option("adminCapId", {
       alias: ["admin-cap-id"],
       type: "string",
       description:
-        "Admin cap object id for AMM config updates; inferred from the selected AMM publish when omitted.",
+        "Admin cap object id for AMM updates; inferred from object artifacts when omitted.",
       demandOption: false
     })
     .option("ammPackageId", {
@@ -253,30 +262,49 @@ runSuiScript(
         "Volatility spread in basis points (u64); defaults to the current config value.",
       demandOption: false
     })
-    .option("useLaser", {
-      alias: ["use-laser"],
-      type: "boolean",
-      description:
-        "Enable the laser pricing path for the AMM; defaults to the current config value."
-    })
-    .option("tradingPaused", {
-      alias: ["trading-paused"],
-      type: "boolean",
-      description:
-        "Pause trading for the AMM; defaults to the current config value."
-    })
-    .option("pythPriceFeedId", {
-      alias: ["pyth-price-feed-id", "pyth-feed-id"],
+    .option("basePythPriceFeedId", {
+      alias: ["base-pyth-price-feed-id", "pyth-price-feed-id", "pyth-feed-id"],
       type: "string",
       description:
-        "Pyth price feed id (32 bytes hex); defaults to the current config value.",
+        "Base asset Pyth price feed id (32 bytes hex); defaults to the current config value.",
+      demandOption: false
+    })
+    .option("quotePythPriceFeedId", {
+      alias: ["quote-pyth-price-feed-id"],
+      type: "string",
+      description:
+        "Quote asset Pyth price feed id (32 bytes hex); defaults to the current config value.",
       demandOption: false
     })
     .option("pythPriceFeedLabel", {
       alias: ["pyth-price-feed-label", "pyth-feed-label"],
       type: "string",
       description:
-        "Localnet artifact feed label to resolve the feed id when --pyth-price-feed-id is omitted.",
+        "Localnet artifact feed label to resolve the base feed id when --base-pyth-price-feed-id is omitted.",
+      demandOption: false
+    })
+    .option("orderExpirationTimeMs", {
+      alias: ["order-expiration-time-ms"],
+      type: "string",
+      description:
+        "Order expiration duration in milliseconds (u64); defaults to the current config value.",
+      default: DEFAULT_ORDER_EXPIRATION_TIME_MS,
+      demandOption: false
+    })
+    .option("maxPriceAgeSecs", {
+      alias: ["max-price-age-secs"],
+      type: "string",
+      description:
+        "Maximum acceptable Pyth price age in seconds (u64); defaults to the current config value.",
+      default: DEFAULT_MAX_PRICE_AGE_SECS,
+      demandOption: false
+    })
+    .option("maxConfRatioBps", {
+      alias: ["max-conf-ratio-bps"],
+      type: "string",
+      description:
+        "Maximum acceptable confidence-to-price ratio in basis points (u64); defaults to the current config value.",
+      default: DEFAULT_MAX_CONF_RATIO_BPS,
       demandOption: false
     })
     .option("devInspect", {

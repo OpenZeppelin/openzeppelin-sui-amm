@@ -24,7 +24,8 @@ type AmmCreateOutput = {
   ammConfig?: AmmConfigOverview
   digest?: string
   initialSharedVersion?: string
-  pythPriceFeedIdHex?: string
+  basePythPriceFeedIdHex?: string
+  quotePythPriceFeedIdHex?: string
   transactionSummary?: { label?: string }
 }
 
@@ -66,7 +67,7 @@ const testEnv = createSuiLocalnetTestEnv({
 })
 
 describe("owner amm-create integration", () => {
-  it("creates a shared AMM config and records artifacts", async () => {
+  it("creates a shared AMM market maker and records artifacts", async () => {
     await testEnv.withTestContext("owner-amm-create", async (context) => {
       const publisher = context.createAccount("publisher")
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
@@ -77,7 +78,6 @@ describe("owner amm-create integration", () => {
 
       const baseSpreadBps = "37"
       const volatilitySpreadBps = "420"
-      const useLaser = true
       const pythPriceFeedId = DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
 
       const scriptRunner = createSuiScriptRunner(context)
@@ -88,8 +88,7 @@ describe("owner amm-create integration", () => {
           args: {
             json: true,
             baseSpreadBps,
-            volatilitySpreadBps,
-            useLaser
+            volatilitySpreadBps
           }
         }
       )
@@ -114,12 +113,11 @@ describe("owner amm-create integration", () => {
       expect(output.transactionSummary?.label).toBe("create-amm")
       expect(output.ammConfig.baseSpreadBps).toBe(baseSpreadBps)
       expect(output.ammConfig.volatilitySpreadBps).toBe(volatilitySpreadBps)
-      expect(output.ammConfig.useLaser).toBe(useLaser)
-      expect(output.ammConfig.tradingPaused).toBe(false)
-      expect(normalizeHex(output.ammConfig.pythPriceFeedIdHex)).toBe(
+      expect(output.ammConfig.active).toBe(true)
+      expect(normalizeHex(output.ammConfig.basePythPriceFeedIdHex)).toBe(
         normalizeHex(pythPriceFeedId)
       )
-      expect(normalizeHex(output.pythPriceFeedIdHex ?? "")).toBe(
+      expect(normalizeHex(output.basePythPriceFeedIdHex ?? "")).toBe(
         normalizeHex(pythPriceFeedId)
       )
 

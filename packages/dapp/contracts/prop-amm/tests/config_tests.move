@@ -36,8 +36,8 @@ fun create_amm_config_builds_expected_config() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let amm_config = config::create(
-        &pool,
+    let amm_config = config::new(
+        object::id(&pool),
         base_spread_bps,
         volatility_spread_bps,
         base_pyth_price_feed_id,
@@ -67,9 +67,8 @@ fun create_amm_config_rejects_zero_base_spread_bps() {
 
     scenario.next_tx(sender);
 
-    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _amm_config = config::create(
-        &pool,
+    let _amm_config = config::new(
+        pool_id,
         0,
         1,
         build_pyth_price_feed_id(0),
@@ -90,9 +89,8 @@ fun create_amm_config_rejects_base_spread_above_volatility_spread() {
 
     scenario.next_tx(sender);
 
-    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _amm_config = config::create(
-        &pool,
+    let _amm_config = config::new(
+        pool_id,
         150,
         100,
         build_pyth_price_feed_id(0),
@@ -113,9 +111,8 @@ fun create_amm_config_rejects_volatility_spread_above_max_basis_points() {
 
     scenario.next_tx(sender);
 
-    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _amm_config = config::create(
-        &pool,
+    let _amm_config = config::new(
+        pool_id,
         100,
         10_001,
         build_pyth_price_feed_id(0),
@@ -136,9 +133,8 @@ fun create_amm_config_rejects_empty_feed_id() {
 
     scenario.next_tx(sender);
 
-    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _amm_config = config::create(
-        &pool,
+    let _amm_config = config::new(
+        pool_id,
         100,
         200,
         vector[],
@@ -159,9 +155,8 @@ fun create_amm_config_rejects_invalid_feed_id_length() {
 
     scenario.next_tx(sender);
 
-    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _amm_config = config::create(
-        &pool,
+    let _amm_config = config::new(
+        pool_id,
         100,
         200,
         build_invalid_pyth_price_feed_id(),
@@ -182,9 +177,8 @@ fun create_amm_config_rejects_zero_max_conf_ratio_bps() {
 
     scenario.next_tx(sender);
 
-    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _amm_config = config::create(
-        &pool,
+    let _amm_config = config::new(
+        pool_id,
         100,
         200,
         build_pyth_price_feed_id(0),
@@ -205,9 +199,8 @@ fun create_amm_config_rejects_max_conf_ratio_bps_above_ten_thousand() {
 
     scenario.next_tx(sender);
 
-    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let _amm_config = config::create(
-        &pool,
+    let _amm_config = config::new(
+        pool_id,
         100,
         200,
         build_pyth_price_feed_id(0),

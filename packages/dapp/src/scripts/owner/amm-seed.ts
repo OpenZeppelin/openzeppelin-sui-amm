@@ -45,7 +45,6 @@ type AmmSeedArguments = {
   ammPackageId?: string
   baseSpreadBps?: string
   volatilitySpreadBps?: string
-  useLaser?: boolean
   pythPriceFeedId?: string
   pythPriceFeedLabel?: string
   allowConfigMismatch?: boolean
@@ -60,7 +59,7 @@ type AmmSeedOutput = {
   ammConfigId: string
   ammConfig: AmmConfigOverview
   initialSharedVersion: string
-  pythPriceFeedIdHex: string
+  basePythPriceFeedIdHex: string
   publishDigest?: string
   transactionSummary?: { label?: string }
   didPublish: boolean
@@ -325,7 +324,7 @@ const shouldResolveExplicitPythPriceFeedId = ({
   Boolean(cliArguments.pythPriceFeedId?.trim()) ||
   Boolean(cliArguments.pythPriceFeedLabel?.trim())
 
-const resolveExpectedPythPriceFeedIdHex = async ({
+const resolveExpectedBasePythPriceFeedIdHex = async ({
   networkName,
   cliArguments,
   existingOverview
@@ -338,7 +337,7 @@ const resolveExpectedPythPriceFeedIdHex = async ({
     existingOverview &&
     !shouldResolveExplicitPythPriceFeedId({ cliArguments })
   ) {
-    return existingOverview.pythPriceFeedIdHex
+    return existingOverview.basePythPriceFeedIdHex
   }
 
   return resolvePythPriceFeedIdHex({
@@ -357,16 +356,18 @@ const resolveExpectedExistingAmmConfigInputs = async ({
   cliArguments: AmmSeedArguments
   existingOverview: AmmConfigOverview
 }) => {
+  const basePythPriceFeedIdHex = await resolveExpectedBasePythPriceFeedIdHex({
+    networkName,
+    cliArguments,
+    existingOverview
+  })
+
   return resolveAmmConfigInputs({
-    pythPriceFeedIdHex: await resolveExpectedPythPriceFeedIdHex({
-      networkName,
-      cliArguments,
-      existingOverview
-    }),
+    basePythPriceFeedIdHex,
+    quotePythPriceFeedIdHex: existingOverview.quotePythPriceFeedIdHex,
     volatilitySpreadBps:
       cliArguments.volatilitySpreadBps ?? existingOverview.volatilitySpreadBps,
-    baseSpreadBps: cliArguments.baseSpreadBps ?? existingOverview.baseSpreadBps,
-    useLaser: cliArguments.useLaser ?? existingOverview.useLaser
+    baseSpreadBps: cliArguments.baseSpreadBps ?? existingOverview.baseSpreadBps
   })
 }
 
@@ -383,11 +384,11 @@ const collectAmmConfigInputMismatches = ({
     expectedInputs.volatilitySpreadBps.toString()
 
   if (
-    normalizeHex(existingOverview.pythPriceFeedIdHex) !==
-    normalizeHex(expectedInputs.pythPriceFeedIdHex)
+    normalizeHex(existingOverview.basePythPriceFeedIdHex) !==
+    normalizeHex(expectedInputs.basePythPriceFeedIdHex)
   ) {
     mismatches.push(
-      `pythPriceFeedIdHex expected ${expectedInputs.pythPriceFeedIdHex} but got ${existingOverview.pythPriceFeedIdHex}`
+      `basePythPriceFeedIdHex expected ${expectedInputs.basePythPriceFeedIdHex} but got ${existingOverview.basePythPriceFeedIdHex}`
     )
   }
 
@@ -400,12 +401,6 @@ const collectAmmConfigInputMismatches = ({
   if (existingOverview.volatilitySpreadBps !== expectedVolatilitySpreadBps) {
     mismatches.push(
       `volatilitySpreadBps expected ${expectedVolatilitySpreadBps} but got ${existingOverview.volatilitySpreadBps}`
-    )
-  }
-
-  if (existingOverview.useLaser !== expectedInputs.useLaser) {
-    mismatches.push(
-      `useLaser expected ${expectedInputs.useLaser} but got ${existingOverview.useLaser}`
     )
   }
 
@@ -450,7 +445,7 @@ const resolveOrCreateAmmConfig = async ({
   ammPackageId: string
 }): Promise<{
   ammConfigSnapshot: AmmConfigSnapshot
-  pythPriceFeedIdHex?: string
+  basePythPriceFeedIdHex?: string
   transactionSummary?: { label?: string }
   didCreate: boolean
 }> => {
@@ -514,28 +509,27 @@ const resolveOrCreateAmmConfig = async ({
 
   logKeyValueBlue("Config")("Creating AMM config.")
 
-  const adminCapId = await resolveAdminCapId({
-    tooling,
-    cliArguments,
-    ammPackageId
-  })
-  const pythPriceFeedIdHex = await resolvePythPriceFeedIdHex({
+  const basePythPriceFeedIdHex = await resolvePythPriceFeedIdHex({
     networkName: tooling.network.networkName,
     pythPriceFeedId: cliArguments.pythPriceFeedId,
     pythPriceFeedLabel: cliArguments.pythPriceFeedLabel
   })
-  const createdAmmConfig = await createAmmConfigSnapshotFromArgs({
-    tooling,
-    ammPackageId,
-    adminCapId,
-    pythPriceFeedIdHex,
-    volatilitySpreadBps: cliArguments.volatilitySpreadBps,
-    baseSpreadBps: cliArguments.baseSpreadBps,
-    useLaser: cliArguments.useLaser
-  })
+  const { ammConfigSnapshot, transactionSummary } =
+    await createAmmConfigSnapshotFromArgs({
+      tooling,
+      ammPackageId,
+      poolId:
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+      basePythPriceFeedIdHex,
+      quotePythPriceFeedIdHex: basePythPriceFeedIdHex,
+      volatilitySpreadBps: cliArguments.volatilitySpreadBps,
+      baseSpreadBps: cliArguments.baseSpreadBps
+    })
 
   return {
-    ...createdAmmConfig,
+    ammConfigSnapshot,
+    basePythPriceFeedIdHex,
+    transactionSummary,
     didCreate: true
   }
 }
@@ -546,7 +540,7 @@ const buildAmmSeedOutput = ({
   didPublish,
   didCreateAmmConfig,
   ammConfigSnapshot,
-  pythPriceFeedIdHex,
+  basePythPriceFeedIdHex,
   transactionSummary
 }: {
   ammPackageId: string
@@ -554,16 +548,16 @@ const buildAmmSeedOutput = ({
   didPublish: boolean
   didCreateAmmConfig: boolean
   ammConfigSnapshot: AmmConfigSnapshot
-  pythPriceFeedIdHex?: string
+  basePythPriceFeedIdHex?: string
   transactionSummary?: { label?: string }
 }): AmmSeedOutput => ({
   ammPackageId,
   ammConfigId: ammConfigSnapshot.ammConfigOverview.configId,
   ammConfig: ammConfigSnapshot.ammConfigOverview,
   initialSharedVersion: ammConfigSnapshot.initialSharedVersion,
-  pythPriceFeedIdHex:
-    pythPriceFeedIdHex ??
-    ammConfigSnapshot.ammConfigOverview.pythPriceFeedIdHex,
+  basePythPriceFeedIdHex:
+    basePythPriceFeedIdHex ??
+    ammConfigSnapshot.ammConfigOverview.basePythPriceFeedIdHex,
   publishDigest,
   transactionSummary,
   didPublish,
@@ -589,7 +583,7 @@ runSuiScript(
 
       const {
         ammConfigSnapshot,
-        pythPriceFeedIdHex,
+        basePythPriceFeedIdHex,
         transactionSummary,
         didCreate
       } = await resolveOrCreateAmmConfig({
@@ -608,7 +602,7 @@ runSuiScript(
         didPublish,
         didCreateAmmConfig: didCreate,
         ammConfigSnapshot,
-        pythPriceFeedIdHex,
+        basePythPriceFeedIdHex,
         transactionSummary
       })
     }
@@ -642,12 +636,6 @@ runSuiScript(
       description:
         "Volatility spread in basis points (u64); defaults to the current config value when reusing, otherwise the AMM default.",
       demandOption: false
-    })
-    .option("useLaser", {
-      alias: ["use-laser"],
-      type: "boolean",
-      description:
-        "Enable the laser pricing path for the AMM; defaults to the current config value when reusing, otherwise false."
     })
     .option("pythPriceFeedId", {
       alias: ["pyth-price-feed-id", "pyth-feed-id"],

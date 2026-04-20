@@ -77,9 +77,8 @@ fun create_market_maker_for_pool(
     volatility_spread_bps: u64,
     feed_id_byte: u8,
 ): (MarketMaker, AdminCap) {
-    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let amm_config = config::create(
-        &pool,
+    let amm_config = config::new(
+        pool_id,
         base_spread_bps,
         volatility_spread_bps,
         build_pyth_price_feed_id(feed_id_byte),
@@ -92,7 +91,6 @@ fun create_market_maker_for_pool(
         amm_config,
         scenario.ctx(),
     );
-    test_scenario::return_shared(pool);
 
     (market_maker, market_maker_cap)
 }
@@ -177,8 +175,8 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let amm_config_a = config::create(
-        &pool,
+    let amm_config_a = config::new(
+        object::id(&pool),
         100,
         200,
         build_pyth_price_feed_id(3),
@@ -187,8 +185,8 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
         30,
         1000,
     );
-    let amm_config_b = config::create(
-        &pool,
+    let amm_config_b = config::new(
+        object::id(&pool),
         125,
         250,
         build_pyth_price_feed_id(4),
@@ -332,8 +330,8 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     let sui_currency = create_sui_currency();
     let usdc_currency = create_usdc_currency();
 
-    let updated_config = config::create(
-        &pool,
+    let updated_config = config::new(
+        object::id(&pool),
         updated_base_spread_bps,
         updated_volatility_spread_bps,
         build_pyth_price_feed_id(feed_id_byte),
@@ -505,8 +503,8 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
     market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
     assert_emitted!(market_maker_paused(market_maker_object.id()));
 
-    let updated_config = config::create(
-        &pool,
+    let updated_config = config::new(
+        object::id(&pool),
         120,
         240,
         build_pyth_price_feed_id(feed_id_byte),

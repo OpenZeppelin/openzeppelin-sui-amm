@@ -19,6 +19,10 @@ const EInvalidPythPriceFeedIdLength: vector<u8> = "pyth price feed id must be 32
 #[error(code = 4)]
 const EInvalidMaxConfRatioBps: vector<u8> =
     "max conf ratio bps must be greater than zero and at most 10000";
+#[error(code = 5)]
+const EInvalidOrderExpirationTime: vector<u8> = "order expiration time must be greater than zero";
+#[error(code = 6)]
+const EInvalidMaxPriceAge: vector<u8> = "max price age must be greater than zero";
 
 // === Constants ===
 
@@ -56,13 +60,14 @@ public struct AMMConfig has drop, store {
 
 // === Public Functions ===
 
-/// Creates a new AMM configuration object with validated inputs.
+/// Creates a new AMM configuration object from a pool ID.
+/// Useful for PTBs that cannot pass pool objects with generic type arguments.
 ///
 /// Pass the returned value into `executor::create` when
 /// creating a new executor or into `executor::update_market_maker`
 /// when replacing an existing market maker configuration.
-public fun create<BaseAsset, QuoteAsset>(
-    pool: &Pool<BaseAsset, QuoteAsset>,
+public fun new(
+    pool_id: ID,
     base_spread_bps: u64,
     volatility_spread_bps: u64,
     base_pyth_price_feed_id: vector<u8>,
@@ -71,13 +76,26 @@ public fun create<BaseAsset, QuoteAsset>(
     max_price_age_secs: u64,
     max_conf_ratio_bps: u64,
 ): AMMConfig {
-    assert_valid_amm_config_inputs!(
-        base_spread_bps,
-        volatility_spread_bps,
-        base_pyth_price_feed_id,
-        quote_pyth_price_feed_id,
-        max_conf_ratio_bps,
+    assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
+    assert!(base_spread_bps <= volatility_spread_bps, EBaseSpreadBpsExceedsVolatilitySpread);
+    assert!(
+        volatility_spread_bps <= HUNDRED_PERCENT_BPS,
+        EVolatilitySpreadBpsExceedsMaxBasisPoints,
     );
+    assert!(
+        base_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
+        EInvalidPythPriceFeedIdLength,
+    );
+    assert!(
+        quote_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
+        EInvalidPythPriceFeedIdLength,
+    );
+    assert!(
+        max_conf_ratio_bps > 0 && max_conf_ratio_bps <= HUNDRED_PERCENT_BPS,
+        EInvalidMaxConfRatioBps,
+    );
+    assert!(order_expiration_time_ms > 0, EInvalidOrderExpirationTime);
+    assert!(max_price_age_secs > 0, EInvalidMaxPriceAge);
 
     AMMConfig {
         base_spread_bps,
@@ -85,7 +103,7 @@ public fun create<BaseAsset, QuoteAsset>(
         active: true,
         base_pyth_price_feed_id,
         quote_pyth_price_feed_id,
-        pool_id: object::id(pool),
+        pool_id,
         base_price_publish_time: option::none(),
         quote_price_publish_time: option::none(),
         order_expiration_time_ms,
@@ -220,39 +238,4 @@ public(package) fun set_quote_price_publish_time(
     publish_time: u64,
 ): Option<u64> {
     config.quote_price_publish_time.swap_or_fill(publish_time)
-}
-
-// === Private Functions ===
-
-/// Validates all inputs for a new or updated configuration.
-macro fun assert_valid_amm_config_inputs(
-    $base_spread_bps: u64,
-    $volatility_spread_bps: u64,
-    $base_pyth_price_feed_id: vector<u8>,
-    $quote_pyth_price_feed_id: vector<u8>,
-    $max_conf_ratio_bps: u64,
-) {
-    let base_spread_bps = $base_spread_bps;
-    let volatility_spread_bps = $volatility_spread_bps;
-    let base_pyth_price_feed_id = $base_pyth_price_feed_id;
-    let quote_pyth_price_feed_id = $quote_pyth_price_feed_id;
-    let max_conf_ratio_bps = $max_conf_ratio_bps;
-    assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
-    assert!(base_spread_bps <= volatility_spread_bps, EBaseSpreadBpsExceedsVolatilitySpread);
-    assert!(
-        volatility_spread_bps <= HUNDRED_PERCENT_BPS,
-        EVolatilitySpreadBpsExceedsMaxBasisPoints,
-    );
-    assert!(
-        base_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
-        EInvalidPythPriceFeedIdLength,
-    );
-    assert!(
-        quote_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
-        EInvalidPythPriceFeedIdLength,
-    );
-    assert!(
-        max_conf_ratio_bps > 0 && max_conf_ratio_bps <= HUNDRED_PERCENT_BPS,
-        EInvalidMaxConfRatioBps,
-    );
 }

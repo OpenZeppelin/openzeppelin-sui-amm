@@ -14,27 +14,49 @@ import {
 } from "@sui-amm/tooling-core/utils/utility"
 import { parsePythPriceFeedIdBytes } from "../ptb/amm.ts"
 
-export const AMM_CONFIG_TYPE_SUFFIX = "::config::AMMConfig"
+export const AMM_CONFIG_TYPE_SUFFIX = "::executor::MarketMaker"
 export const AMM_ADMIN_CAP_TYPE_SUFFIX = "::executor::AdminCap"
 export const PROP_AMM_EXECUTOR_SUFFIX = "::executor::PropAmmApp"
 
 export const MAX_BASE_SPREAD_BPS = "10000"
 
+export const DEFAULT_ORDER_EXPIRATION_TIME_MS = "86400000"
+export const DEFAULT_MAX_PRICE_AGE_SECS = "60"
+export const DEFAULT_MAX_CONF_RATIO_BPS = "1000"
+
 export type AmmConfigOverview = {
   configId: string
   baseSpreadBps: string
   volatilitySpreadBps: string
-  useLaser: boolean
-  tradingPaused: boolean
-  pythPriceFeedIdHex: string
+  active: boolean
+  basePythPriceFeedIdHex: string
+  quotePythPriceFeedIdHex: string
+  poolId: string
+  orderExpirationTimeMs: string
+  maxPriceAgeSecs: string
+  maxConfRatioBps: string
 }
 
 type AmmConfigFields = {
+  active?: unknown
   base_spread_bps?: unknown
   volatility_spread_bps?: unknown
-  use_laser?: unknown
-  trading_paused?: unknown
-  pyth_price_feed_id?: unknown
+  base_pyth_price_feed_id?: unknown
+  quote_pyth_price_feed_id?: unknown
+  pool_id?: unknown
+  order_expiration_time_ms?: unknown
+  max_price_age_secs?: unknown
+  max_conf_ratio_bps?: unknown
+}
+
+type MarketMakerFields = {
+  config?: { fields?: AmmConfigFields } | AmmConfigFields
+}
+
+const unwrapNestedFields = <T>(value: unknown): T | undefined => {
+  if (!value || typeof value !== "object") return undefined
+  if ("fields" in value) return (value as { fields: T }).fields
+  return value as T
 }
 
 const requireNumericField = (value: unknown, label: string): string => {
@@ -48,13 +70,17 @@ const requireBooleanField = (value: unknown, label: string): boolean => {
   throw new Error(`${label} is required.`)
 }
 
-const requireFeedIdHex = (value: unknown): string => {
+const requireFeedIdHex = (value: unknown, label: string): string => {
   const formatted = formatVectorBytesAsHex(value)
   if (formatted === "Unknown") {
-    throw new Error("Pyth price feed id is required.")
+    throw new Error(`${label} is required.`)
   }
-
   return formatted
+}
+
+const requireStringField = (value: unknown, label: string): string => {
+  if (typeof value === "string") return value
+  throw new Error(`${label} is required.`)
 }
 
 const buildAmmConfigOverviewFromObject = ({
@@ -64,20 +90,42 @@ const buildAmmConfigOverviewFromObject = ({
   configId: string
   object: SuiObjectData
 }): AmmConfigOverview => {
-  const fields = unwrapMoveObjectFields<AmmConfigFields>(object)
+  const marketMakerFields = unwrapMoveObjectFields<MarketMakerFields>(object)
+  const config =
+    unwrapNestedFields<AmmConfigFields>(marketMakerFields.config) ?? {}
+
   return {
     configId,
     baseSpreadBps: requireNumericField(
-      fields.base_spread_bps,
+      config.base_spread_bps,
       "Base spread bps"
     ),
     volatilitySpreadBps: requireNumericField(
-      fields.volatility_spread_bps,
+      config.volatility_spread_bps,
       "Volatility spread bps"
     ),
-    useLaser: requireBooleanField(fields.use_laser, "Use laser flag"),
-    tradingPaused: requireBooleanField(fields.trading_paused, "Trading paused"),
-    pythPriceFeedIdHex: requireFeedIdHex(fields.pyth_price_feed_id)
+    active: requireBooleanField(config.active, "Active"),
+    basePythPriceFeedIdHex: requireFeedIdHex(
+      config.base_pyth_price_feed_id,
+      "Base Pyth price feed id"
+    ),
+    quotePythPriceFeedIdHex: requireFeedIdHex(
+      config.quote_pyth_price_feed_id,
+      "Quote Pyth price feed id"
+    ),
+    poolId: requireStringField(config.pool_id, "Pool id"),
+    orderExpirationTimeMs: requireNumericField(
+      config.order_expiration_time_ms,
+      "Order expiration time ms"
+    ),
+    maxPriceAgeSecs: requireNumericField(
+      config.max_price_age_secs,
+      "Max price age secs"
+    ),
+    maxConfRatioBps: requireNumericField(
+      config.max_conf_ratio_bps,
+      "Max conf ratio bps"
+    )
   }
 }
 
@@ -109,34 +157,55 @@ const resolveBaseSpreadBps = (rawValue?: string): bigint => {
   return baseSpreadBps
 }
 
-const resolvevolatilitySpreadBps = (rawValue?: string): bigint =>
+const resolveVolatilitySpreadBps = (rawValue?: string): bigint =>
   parseNonNegativeU64(
     rawValue ?? DEFAULT_VOLATILITY_SPREAD_BPS,
     "Volatility spread bps"
   )
 
-const resolveUseLaserFlag = (rawValue?: boolean): boolean => rawValue ?? false
-
 export const resolveAmmConfigInputs = ({
   volatilitySpreadBps,
   baseSpreadBps,
-  useLaser,
-  pythPriceFeedIdHex
+  basePythPriceFeedIdHex,
+  quotePythPriceFeedIdHex,
+  orderExpirationTimeMs,
+  maxPriceAgeSecs,
+  maxConfRatioBps
 }: {
   volatilitySpreadBps?: string
   baseSpreadBps?: string
-  useLaser?: boolean
-  pythPriceFeedIdHex: string
+  basePythPriceFeedIdHex: string
+  quotePythPriceFeedIdHex: string
+  orderExpirationTimeMs?: string
+  maxPriceAgeSecs?: string
+  maxConfRatioBps?: string
 }): {
   baseSpreadBps: bigint
   volatilitySpreadBps: bigint
-  useLaser: boolean
-  pythPriceFeedIdHex: string
-  pythPriceFeedIdBytes: number[]
+  basePythPriceFeedIdHex: string
+  basePythPriceFeedIdBytes: number[]
+  quotePythPriceFeedIdHex: string
+  quotePythPriceFeedIdBytes: number[]
+  orderExpirationTimeMs: bigint
+  maxPriceAgeSecs: bigint
+  maxConfRatioBps: bigint
 } => ({
   baseSpreadBps: resolveBaseSpreadBps(baseSpreadBps),
-  volatilitySpreadBps: resolvevolatilitySpreadBps(volatilitySpreadBps),
-  useLaser: resolveUseLaserFlag(useLaser),
-  pythPriceFeedIdHex,
-  pythPriceFeedIdBytes: parsePythPriceFeedIdBytes(pythPriceFeedIdHex)
+  volatilitySpreadBps: resolveVolatilitySpreadBps(volatilitySpreadBps),
+  basePythPriceFeedIdHex,
+  basePythPriceFeedIdBytes: parsePythPriceFeedIdBytes(basePythPriceFeedIdHex),
+  quotePythPriceFeedIdHex,
+  quotePythPriceFeedIdBytes: parsePythPriceFeedIdBytes(quotePythPriceFeedIdHex),
+  orderExpirationTimeMs: parseNonNegativeU64(
+    orderExpirationTimeMs ?? DEFAULT_ORDER_EXPIRATION_TIME_MS,
+    "Order expiration time ms"
+  ),
+  maxPriceAgeSecs: parseNonNegativeU64(
+    maxPriceAgeSecs ?? DEFAULT_MAX_PRICE_AGE_SECS,
+    "Max price age secs"
+  ),
+  maxConfRatioBps: parsePositiveU64(
+    maxConfRatioBps ?? DEFAULT_MAX_CONF_RATIO_BPS,
+    "Max conf ratio bps"
+  )
 })

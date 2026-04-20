@@ -51,16 +51,9 @@ const buildStatusBadge = ({
   )
 })
 
-const buildLaserBadge = (useLaser: boolean): TAmmConfigBadge =>
+const buildTradingBadge = (active: boolean): TAmmConfigBadge =>
   buildStatusBadge({
-    isActive: useLaser,
-    activeLabel: "Enabled",
-    inactiveLabel: "Disabled"
-  })
-
-const buildTradingBadge = (tradingPaused: boolean): TAmmConfigBadge =>
-  buildStatusBadge({
-    isActive: !tradingPaused,
+    isActive: active,
     activeLabel: "Live",
     inactiveLabel: "Paused"
   })
@@ -70,9 +63,9 @@ const buildAmmConfigDetails = (
 ): TAmmConfigDetails => ({
   baseSpreadBps: ammConfig.baseSpreadBps,
   volatilitySpreadBps: ammConfig.volatilitySpreadBps,
-  laserBadge: buildLaserBadge(ammConfig.useLaser),
-  tradingBadge: buildTradingBadge(ammConfig.tradingPaused),
-  pythPriceFeedIdHex: ammConfig.pythPriceFeedIdHex
+  tradingBadge: buildTradingBadge(ammConfig.active),
+  basePythPriceFeedIdHex: ammConfig.basePythPriceFeedIdHex,
+  quotePythPriceFeedIdHex: ammConfig.quotePythPriceFeedIdHex
 })
 
 const resolveContentState = ({
