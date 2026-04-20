@@ -28,7 +28,7 @@ const EPythPriceNonPositive: vector<u8> = "pyth price must be positive";
 #[error(code = 1)]
 const EPythExponentNonNegative: vector<u8> = "pyth price exponent_u128 must be negative";
 #[error(code = 2)]
-const ExponentTooLarge: vector<u8> = "price exponent too large";
+const EExponentTooLarge: vector<u8> = "price exponent too large";
 #[error(code = 3)]
 const EPythInvalidPriceValue: vector<u8> = "pyth price must be of valid size";
 #[error(code = 4)]
@@ -87,10 +87,10 @@ public struct Caps has store {
     withdraw_cap: WithdrawCap,
 }
 
-// === Init ===
-
 /// One-time publisher witness created at publish time.
 public struct EXECUTOR has drop {}
+
+// === Init ===
 
 /// Initializes publish-time metadata by claiming and keeping the package publisher object.
 fun init(publisher_witness: EXECUTOR, ctx: &mut TxContext) {
@@ -271,7 +271,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Protects from calling permissionless quote refresh with old pricing,
     // that will force market maker resubmit orders and loose priority.
     let is_price_stale =
-        market_maker.is_base_price_stale(base_pyth_price) 
+        market_maker.is_base_price_stale(base_pyth_price)
         && market_maker.is_quote_price_stale(quote_pyth_price);
     if (is_price_stale) {
         return
@@ -387,7 +387,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     );
 }
 
-// === View Functions ===
+// === View helpers ===
 
 /// Returns the market maker ID.
 public fun id(market_maker: &MarketMaker): ID {
@@ -561,8 +561,8 @@ fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8) {
     let exponent = expo_i64
         .get_magnitude_if_negative()
         .try_as_u8()
-        .destroy_or!(abort ExponentTooLarge);
-    assert!(exponent <= MAX_DECIMAL_POWER, ExponentTooLarge);
+        .destroy_or!(abort EExponentTooLarge);
+    assert!(exponent <= MAX_DECIMAL_POWER, EExponentTooLarge);
 
     (mantissa, exponent)
 }
@@ -575,8 +575,8 @@ fun deepbook_price(
     quote_decimals: u8,
     max_conf_ratio_bps: u64,
 ): u64 {
-    assert!(base_decimals <= MAX_DECIMAL_POWER, ExponentTooLarge);
-    assert!(quote_decimals <= MAX_DECIMAL_POWER, ExponentTooLarge);
+    assert!(base_decimals <= MAX_DECIMAL_POWER, EExponentTooLarge);
+    assert!(quote_decimals <= MAX_DECIMAL_POWER, EExponentTooLarge);
 
     let (base_mantissa, base_exponent) = deepbook_usd_price(base_price, max_conf_ratio_bps);
     let (quote_mantissa, quote_exponent) = deepbook_usd_price(quote_price, max_conf_ratio_bps);
@@ -616,8 +616,8 @@ fun quote_to_base_quantity(quote_quantity: u64, deepbook_price: u64): u64 {
 
 // === Test-Only Helpers ===
 
-#[test_only]
 /// Creates the package witness and runs init for tests.
+#[test_only]
 public fun test_init(ctx: &mut TxContext) {
     let publisher_witness = sui::test_utils::create_one_time_witness<EXECUTOR>();
     init(

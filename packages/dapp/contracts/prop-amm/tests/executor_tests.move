@@ -34,6 +34,8 @@ use sui::event;
 use sui::sui::SUI;
 use sui::test_scenario;
 
+// === Test-Only Helpers ===
+
 fun create_registry(scenario: &mut test_scenario::Scenario, sender: address) {
     scenario.next_tx(sender);
     registry::test_registry(scenario.ctx());

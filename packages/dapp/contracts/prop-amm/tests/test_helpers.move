@@ -1,3 +1,4 @@
+/// Shared test helpers for the AMM package tests.
 #[test_only]
 module openzeppelin_market_maker::test_helpers;
 
@@ -10,6 +11,8 @@ use sui::coin_registry::{Self, Currency};
 use sui::sui::SUI;
 use sui::test_scenario;
 
+// === Structs ===
+
 /// Test-only USDC type for DeepBook pool quote asset.
 public struct USDC has key {
     id: UID,
@@ -19,6 +22,8 @@ public struct USDC has key {
 public struct USDT has key {
     id: UID,
 }
+
+// === Test-Only Helpers ===
 
 /// Creates a `Currency<USDC>` for testing via `coin_registry`.
 /// Uses `tx_context::dummy()` to get a context with sender `@0x0` (required by coin_registry).
