@@ -15,6 +15,8 @@ use std::unit_test::assert_eq;
 use sui::sui::SUI;
 use sui::test_scenario;
 
+// === Test-Only Helpers ===
+
 fun create_registry_and_pool(scenario: &mut test_scenario::Scenario, sender: address): ID {
     scenario.next_tx(sender);
     registry::test_registry(scenario.ctx());

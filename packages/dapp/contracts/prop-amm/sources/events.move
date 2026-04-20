@@ -3,6 +3,8 @@ module openzeppelin_market_maker::events;
 
 use sui::event;
 
+// === Events ===
+
 /// Emitted when a market maker is created.
 public struct MarketMakerCreated has copy, drop {
     /// ID of the market maker object.
@@ -39,6 +41,8 @@ public struct MarketMakerConfigUpdated has copy, drop {
     market_maker_id: ID,
 }
 
+// === Package Functions ===
+
 /// Emit a `MarketMakerCreated` event.
 public(package) fun emit_market_maker_created(market_maker_id: ID) {
     event::emit(MarketMakerCreated { market_maker_id });
@@ -68,7 +72,7 @@ public(package) fun emit_market_maker_config_updated(market_maker_id: ID) {
     event::emit(MarketMakerConfigUpdated { market_maker_id });
 }
 
-// === Test only helpers ===
+// === Test-Only Helpers ===
 
 /// Builds a `MarketMakerCreated` payload.
 #[test_only]

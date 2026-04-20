@@ -94,7 +94,7 @@ public fun create<BaseAsset, QuoteAsset>(
     }
 }
 
-// === View Functions ===
+// === View helpers ===
 
 /// Returns the base spread in basis points.
 public fun base_spread_bps(config: &AMMConfig): u64 {
