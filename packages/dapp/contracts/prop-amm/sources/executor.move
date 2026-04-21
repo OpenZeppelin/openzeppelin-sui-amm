@@ -65,6 +65,7 @@ public struct AdminCap has key, store {
     executor_id: ID,
 }
 
+// TODO#q: rename to Executor
 /// Per-market maker state.
 public struct MarketMaker has key, store {
     /// Unique ID for the account object.
@@ -200,6 +201,8 @@ public fun deposit<T>(
 ) {
     assert!(market_maker.id() == cap.executor_id, EInvalidCap);
 
+    // TODO#q: record how much we deposited in quote (with base price conversion).
+
     market_maker.balance_manager.deposit_with_cap(&market_maker.caps.deposit_cap, coin, ctx)
 }
 
@@ -218,10 +221,15 @@ public fun withdraw<T>(
     assert!(market_maker.id() == cap.executor_id, EInvalidCap);
     assert!(!market_maker.config.active(), ENotPaused);
 
+    // TODO#q: record how much we withdrawed in quote (with base price conversion).
+
     market_maker
         .balance_manager
         .withdraw_with_cap(&market_maker.caps.withdraw_cap, withdraw_amount, ctx)
 }
+
+// TODO#q: move decimals retrieved from Currency to market module (or config/market).
+// TODO#q: refresh quotes api with laser api.
 
 /// Public quote refresh entrypoint for bot-driven PTBs.
 ///
@@ -293,12 +301,15 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Fetch deepbook's pool parameters.
     let (tick, lot_size, min_size) = pool.pool_book_params();
 
+    // TODO#q: doublecheck that price will be correct and we won't get bid and ask price equal. Force to have at least 1 tick difference between those parameters.
+    // TODO#q: configuration field to consider deepbook's price? (to not execute market order accidentaly)
     // Calculate bids/ask order prices.
     let bid_inner = compute_bid_price(oracle_mid_price, base_spread, tick);
     let bid_outer = compute_bid_price(oracle_mid_price, volatility_spread, tick);
     let ask_inner = compute_ask_price(oracle_mid_price, base_spread, tick);
     let ask_outer = compute_ask_price(oracle_mid_price, volatility_spread, tick);
 
+    // TODO#q: move balance distribution adjustment into config (5000 bps - default)
     // Split bid order balance equally (almost xD) between inner and outer spread,
     // and compute quantity in base asset (for deepbook limit order).
     let quote_balance = market_maker.balance_manager.balance<QuoteAsset>();
@@ -327,6 +338,13 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         .balance_manager
         .generate_proof_as_trader(&market_maker.caps.trade_cap, ctx);
 
+    // TODO#q: include settled balances into smart contract and event to calculate volume (volume calculation based on events off-chain is complex, since we should keep all the events).
+    // let account = pool.account(&market_maker.balance_manager);
+    // let settled: Balances = account.settled_balances();
+    // let base = settled.base(); // u64
+    // let quote = settled.quote(); // u64
+    // let deep = settled.deep(); // u64
+
     // Cancel all previous active orders.
     pool.cancel_all_orders(
         &mut market_maker.balance_manager,
@@ -337,6 +355,8 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
+
+    // TODO#q: include total balance after being settled into event
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
     market_maker.try_place_limit_order(
@@ -380,6 +400,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         ctx,
     );
 
+    // TODO#q: emit placed order ids (will be used to retrieve info about matched orders)
     events::emit_quote_updated(
         oracle_mid_price,
         market_maker.config.base_spread_bps(),
@@ -431,6 +452,7 @@ public fun cap_id(amm_cap: &AdminCap): ID {
 
 // === Private Functions ===
 
+// TODO#q: move to `market` module
 /// Returns true when the cached base price publish time is at least as recent as the incoming
 /// price timestamp, meaning the base feed has not advanced.
 fun is_base_price_stale(market_maker: &MarketMaker, price: Price): bool {
@@ -441,6 +463,7 @@ fun is_base_price_stale(market_maker: &MarketMaker, price: Price): bool {
         .destroy_or!(false)
 }
 
+// TODO#q: move to `market` module
 /// Returns true when the cached quote price publish time is at least as recent as the incoming
 /// price timestamp, meaning the quote feed has not advanced.
 fun is_quote_price_stale(market_maker: &MarketMaker, price: Price): bool {
@@ -566,6 +589,8 @@ fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8) {
 
     (mantissa, exponent)
 }
+
+// TODO#q: probably rename since we should have a function that can retrieve deepbook real price
 
 /// Derive the DeepBook base/quote price from base and quote USD prices.
 fun deepbook_price(

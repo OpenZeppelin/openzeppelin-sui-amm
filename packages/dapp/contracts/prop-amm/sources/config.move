@@ -1,6 +1,8 @@
 /// AMM configuration.
 module openzeppelin_market_maker::config;
 
+// TODO#q: rename module to amm_config (or config/amm)
+
 use deepbook::pool::Pool;
 use pyth::price_info::PriceInfoObject;
 
@@ -31,6 +33,10 @@ const HUNDRED_PERCENT_BPS: u64 = 10_000;
 const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 
 // === Structs ===
+
+// TODO#q: extract market configuration fields to `market` module (base_pyth_price_feed_id, quote_pyth_price_feed_id, pool_id, base_price_publish_time, quote_price_publish_time, )
+// TODO#q: move `active` flag to Executor
+// TODO#q: add balance aware pricing configuration
 
 /// AMM configuration shared across pools.
 public struct AMMConfig has drop, store {
