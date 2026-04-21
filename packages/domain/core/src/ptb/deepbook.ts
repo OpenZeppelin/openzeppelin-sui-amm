@@ -47,20 +47,3 @@ export const buildInitBalanceManagerMapTransaction = ({
 
   return transaction
 }
-
-export const buildCreateTraderAccountTransaction = ({
-  ammPackageId,
-  adminCapId
-}: {
-  ammPackageId: string
-  adminCapId: string
-}) => {
-  const transaction = newTransaction()
-
-  transaction.moveCall({
-    target: `${ammPackageId}::executor::create`,
-    arguments: [transaction.object(adminCapId)]
-  })
-
-  return transaction
-}

@@ -12,20 +12,12 @@ export type TTraderAccountCardContent =
   | { state: "error"; message: string }
   | { state: "ready"; details: TTraderAccountDetails }
 
-export type TTraderAccountCardHeaderAction = {
-  label: string
-  disabled: boolean
-  tooltip?: string
-  onClick: () => void
-}
-
 export type TTraderAccountCardViewModel = {
   title: string
   description: string
   explorerUrl?: string
   traderAccountId?: string
   content: TTraderAccountCardContent
-  headerAction?: TTraderAccountCardHeaderAction
 }
 
 export type TTraderAccountCardState = {

@@ -4,31 +4,11 @@ import {
   resolveTraderAccountType,
   type TraderAccountOverview
 } from "@sui-amm/domain-core/models/traderAccount"
-import { buildCreateTraderAccountTransaction } from "@sui-amm/domain-core/ptb/deepbook"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
-import { ensureCreatedObject } from "@sui-amm/tooling-node/transactions"
-import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
 
-const CREATE_MARKET_MAKER_LABEL = "create-market-maker"
-
-const buildSummaryLabel = (label: string): TransactionSummary => ({
-  label,
-  objectChanges: [],
-  balanceChanges: []
-})
-
-export type ResolveOrCreateTraderAccountResult = {
-  status: "existing" | "created" | "dry-run-created"
-  traderAccount?: TraderAccountOverview
-  note?: string
-  transactionSummaries: {
-    createTraderAccount?: TransactionSummary
-  }
+export type ResolveTraderAccountResult = {
+  traderAccount: TraderAccountOverview
 }
-
-type ResolveCreateDependencies = () => Promise<{
-  adminCapId: string
-}>
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message
@@ -89,58 +69,6 @@ const loadTraderAccountOverview = async ({
   return traderAccount
 }
 
-const createTraderAccount = async ({
-  tooling,
-  ammPackageId,
-  resolveCreateDependencies,
-  devInspect,
-  dryRun
-}: {
-  tooling: Pick<
-    Tooling,
-    "executeTransactionWithSummary" | "loadedEd25519KeyPair"
-  >
-  ammPackageId: string
-  resolveCreateDependencies: ResolveCreateDependencies
-  devInspect?: boolean
-  dryRun?: boolean
-}): Promise<{
-  traderAccountId?: string
-  summary: TransactionSummary
-}> => {
-  const { adminCapId } = await resolveCreateDependencies()
-  const createTransaction = buildCreateTraderAccountTransaction({
-    ammPackageId,
-    adminCapId
-  })
-  const createResult = await tooling.executeTransactionWithSummary({
-    transaction: createTransaction,
-    signer: tooling.loadedEd25519KeyPair,
-    summaryLabel: CREATE_MARKET_MAKER_LABEL,
-    devInspect,
-    dryRun
-  })
-
-  const summary =
-    createResult.summary ?? buildSummaryLabel(CREATE_MARKET_MAKER_LABEL)
-
-  if (dryRun) {
-    return { summary }
-  }
-
-  const createExecution = createResult.execution?.transactionResult
-  if (!createExecution)
-    throw new Error("Market maker creation did not execute.")
-
-  return {
-    traderAccountId: ensureCreatedObject(
-      "::executor::MarketMaker",
-      createExecution
-    ).objectId,
-    summary
-  }
-}
-
 const resolveExistingTraderAccountId = async ({
   tooling,
   traderAccountId,
@@ -168,31 +96,17 @@ const resolveExistingTraderAccountId = async ({
   return ownedTraderAccountIds[0]
 }
 
-export const resolveOrCreateTraderAccount = async ({
+export const resolveTraderAccount = async ({
   tooling,
   ammPackageId,
-  resolveCreateDependencies,
-  deepbookRegistryId,
   ownerAddress,
-  traderAccountId,
-  devInspect,
-  dryRun
+  traderAccountId
 }: {
-  tooling: Pick<
-    Tooling,
-    "executeTransactionWithSummary" | "loadedEd25519KeyPair" | "suiClient"
-  >
+  tooling: Pick<Tooling, "suiClient">
   ammPackageId: string
-  resolveCreateDependencies: ResolveCreateDependencies
-  deepbookRegistryId: string
   ownerAddress: string
   traderAccountId?: string
-  devInspect?: boolean
-  dryRun?: boolean
-}): Promise<ResolveOrCreateTraderAccountResult> => {
-  // Kept for backward-compatible callsites; no longer needed by create_market_maker.
-  void deepbookRegistryId
-
+}): Promise<ResolveTraderAccountResult> => {
   const resolvedTraderAccountId = await resolveExistingTraderAccountId({
     tooling,
     traderAccountId,
@@ -200,50 +114,17 @@ export const resolveOrCreateTraderAccount = async ({
     ammPackageId
   })
 
-  if (resolvedTraderAccountId) {
-    return {
-      status: "existing",
-      traderAccount: await loadTraderAccountOverview({
-        tooling,
-        traderAccountId: resolvedTraderAccountId,
-        ownerAddress,
-        ammPackageId
-      }),
-      transactionSummaries: {}
-    }
-  }
-
-  const createResult = await createTraderAccount({
-    tooling,
-    ammPackageId,
-    resolveCreateDependencies,
-    devInspect,
-    dryRun
-  })
-
-  if (dryRun) {
-    return {
-      status: "dry-run-created",
-      note: "Dry-run simulated market maker creation. Created object IDs are unavailable without execution.",
-      transactionSummaries: {
-        createTraderAccount: createResult.summary
-      }
-    }
-  }
-
-  if (!createResult.traderAccountId)
-    throw new Error("Market maker creation did not return a market maker id.")
+  if (!resolvedTraderAccountId)
+    throw new Error(
+      `No market maker found for owner ${ownerAddress} on package ${ammPackageId}. Run amm-create to create one, then re-run this script.`
+    )
 
   return {
-    status: "created",
     traderAccount: await loadTraderAccountOverview({
       tooling,
-      traderAccountId: createResult.traderAccountId,
+      traderAccountId: resolvedTraderAccountId,
       ownerAddress,
       ammPackageId
-    }),
-    transactionSummaries: {
-      createTraderAccount: createResult.summary
-    }
+    })
   }
 }

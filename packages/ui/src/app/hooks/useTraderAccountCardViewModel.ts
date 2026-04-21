@@ -11,7 +11,6 @@ import type {
 } from "../types/TTraderAccountCard"
 import useExplorerUrl from "./useExplorerUrl"
 import type useResolvedTraderAccountId from "./useResolvedTraderAccountId"
-import useTraderAccountHeaderActionViewModel from "./useTraderAccountHeaderActionViewModel"
 import { type TraderAccountStatus } from "./useTraderAccountOverview"
 
 const headerTitle = "Market maker"
@@ -109,7 +108,6 @@ const useTraderAccountCardViewModel = (): TTraderAccountCardState => {
     useTraderAccountContext()
   const traderAccountId = traderAccountResolution.traderAccountId
   const { status, traderAccount, error } = overview
-  const headerAction = useTraderAccountHeaderActionViewModel()
 
   const content = useMemo(
     () =>
@@ -134,8 +132,7 @@ const useTraderAccountCardViewModel = (): TTraderAccountCardState => {
     description: headerDescription,
     explorerUrl,
     traderAccountId,
-    content,
-    headerAction
+    content
   }
 
   return { viewModel }

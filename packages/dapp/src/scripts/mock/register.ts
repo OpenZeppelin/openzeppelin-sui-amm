@@ -1,6 +1,6 @@
 /**
  * Localnet trader-account setup: authorizes PropAmm in DeepBook, initializes the
- * balance manager map, and resolves or creates a market maker.
+ * balance manager map, and resolves the market maker.
  */
 import yargs from "yargs"
 
@@ -33,13 +33,12 @@ import {
   toTraderAccountResultView,
   toTransactionSummaryView
 } from "../../utils/deepbook-registration-script.ts"
-import { resolveSignerAmmAdminCapId } from "../../utils/amm.ts"
-import { resolveOrCreateTraderAccount } from "../../utils/deepbook-registration.ts"
+import { resolveTraderAccount } from "../../utils/deepbook-registration.ts"
 import { mockArtifactPath, type MockArtifact } from "../../utils/mocks.ts"
 import {
-  withAdminCapIdOption,
   withAmmPackageIdOption,
-  withCommonRegistrationOptions
+  withCommonRegistrationOptions,
+  withTransactionExecutionOptions
 } from "../../utils/register-script-options.ts"
 
 type RegisterLocalnetCliArgs = {
@@ -47,7 +46,6 @@ type RegisterLocalnetCliArgs = {
   deepbookPackageId?: string
   deepbookRegistryId?: string
   deepbookAdminCapId?: string
-  adminCapId?: string
   ownerAddress?: string
   traderAccountId?: string
   devInspect?: boolean
@@ -223,38 +221,21 @@ runSuiScript(
     })
     const deepbookArtifacts = await resolveDeepbookArtifacts(cliArguments)
 
-    let resolvedAdminCapId: string | undefined
-    let authorizeSummary: TransactionSummary | undefined
-    let initSummary: TransactionSummary | undefined
+    const { authorizeSummary, initSummary } = await ensureLocalnetDeepbookReady(
+      {
+        tooling,
+        deepbookArtifacts,
+        ammPackageId,
+        devInspect: cliArguments.devInspect,
+        dryRun: cliArguments.dryRun
+      }
+    )
 
-    const traderAccountResult = await resolveOrCreateTraderAccount({
+    const traderAccountResult = await resolveTraderAccount({
       tooling,
       ammPackageId,
-      resolveCreateDependencies: async () => {
-        resolvedAdminCapId ??= await resolveSignerAmmAdminCapId({
-          tooling,
-          ammPackageId,
-          signerAddress,
-          adminCapId: cliArguments.adminCapId
-        })
-
-        const localnetReady = await ensureLocalnetDeepbookReady({
-          tooling,
-          deepbookArtifacts,
-          ammPackageId,
-          devInspect: cliArguments.devInspect,
-          dryRun: cliArguments.dryRun
-        })
-        authorizeSummary ??= localnetReady.authorizeSummary
-        initSummary ??= localnetReady.initSummary
-
-        return { adminCapId: resolvedAdminCapId }
-      },
-      deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
       ownerAddress,
-      traderAccountId: cliArguments.traderAccountId,
-      devInspect: cliArguments.devInspect,
-      dryRun: cliArguments.dryRun
+      traderAccountId: cliArguments.traderAccountId
     })
 
     const traderAccountResultView =
@@ -265,15 +246,13 @@ runSuiScript(
         {
           ownerAddress,
           ammPackageId,
-          adminCapId: resolvedAdminCapId,
           deepbookPackageId: deepbookArtifacts.deepbookPackageId,
           deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
           deepbookAdminCapId: deepbookArtifacts.deepbookAdminCapId,
           ...traderAccountResultView,
           transactionSummaries: {
             authorize: toTransactionSummaryView(authorizeSummary),
-            initBalanceManagerMap: toTransactionSummaryView(initSummary),
-            ...traderAccountResultView.transactionSummaries
+            initBalanceManagerMap: toTransactionSummaryView(initSummary)
           }
         },
         cliArguments.json
@@ -284,13 +263,12 @@ runSuiScript(
     logTraderAccountResult({
       ownerAddress,
       ammPackageId,
-      adminCapId: resolvedAdminCapId,
       deepbookPackageId: deepbookArtifacts.deepbookPackageId,
       deepbookRegistryId: deepbookArtifacts.deepbookRegistryId,
       traderAccountResult
     })
   },
-  withAdminCapIdOption(
+  withTransactionExecutionOptions(
     withCommonRegistrationOptions(withAmmPackageIdOption(yargs()))
   )
     .option("deepbookPackageId", {
