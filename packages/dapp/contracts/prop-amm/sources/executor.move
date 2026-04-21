@@ -13,8 +13,6 @@ use deepbook::constants;
 use deepbook::pool::Pool;
 use openzeppelin_market_maker::config::AMMConfig;
 use openzeppelin_market_maker::events;
-use openzeppelin_math::rounding;
-use openzeppelin_math::u64 as oz_u64;
 use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
 use pyth::pyth;
@@ -611,12 +609,9 @@ fun deepbook_price(
 /// quantity_base = quantity_quote / deepbook_price
 /// => quantity_base = quantity_quote * FLOAT_SCALING / deepbook_price_mantissa
 fun quote_to_base_quantity(quote_quantity: u64, deepbook_price: u64): u64 {
-    oz_u64::mul_div(
-        quote_quantity,
-        constants::float_scaling(),
-        deepbook_price,
-        rounding::down(),
-    ).destroy_or!(abort EInvalidQuantity)
+    ((quote_quantity as u128) * constants::float_scaling_u128() / (deepbook_price as u128))
+        .try_as_u64()
+        .destroy_or!(abort EInvalidQuantity)
 }
 
 // === Test-Only Helpers ===
