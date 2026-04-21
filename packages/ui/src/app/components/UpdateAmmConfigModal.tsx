@@ -265,7 +265,7 @@ const UpdateAmmConfigModal = ({
 
         <ModalSection
           title="Configuration updates"
-          subtitle="Adjust spreads and oracle feed settings."
+          subtitle="Adjust spread parameters. Pool and Pyth feed updates are handled in a separate flow."
         >
           <div className="grid gap-4 md:grid-cols-2">
             <label className={modalFieldLabelClassName}>
@@ -335,71 +335,20 @@ const UpdateAmmConfigModal = ({
             </label>
           </div>
 
-          <label className={modalFieldLabelClassName}>
-            <span className={modalFieldTitleClassName}>
-              Base Pyth price feed id
-            </span>
-            <span className={modalFieldDescriptionClassName}>
-              32-byte hex string (0x...).
-            </span>
-            <input
-              value={formState.basePythPriceFeedIdHex}
-              onChange={(event) =>
-                handleInputChange("basePythPriceFeedIdHex", event.target.value)
-              }
-              onBlur={() => markFieldBlur("basePythPriceFeedIdHex")}
-              className={inputClassName(
-                shouldShowFieldError(
-                  "basePythPriceFeedIdHex",
-                  fieldErrors.basePythPriceFeedIdHex
-                )
-                  ? fieldErrors.basePythPriceFeedIdHex
-                  : undefined
-              )}
-              placeholder="0x..."
-            />
-            {shouldShowFieldError(
-              "basePythPriceFeedIdHex",
-              fieldErrors.basePythPriceFeedIdHex
-            ) ? (
-              <span className={modalFieldErrorTextClassName}>
-                {fieldErrors.basePythPriceFeedIdHex}
-              </span>
-            ) : undefined}
-          </label>
-
-          <label className={modalFieldLabelClassName}>
-            <span className={modalFieldTitleClassName}>
-              Quote Pyth price feed id
-            </span>
-            <span className={modalFieldDescriptionClassName}>
-              32-byte hex string (0x...).
-            </span>
-            <input
-              value={formState.quotePythPriceFeedIdHex}
-              onChange={(event) =>
-                handleInputChange("quotePythPriceFeedIdHex", event.target.value)
-              }
-              onBlur={() => markFieldBlur("quotePythPriceFeedIdHex")}
-              className={inputClassName(
-                shouldShowFieldError(
-                  "quotePythPriceFeedIdHex",
-                  fieldErrors.quotePythPriceFeedIdHex
-                )
-                  ? fieldErrors.quotePythPriceFeedIdHex
-                  : undefined
-              )}
-              placeholder="0x..."
-            />
-            {shouldShowFieldError(
-              "quotePythPriceFeedIdHex",
-              fieldErrors.quotePythPriceFeedIdHex
-            ) ? (
-              <span className={modalFieldErrorTextClassName}>
-                {fieldErrors.quotePythPriceFeedIdHex}
-              </span>
-            ) : undefined}
-          </label>
+          {ammConfig ? (
+            <div className="grid gap-3 text-xs sm:grid-cols-1">
+              <ConfigValueCard
+                label="Base Pyth price feed id (read-only)"
+                value={shortenId(ammConfig.basePythPriceFeedIdHex, 10, 8)}
+                detail={ammConfig.basePythPriceFeedIdHex}
+              />
+              <ConfigValueCard
+                label="Quote Pyth price feed id (read-only)"
+                value={shortenId(ammConfig.quotePythPriceFeedIdHex, 10, 8)}
+                detail={ammConfig.quotePythPriceFeedIdHex}
+              />
+            </div>
+          ) : undefined}
         </ModalSection>
       </ModalBody>
 

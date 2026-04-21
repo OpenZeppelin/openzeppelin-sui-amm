@@ -5,10 +5,10 @@ use sui::event;
 
 // === Events ===
 
-/// Emitted when a market maker is created.
-public struct MarketMakerCreated has copy, drop {
-    /// ID of the market maker object.
-    market_maker_id: ID,
+/// Emitted when a market maker executor is created.
+public struct ExecutorCreated has copy, drop {
+    /// ID of the market maker executor object.
+    executor_id: ID,
 }
 
 /// Emitted whenever quote levels are recomputed from oracle input.
@@ -21,31 +21,39 @@ public struct QuoteUpdated has copy, drop {
     volatility_spread_bps: u64,
 }
 
-/// Emitted when market maker trading is paused.
-public struct MarketMakerPaused has copy, drop {
-    /// ID of the market maker object.
-    market_maker_id: ID,
+/// Emitted when market maker executor trading is paused.
+public struct ExecutorPaused has copy, drop {
+    /// ID of the market maker executor object.
+    executor_id: ID,
 }
 
-/// Emitted when market maker trading is unpaused.
-public struct MarketMakerUnpaused has copy, drop {
-    /// ID of the market maker object.
-    market_maker_id: ID,
+/// Emitted when market maker executor trading is unpaused.
+public struct ExecutorUnpaused has copy, drop {
+    /// ID of the market maker executor object.
+    executor_id: ID,
 }
 
-/// Emitted when market maker configuration is updated.
+/// Emitted when the market maker executor configuration is updated.
 ///
 /// NOTE: Can be emitted when update triggered even without actual changes to config.
-public struct MarketMakerConfigUpdated has copy, drop {
-    /// ID of the market maker object.
-    market_maker_id: ID,
+public struct ExecutorConfigUpdated has copy, drop {
+    /// ID of the market maker executor object.
+    executor_id: ID,
+}
+
+/// Emitted when the market maker executor's market metadata is updated.
+///
+/// NOTE: Can be emitted when update triggered even without actual changes to market.
+public struct MarketUpdated has copy, drop {
+    /// ID of the market maker executor object.
+    executor_id: ID,
 }
 
 // === Package Functions ===
 
-/// Emit a `MarketMakerCreated` event.
-public(package) fun emit_market_maker_created(market_maker_id: ID) {
-    event::emit(MarketMakerCreated { market_maker_id });
+/// Emit an `ExecutorCreated` event.
+public(package) fun emit_executor_created(executor_id: ID) {
+    event::emit(ExecutorCreated { executor_id });
 }
 
 /// Emit a `QuoteUpdated` event.
@@ -57,27 +65,32 @@ public(package) fun emit_quote_updated(
     event::emit(QuoteUpdated { price, base_spread_bps, volatility_spread_bps });
 }
 
-/// Emit a `MarketMakerPaused` event.
-public(package) fun emit_market_maker_paused(market_maker_id: ID) {
-    event::emit(MarketMakerPaused { market_maker_id });
+/// Emit an `ExecutorPaused` event.
+public(package) fun emit_executor_paused(executor_id: ID) {
+    event::emit(ExecutorPaused { executor_id });
 }
 
-/// Emit a `MarketMakerUnpaused` event.
-public(package) fun emit_market_maker_unpaused(market_maker_id: ID) {
-    event::emit(MarketMakerUnpaused { market_maker_id });
+/// Emit an `ExecutorUnpaused` event.
+public(package) fun emit_executor_unpaused(executor_id: ID) {
+    event::emit(ExecutorUnpaused { executor_id });
 }
 
-/// Emit a `MarketMakerConfigUpdated` event.
-public(package) fun emit_market_maker_config_updated(market_maker_id: ID) {
-    event::emit(MarketMakerConfigUpdated { market_maker_id });
+/// Emit an `ExecutorConfigUpdated` event.
+public(package) fun emit_executor_config_updated(executor_id: ID) {
+    event::emit(ExecutorConfigUpdated { executor_id });
+}
+
+/// Emit a `MarketUpdated` event.
+public(package) fun emit_market_updated(executor_id: ID) {
+    event::emit(MarketUpdated { executor_id });
 }
 
 // === Test-Only Helpers ===
 
-/// Builds a `MarketMakerCreated` payload.
+/// Builds an `ExecutorCreated` payload.
 #[test_only]
-public(package) fun market_maker_created(market_maker_id: ID): MarketMakerCreated {
-    MarketMakerCreated { market_maker_id }
+public(package) fun executor_created(executor_id: ID): ExecutorCreated {
+    ExecutorCreated { executor_id }
 }
 
 /// Builds a `QuoteUpdated` payload.
@@ -90,20 +103,26 @@ public(package) fun quote_updated(
     QuoteUpdated { price, base_spread_bps, volatility_spread_bps }
 }
 
-/// Builds a `MarketMakerPaused` payload.
+/// Builds an `ExecutorPaused` payload.
 #[test_only]
-public(package) fun market_maker_paused(market_maker_id: ID): MarketMakerPaused {
-    MarketMakerPaused { market_maker_id }
+public(package) fun executor_paused(executor_id: ID): ExecutorPaused {
+    ExecutorPaused { executor_id }
 }
 
-/// Builds a `MarketMakerUnpaused` payload.
+/// Builds an `ExecutorUnpaused` payload.
 #[test_only]
-public(package) fun market_maker_unpaused(market_maker_id: ID): MarketMakerUnpaused {
-    MarketMakerUnpaused { market_maker_id }
+public(package) fun executor_unpaused(executor_id: ID): ExecutorUnpaused {
+    ExecutorUnpaused { executor_id }
 }
 
-/// Builds a `MarketMakerConfigUpdated` payload.
+/// Builds an `ExecutorConfigUpdated` payload.
 #[test_only]
-public(package) fun market_maker_config_updated(market_maker_id: ID): MarketMakerConfigUpdated {
-    MarketMakerConfigUpdated { market_maker_id }
+public(package) fun executor_config_updated(executor_id: ID): ExecutorConfigUpdated {
+    ExecutorConfigUpdated { executor_id }
+}
+
+/// Builds a `MarketUpdated` payload.
+#[test_only]
+public(package) fun market_updated(executor_id: ID): MarketUpdated {
+    MarketUpdated { executor_id }
 }

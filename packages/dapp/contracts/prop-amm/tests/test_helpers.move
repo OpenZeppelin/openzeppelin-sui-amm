@@ -5,7 +5,7 @@ module openzeppelin_market_maker::test_helpers;
 use deepbook::constants;
 use deepbook::pool;
 use deepbook::registry;
-use openzeppelin_market_maker::config;
+use openzeppelin_market_maker::market;
 use sui::coin;
 use sui::coin_registry::{Self, Currency};
 use sui::sui::SUI;
@@ -134,10 +134,10 @@ public(package) macro fun assert_emitted<$T>($expected_event: $T) {
 
 /// Builds a dummy Pyth feed ID with a caller-provided byte value.
 public(package) fun build_pyth_price_feed_id(byte_value: u8): vector<u8> {
-    vector::tabulate!(config::pyth_price_identifier_length(), |_| byte_value)
+    vector::tabulate!(market::pyth_price_identifier_length(), |_| byte_value)
 }
 
 /// Builds a dummy Pyth feed ID with invalid length.
 public(package) fun build_invalid_pyth_price_feed_id(): vector<u8> {
-    vector::tabulate!(config::pyth_price_identifier_length() - 1, |_| 0)
+    vector::tabulate!(market::pyth_price_identifier_length() - 1, |_| 0)
 }

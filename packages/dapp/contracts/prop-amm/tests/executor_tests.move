@@ -10,13 +10,15 @@ use deepbook::registry::{Self, Registry};
 use openzeppelin_market_maker::config;
 use openzeppelin_market_maker::events::{
     QuoteUpdated,
-    market_maker_config_updated,
-    market_maker_created,
-    market_maker_paused,
-    market_maker_unpaused,
+    executor_config_updated,
+    executor_created,
+    executor_paused,
+    executor_unpaused,
+    market_updated,
     quote_updated
 };
-use openzeppelin_market_maker::executor::{Self, MarketMaker, AdminCap};
+use openzeppelin_market_maker::executor::{Self, Executor, AdminCap};
+use openzeppelin_market_maker::market;
 use openzeppelin_market_maker::test_helpers::{
     USDC,
     USDT,
@@ -24,9 +26,9 @@ use openzeppelin_market_maker::test_helpers::{
     build_pyth_price_feed_id,
     create_pool,
     create_sui_currency,
-    create_usdc_currency,
-    create_usdt_currency
+    create_usdc_currency
 };
+use sui::coin_registry::Currency;
 use std::unit_test::{assert_eq, destroy};
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, mint_for_testing};
@@ -70,33 +72,38 @@ fun publish_price_feed(scenario: &mut test_scenario::Scenario, sender: address, 
     test_scenario::return_shared(clock_for_price_feed);
 }
 
-fun create_market_maker_for_pool(
+fun create_executor_for_pool(
     scenario: &mut test_scenario::Scenario,
-    pool_id: ID,
+    sender: address,
+    pool: &Pool<SUI, USDC>,
+    base_currency: &Currency<SUI>,
+    quote_currency: &Currency<USDC>,
     base_spread_bps: u64,
     volatility_spread_bps: u64,
     feed_id_byte: u8,
-): (MarketMaker, AdminCap) {
+): (Executor, AdminCap) {
+    let market = market::new(
+        pool,
+        base_currency,
+        quote_currency,
+        build_pyth_price_feed_id(feed_id_byte),
+        build_pyth_price_feed_id(feed_id_byte),
+    );
     let amm_config = config::new(
-        pool_id,
         base_spread_bps,
         volatility_spread_bps,
-        build_pyth_price_feed_id(feed_id_byte),
-        build_pyth_price_feed_id(feed_id_byte),
         30_000,
         30,
         1000,
     );
-    let (market_maker, market_maker_cap) = executor::create(
-        amm_config,
-        scenario.ctx(),
-    );
-
-    (market_maker, market_maker_cap)
+    // Restore the native tx sender after `tx_context::dummy()` inside the `create_*_currency`
+    // helpers replaced it with @0x0.
+    scenario.next_tx(sender);
+    executor::create(market, amm_config, scenario.ctx())
 }
 
 #[test]
-fun create_market_maker_sets_owner_and_emits_created_event() {
+fun create_executor_sets_owner_and_emits_created_event() {
     let sender = @0x10;
     let mut scenario = test_scenario::begin(sender);
 
@@ -106,26 +113,37 @@ fun create_market_maker_sets_owner_and_emits_created_event() {
 
     scenario.next_tx(sender);
 
-    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         100,
         200,
         1,
     );
 
-    assert_emitted!(market_maker_created(market_maker_object.id()));
-    assert_eq!(market_maker_object.owner(), sender);
-    assert_eq!(market_maker_object.id(), object::id(&market_maker_object));
-    assert_eq!(market_maker_cap.cap_id(), object::id(&market_maker_cap));
+    assert_emitted!(executor_created(executor_object.id()));
+    assert_eq!(executor_object.owner(), sender);
+    assert_eq!(executor_object.id(), object::id(&executor_object));
+    assert_eq!(executor_cap.cap_id(), object::id(&executor_cap));
+    assert_eq!(executor_object.market().pool_id(), pool_id);
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
     scenario.end();
 }
 
 #[test]
-fun create_market_maker_and_transfer_moves_objects_to_owner() {
+fun create_executor_and_transfer_moves_objects_to_owner() {
     let sender = @0x11;
     let owner = @0x12;
     let mut scenario = test_scenario::begin(sender);
@@ -136,35 +154,45 @@ fun create_market_maker_and_transfer_moves_objects_to_owner() {
 
     scenario.next_tx(sender);
 
-    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         100,
         200,
         2,
     );
-    let market_maker_id = market_maker_object.id();
-    let market_maker_cap_id = market_maker_cap.cap_id();
+    let executor_id = executor_object.id();
+    let executor_cap_id = executor_cap.cap_id();
 
-    transfer::public_transfer(market_maker_object, owner);
-    transfer::public_transfer(market_maker_cap, owner);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, owner);
+    transfer::public_transfer(executor_cap, owner);
 
     scenario.next_tx(owner);
 
-    let market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: AdminCap = scenario.take_from_sender();
+    let executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
 
-    assert_eq!(market_maker_object.owner(), sender);
-    assert_eq!(market_maker_object.id(), market_maker_id);
-    assert_eq!(market_maker_cap.cap_id(), market_maker_cap_id);
+    assert_eq!(executor_object.owner(), sender);
+    assert_eq!(executor_object.id(), executor_id);
+    assert_eq!(executor_cap.cap_id(), executor_cap_id);
 
-    transfer::public_transfer(market_maker_object, owner);
-    transfer::public_transfer(market_maker_cap, owner);
+    transfer::public_transfer(executor_object, owner);
+    transfer::public_transfer(executor_cap, owner);
     scenario.end();
 }
 
 #[test]
-fun create_market_maker_creates_distinct_accounts_and_caps() {
+fun create_executor_creates_distinct_accounts_and_caps() {
     let sender = @0x13;
     let mut scenario = test_scenario::begin(sender);
 
@@ -175,52 +203,60 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let amm_config_a = config::new(
-        object::id(&pool),
-        100,
-        200,
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let market_a = market::new(
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         build_pyth_price_feed_id(3),
         build_pyth_price_feed_id(3),
-        30_000,
-        30,
-        1000,
     );
-    let amm_config_b = config::new(
-        object::id(&pool),
-        125,
-        250,
+    let market_b = market::new(
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         build_pyth_price_feed_id(4),
         build_pyth_price_feed_id(4),
-        30_000,
-        30,
-        1000,
     );
-    let (market_maker_a, market_maker_cap_a) = executor::create(
+    let amm_config_a = config::new(100, 200, 30_000, 30, 1000);
+    let amm_config_b = config::new(125, 250, 30_000, 30, 1000);
+
+    // Restore the native tx sender after `create_sui_currency`/`create_usdc_currency` used
+    // `tx_context::dummy()` and reset it to @0x0.
+    scenario.next_tx(sender);
+
+    let (executor_a, executor_cap_a) = executor::create(
+        market_a,
         amm_config_a,
         scenario.ctx(),
     );
-    let (market_maker_b, market_maker_cap_b) = executor::create(
+    let (executor_b, executor_cap_b) = executor::create(
+        market_b,
         amm_config_b,
         scenario.ctx(),
     );
 
-    assert!(market_maker_a.id() != market_maker_b.id());
-    assert!(market_maker_cap_a.cap_id() != market_maker_cap_b.cap_id());
-    assert!(market_maker_a.trade_cap_id() != market_maker_b.trade_cap_id());
-    assert!(market_maker_a.deposit_cap_id() != market_maker_b.deposit_cap_id());
-    assert!(market_maker_a.withdraw_cap_id() != market_maker_b.withdraw_cap_id());
-    assert!(market_maker_a.balance_manager().id() != market_maker_b.balance_manager().id());
+    assert!(executor_a.id() != executor_b.id());
+    assert!(executor_cap_a.cap_id() != executor_cap_b.cap_id());
+    assert!(executor_a.trade_cap_id() != executor_b.trade_cap_id());
+    assert!(executor_a.deposit_cap_id() != executor_b.deposit_cap_id());
+    assert!(executor_a.withdraw_cap_id() != executor_b.withdraw_cap_id());
+    assert!(executor_a.balance_manager().id() != executor_b.balance_manager().id());
 
     test_scenario::return_shared(pool);
-    transfer::public_transfer(market_maker_a, sender);
-    transfer::public_transfer(market_maker_cap_a, sender);
-    transfer::public_transfer(market_maker_b, sender);
-    transfer::public_transfer(market_maker_cap_b, sender);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_a, sender);
+    transfer::public_transfer(executor_cap_a, sender);
+    transfer::public_transfer(executor_b, sender);
+    transfer::public_transfer(executor_cap_b, sender);
     scenario.end();
 }
 
 #[test]
-fun deposit_and_withdraw_updates_market_maker_balance() {
+fun deposit_and_withdraw_updates_executor_balance() {
     let sender = @0x14;
     let feed_id_byte = 5;
     let deposit_amount = 50 * constants::float_scaling();
@@ -234,34 +270,44 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
 
     scenario.next_tx(sender);
 
-    let (mut market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         100,
         200,
         feed_id_byte,
     );
 
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<SUI>(deposit_amount, scenario.ctx()),
         scenario.ctx(),
     );
     assert_eq!(event::events_by_type<BalanceEvent>().length(), 1);
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: AdminCap = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let clock: Clock = scenario.take_shared();
 
-    market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
-    let withdrawn_coin = market_maker_object.withdraw<SUI>(
-        &market_maker_cap,
+    executor_object.pause(&executor_cap, &mut pool, &clock, scenario.ctx());
+    let withdrawn_coin = executor_object.withdraw<SUI>(
+        &executor_cap,
         withdraw_amount,
         scenario.ctx(),
     );
@@ -269,20 +315,20 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
 
     assert_eq!(withdrawn_coin.value(), withdraw_amount);
     assert_eq!(
-        market_maker_object.balance_manager().balance<SUI>(),
+        executor_object.balance_manager().balance<SUI>(),
         deposit_amount - withdraw_amount,
     );
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(clock);
     coin::burn_for_testing(withdrawn_coin);
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
     scenario.end();
 }
 
 #[test]
-fun update_market_maker_replaces_config_before_refreshing_quotes() {
+fun update_config_replaces_config_before_refreshing_quotes() {
     let sender = @0x15;
     let updated_base_spread_bps = 150;
     let updated_volatility_spread_bps = 300;
@@ -298,54 +344,57 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
 
     scenario.next_tx(sender);
 
-    let (mut market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         100,
         200,
         feed_id_byte,
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<SUI>(1_000_000 * constants::float_scaling(), scenario.ctx()),
         scenario.ctx(),
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<USDC>(quote_balance, scenario.ctx()),
         scenario.ctx(),
     );
     assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: AdminCap = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let updated_config = config::new(
-        object::id(&pool),
         updated_base_spread_bps,
         updated_volatility_spread_bps,
-        build_pyth_price_feed_id(feed_id_byte),
-        build_pyth_price_feed_id(feed_id_byte),
         30_000,
         30,
         1000,
     );
-    market_maker_object.update_market_maker(&market_maker_cap, updated_config);
-    assert_emitted!(market_maker_config_updated(market_maker_object.id()));
-    market_maker_object.refresh_quotes(
+    executor_object.update_config(&executor_cap, updated_config);
+    assert_emitted!(executor_config_updated(executor_object.id()));
+    executor_object.refresh_quotes(
         &mut pool,
-        &sui_currency,
-        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -363,15 +412,13 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
     test_scenario::return_shared(clock);
-    destroy(sui_currency);
-    destroy(usdc_currency);
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
     scenario.end();
 }
 
 #[test]
-fun pause_and_unpause_emit_events_and_toggle_market_maker_activity() {
+fun pause_and_unpause_emit_events_and_toggle_executor_activity() {
     let sender = @0x16;
     let feed_id_byte = 12;
     let mut scenario = test_scenario::begin(sender);
@@ -383,36 +430,46 @@ fun pause_and_unpause_emit_events_and_toggle_market_maker_activity() {
 
     scenario.next_tx(sender);
 
-    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         100,
         200,
         feed_id_byte,
     );
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: AdminCap = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let clock: Clock = scenario.take_shared();
 
-    market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
-    assert_emitted!(market_maker_paused(market_maker_object.id()));
-    assert!(!market_maker_object.config().active());
+    executor_object.pause(&executor_cap, &mut pool, &clock, scenario.ctx());
+    assert_emitted!(executor_paused(executor_object.id()));
+    assert!(!executor_object.active());
 
-    market_maker_object.unpause(&market_maker_cap);
-    assert_emitted!(market_maker_unpaused(market_maker_object.id()));
-    assert!(market_maker_object.config().active());
+    executor_object.unpause(&executor_cap);
+    assert_emitted!(executor_unpaused(executor_object.id()));
+    assert!(executor_object.active());
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(clock);
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
     scenario.end();
 }
 
@@ -429,48 +486,58 @@ fun unpause_emits_event_in_followup_transaction() {
 
     scenario.next_tx(sender);
 
-    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         100,
         200,
         feed_id_byte,
     );
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: AdminCap = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let clock: Clock = scenario.take_shared();
 
-    market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
-    assert_emitted!(market_maker_paused(market_maker_object.id()));
+    executor_object.pause(&executor_cap, &mut pool, &clock, scenario.ctx());
+    assert_emitted!(executor_paused(executor_object.id()));
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(clock);
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: AdminCap = scenario.take_from_sender();
-    market_maker_object.unpause(&market_maker_cap);
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
+    executor_object.unpause(&executor_cap);
 
-    assert_emitted!(market_maker_unpaused(market_maker_object.id()));
-    assert!(market_maker_object.config().active());
+    assert_emitted!(executor_unpaused(executor_object.id()));
+    assert!(executor_object.active());
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
     scenario.end();
 }
 
 #[test]
-fun update_market_maker_from_paused_emits_unpaused_event() {
+fun update_config_preserves_paused_state() {
     let sender = @0x18;
     let feed_id_byte = 14;
     let mut scenario = test_scenario::begin(sender);
@@ -482,48 +549,162 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
 
     scenario.next_tx(sender);
 
-    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         100,
         200,
         feed_id_byte,
     );
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
-    let market_maker_cap: AdminCap = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let clock: Clock = scenario.take_shared();
 
-    market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
-    assert_emitted!(market_maker_paused(market_maker_object.id()));
+    executor_object.pause(&executor_cap, &mut pool, &clock, scenario.ctx());
+    assert_emitted!(executor_paused(executor_object.id()));
 
-    let updated_config = config::new(
-        object::id(&pool),
-        120,
-        240,
-        build_pyth_price_feed_id(feed_id_byte),
-        build_pyth_price_feed_id(feed_id_byte),
-        30_000,
-        30,
-        1000,
-    );
-    market_maker_object.update_market_maker(&market_maker_cap, updated_config);
+    let updated_config = config::new(120, 240, 30_000, 30, 1000);
+    executor_object.update_config(&executor_cap, updated_config);
 
-    assert_emitted!(market_maker_config_updated(market_maker_object.id()));
-    assert_emitted!(market_maker_unpaused(market_maker_object.id()));
-    assert!(market_maker_object.config().active());
+    assert_emitted!(executor_config_updated(executor_object.id()));
+    assert!(!executor_object.active());
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(clock);
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
     scenario.end();
+}
+
+#[test]
+fun update_market_replaces_market_while_paused() {
+    let sender = @0x19;
+    let feed_id_byte = 15;
+    let updated_feed_id_byte = 16;
+    let mut scenario = test_scenario::begin(sender);
+
+    executor::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    // Create currencies once and reuse for both `market::new` calls; `create_sui_currency`
+    // and `create_usdc_currency` cannot be called twice because each migrates the same legacy
+    // metadata into a fresh registry and the derived object already exists globally.
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
+        &mut scenario,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        100,
+        200,
+        feed_id_byte,
+    );
+
+    test_scenario::return_shared(pool);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+
+    executor_object.pause(&executor_cap, &mut pool, &clock, scenario.ctx());
+
+    let updated_market = market::new(
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        build_pyth_price_feed_id(updated_feed_id_byte),
+        build_pyth_price_feed_id(updated_feed_id_byte),
+    );
+    executor_object.update_market(&executor_cap, updated_market);
+
+    assert_emitted!(market_updated(executor_object.id()));
+    assert_eq!(
+        executor_object.market().base_pyth_price_feed_id(),
+        build_pyth_price_feed_id(updated_feed_id_byte),
+    );
+    assert_eq!(
+        executor_object.market().quote_pyth_price_feed_id(),
+        build_pyth_price_feed_id(updated_feed_id_byte),
+    );
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(clock);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
+    scenario.end();
+}
+
+#[test, expected_failure(abort_code = executor::EInvalidMarketUpdate)]
+fun update_market_rejects_while_active() {
+    let sender = @0x1a;
+    let feed_id_byte = 17;
+    let updated_feed_id_byte = 18;
+    let mut scenario = test_scenario::begin(sender);
+
+    executor::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (mut executor_object, executor_cap) = create_executor_for_pool(
+        &mut scenario,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        100,
+        200,
+        feed_id_byte,
+    );
+
+    let updated_market = market::new(
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        build_pyth_price_feed_id(updated_feed_id_byte),
+        build_pyth_price_feed_id(updated_feed_id_byte),
+    );
+    executor_object.update_market(&executor_cap, updated_market);
+
+    abort
 }
 
 #[test]
@@ -543,41 +724,47 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
 
     scenario.next_tx(sender);
 
-    let (mut market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         base_spread_bps,
         volatility_spread_bps,
         feed_id_byte,
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<SUI>(1_000_000 * constants::float_scaling(), scenario.ctx()),
         scenario.ctx(),
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<USDC>(quote_balance, scenario.ctx()),
         scenario.ctx(),
     );
     assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
-    market_maker_object.refresh_quotes(
+    executor_object.refresh_quotes(
         &mut pool,
-        &sui_currency,
-        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -596,9 +783,7 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
     test_scenario::return_shared(clock);
-    destroy(sui_currency);
-    destroy(usdc_currency);
-    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(executor_object, sender);
     scenario.end();
 }
 
@@ -618,43 +803,49 @@ fun refresh_quotes_ignores_replayed_publish_time() {
 
     scenario.next_tx(sender);
 
-    let (mut market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         base_spread_bps,
         volatility_spread_bps,
         feed_id_byte,
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<SUI>(1_000_000 * constants::float_scaling(), scenario.ctx()),
         scenario.ctx(),
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<USDC>(quote_balance, scenario.ctx()),
         scenario.ctx(),
     );
     assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     assert_eq!(event::events_by_type<QuoteUpdated>().length(), 0);
 
-    market_maker_object.refresh_quotes(
+    executor_object.refresh_quotes(
         &mut pool,
-        &sui_currency,
-        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -663,10 +854,8 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     assert_eq!(event::events_by_type<QuoteUpdated>().length(), 1);
 
     // Same oracle publish timestamp should be treated as stale and skip quote refresh.
-    market_maker_object.refresh_quotes(
+    executor_object.refresh_quotes(
         &mut pool,
-        &sui_currency,
-        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -677,9 +866,7 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
     test_scenario::return_shared(clock);
-    destroy(sui_currency);
-    destroy(usdc_currency);
-    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(executor_object, sender);
     scenario.end();
 }
 
@@ -698,40 +885,46 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
 
     scenario.next_tx(sender);
 
-    let (mut market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         100,
         200,
         config_feed_id_byte,
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<SUI>(1_000_000 * constants::float_scaling(), scenario.ctx()),
         scenario.ctx(),
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<USDC>(quote_balance, scenario.ctx()),
         scenario.ctx(),
     );
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
-    market_maker_object.refresh_quotes(
+    executor_object.refresh_quotes(
         &mut pool,
-        &sui_currency,
-        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -773,29 +966,35 @@ fun refresh_quotes_rejects_when_pool_mismatch() {
 
     scenario.next_tx(sender);
 
-    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(configured_pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        configured_pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         100,
         200,
         feed_id_byte,
     );
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
     let mut other_pool: Pool<SUI, USDT> = scenario.take_shared_by_id(other_pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
-    let sui_currency = create_sui_currency();
-    let usdt_currency = create_usdt_currency();
 
-    market_maker_object.refresh_quotes(
+    executor_object.refresh_quotes(
         &mut other_pool,
-        &sui_currency,
-        &usdt_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -823,41 +1022,47 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
 
     scenario.next_tx(sender);
 
-    let (mut market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
-        pool_id,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         base_spread_bps,
         volatility_spread_bps,
         feed_id_byte,
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<SUI>(2 * constants::min_size(), scenario.ctx()),
         scenario.ctx(),
     );
-    market_maker_object.deposit(
-        &market_maker_cap,
+    executor_object.deposit(
+        &executor_cap,
         mint_for_testing<USDC>(quote_balance, scenario.ctx()),
         scenario.ctx(),
     );
     assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
-    transfer::public_transfer(market_maker_object, sender);
-    transfer::public_transfer(market_maker_cap, sender);
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
 
     scenario.next_tx(sender);
 
-    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let mut executor_object: Executor = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
     let clock: Clock = scenario.take_shared();
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
-    market_maker_object.refresh_quotes(
+    executor_object.refresh_quotes(
         &mut pool,
-        &sui_currency,
-        &usdc_currency,
         &price_info_object,
         &price_info_object,
         &clock,
@@ -869,9 +1074,7 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);
     test_scenario::return_shared(clock);
-    destroy(sui_currency);
-    destroy(usdc_currency);
-    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(executor_object, sender);
 
     scenario.next_tx(maker);
 

@@ -13,10 +13,10 @@ import {
   unwrapMoveFields
 } from "@sui-amm/tooling-core/utils/move-values"
 
-export const MARKET_MAKER_TYPE_SUFFIX = "::executor::MarketMaker"
+export const EXECUTOR_TYPE_SUFFIX = "::executor::Executor"
 
 export const resolveTraderAccountType = (packageId: string) =>
-  `${packageId}${MARKET_MAKER_TYPE_SUFFIX}`
+  `${packageId}${EXECUTOR_TYPE_SUFFIX}`
 
 export type TraderAccountOverview = {
   traderAccountId: string
@@ -59,7 +59,7 @@ const resolveCapId = (value: unknown, label: string) => {
 const resolveCapIds = (capIdsValue: unknown) => {
   const capIdsFields = unwrapMoveFields(capIdsValue)
   if (!capIdsFields) {
-    throw new Error("Market maker cap IDs are required.")
+    throw new Error("Market maker executor cap IDs are required.")
   }
 
   const capIds = capIdsFields as TraderAccountCapFields
@@ -95,7 +95,7 @@ const resolveOwnerAddress = ({
     return extractOwnerAddress(owner)
   }
 
-  throw new Error("Market maker owner is required.")
+  throw new Error("Market maker executor owner is required.")
 }
 
 const buildTraderAccountOverviewFromObject = ({
@@ -144,7 +144,7 @@ export const getTraderAccountOverview = async (
   const expectedType = resolveTraderAccountType(ammPackageId)
   if (object.type !== expectedType)
     throw new Error(
-      `Object ${traderAccountId} has unexpected type "${object.type}"; expected "${expectedType}" (likely wrong package id or not a market maker object).`
+      `Object ${traderAccountId} has unexpected type "${object.type}"; expected "${expectedType}" (likely wrong package id or not a market maker executor object).`
     )
 
   return buildTraderAccountOverviewFromObject({

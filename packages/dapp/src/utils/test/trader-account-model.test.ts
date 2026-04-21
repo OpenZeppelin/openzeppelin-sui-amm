@@ -19,11 +19,11 @@ import {
 } from "@sui-amm/domain-core/models/traderAccount"
 
 const AMM_PACKAGE_ID = "0xamm"
-const MARKET_MAKER_TYPE = `${AMM_PACKAGE_ID}::executor::MarketMaker`
+const EXECUTOR_TYPE = `${AMM_PACKAGE_ID}::executor::Executor`
 
 const buildMoveObject = (
   fields: Record<string, unknown>,
-  { type = MARKET_MAKER_TYPE }: { type?: string } = {}
+  { type = EXECUTOR_TYPE }: { type?: string } = {}
 ) =>
   ({
     objectId: "0xtrader",
@@ -121,7 +121,7 @@ describe("market maker model compatibility", () => {
     await expect(
       getTraderAccountOverview("0xtrader", {} as never, AMM_PACKAGE_ID)
     ).rejects.toThrow(
-      'Object 0xtrader has unexpected type "0xother::foo::Bar"; expected "0xamm::executor::MarketMaker" (likely wrong package id or not a market maker object).'
+      'Object 0xtrader has unexpected type "0xother::foo::Bar"; expected "0xamm::executor::Executor" (likely wrong package id or not a market maker executor object).'
     )
   })
 
