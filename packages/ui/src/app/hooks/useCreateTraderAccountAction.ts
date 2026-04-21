@@ -58,6 +58,7 @@ const resolveDisabledReason = ({
   ammPackageId,
   deepbookRegistryId,
   chainMismatch,
+  isLocalnet,
   network,
   adminCapResolution
 }: {
@@ -65,6 +66,7 @@ const resolveDisabledReason = ({
   ammPackageId?: string
   deepbookRegistryId?: string
   chainMismatch: boolean
+  isLocalnet: boolean
   network: string
   adminCapResolution: AdminCapResolutionState
 }) => {
@@ -80,7 +82,7 @@ const resolveDisabledReason = ({
     return networkUnsupportedMessage
   }
 
-  if (chainMismatch) {
+  if (!isLocalnet && chainMismatch) {
     return `Switch your wallet to ${network} before creating a market maker.`
   }
 
@@ -206,6 +208,7 @@ const useCreateTraderAccountAction = ({
     ammPackageId,
     deepbookRegistryId,
     chainMismatch,
+    isLocalnet,
     network,
     adminCapResolution
   })
