@@ -2,10 +2,8 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 
-import {
-  AMM_CONFIG_TYPE_SUFFIX,
-  type AmmConfigOverview
-} from "@sui-amm/domain-core/models/amm"
+import { type AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
+import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
 import { createSuiLocalnetTestEnv } from "@sui-amm/tooling-node/testing/env"
 import {
@@ -133,7 +131,7 @@ describe("owner amm-create integration", () => {
         output.ammConfig.configId
       )
       expect(
-        createdArtifact?.objectType?.endsWith(AMM_CONFIG_TYPE_SUFFIX)
+        createdArtifact?.objectType?.endsWith(MARKET_MAKER_TYPE_SUFFIX)
       ).toBe(true)
       expect(createdArtifact?.initialSharedVersion).toBe(
         output.initialSharedVersion

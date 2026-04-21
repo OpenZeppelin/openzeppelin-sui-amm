@@ -5,7 +5,6 @@ import yargs from "yargs"
 
 import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
-  AMM_CONFIG_TYPE_SUFFIX,
   DEFAULT_BASE_SPREAD_BPS,
   DEFAULT_MAX_CONF_RATIO_BPS,
   DEFAULT_MAX_PRICE_AGE_SECS,
@@ -14,6 +13,7 @@ import {
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
+import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import { buildCreateMarketMakerTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { resolveAmmPackageId } from "@sui-amm/domain-node/amm"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
@@ -102,7 +102,7 @@ runSuiScript(
     const createdArtifacts = execution.objectArtifacts.created
     const createdMarketMaker = findCreatedArtifactBySuffix(
       createdArtifacts,
-      AMM_CONFIG_TYPE_SUFFIX
+      MARKET_MAKER_TYPE_SUFFIX
     )
     const createdAdminCap = findCreatedArtifactBySuffix(
       createdArtifacts,

@@ -5,11 +5,11 @@ import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
-  AMM_CONFIG_TYPE_SUFFIX,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
 import { buildCreateMarketMakerTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import {
   getAllOwnedObjectsByFilter,
   normalizeIdOrThrow
@@ -119,7 +119,7 @@ export const resolveAmmConfigId = async ({
     networkName,
     errorMessage:
       "An AMM config id is required; create an AMM config first or provide --amm-config-id.",
-    resolveArtifact: getLatestObjectFromArtifact(AMM_CONFIG_TYPE_SUFFIX),
+    resolveArtifact: getLatestObjectFromArtifact(MARKET_MAKER_TYPE_SUFFIX),
     getArtifactId: (artifact) => artifact?.objectId
   })
 }
@@ -190,7 +190,7 @@ export const resolveExistingAmmConfigIdFromArtifacts = async ({
   ) {
     const artifact = objectArtifacts[artifactIndex]
 
-    if (!artifact?.objectType?.endsWith(AMM_CONFIG_TYPE_SUFFIX)) {
+    if (!artifact?.objectType?.endsWith(MARKET_MAKER_TYPE_SUFFIX)) {
       continue
     }
 
@@ -254,7 +254,7 @@ export const createAmmConfigSnapshot = async ({
 
   const ammConfigId = requireCreatedArtifactIdBySuffix({
     createdArtifacts: execution.objectArtifacts.created,
-    suffix: AMM_CONFIG_TYPE_SUFFIX,
+    suffix: MARKET_MAKER_TYPE_SUFFIX,
     label: "AMM market maker"
   })
 

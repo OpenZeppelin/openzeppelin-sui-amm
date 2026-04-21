@@ -49,7 +49,8 @@ const loadTraderAccountOverview = async ({
   try {
     traderAccount = await getTraderAccountOverview(
       traderAccountId,
-      tooling.suiClient
+      tooling.suiClient,
+      ammPackageId
     )
   } catch (error) {
     throw buildModelError({

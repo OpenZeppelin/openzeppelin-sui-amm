@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest"
 
 import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
-  AMM_CONFIG_TYPE_SUFFIX,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
+import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import {
   buildCreateMarketMakerTransaction,
   parsePythPriceFeedIdBytes
@@ -123,7 +123,7 @@ describe("amm-view script", () => {
         await context.waitForFinality(createResult.digest)
 
         const createdConfig = ensureCreatedObject(
-          AMM_CONFIG_TYPE_SUFFIX,
+          MARKET_MAKER_TYPE_SUFFIX,
           createResult
         )
         const initialSharedVersion = extractInitialSharedVersion(createdConfig)

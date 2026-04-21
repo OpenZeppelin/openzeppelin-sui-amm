@@ -14,7 +14,6 @@ import {
 } from "@sui-amm/tooling-core/utils/utility"
 import { parsePythPriceFeedIdBytes } from "../ptb/amm.ts"
 
-export const AMM_CONFIG_TYPE_SUFFIX = "::executor::MarketMaker"
 export const AMM_ADMIN_CAP_TYPE_SUFFIX = "::executor::AdminCap"
 export const PROP_AMM_EXECUTOR_SUFFIX = "::executor::PropAmmApp"
 

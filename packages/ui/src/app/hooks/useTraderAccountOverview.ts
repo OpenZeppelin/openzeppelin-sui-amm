@@ -6,6 +6,7 @@ import {
   type TraderAccountOverview
 } from "@sui-amm/domain-core/models/traderAccount"
 import { useEffect, useState } from "react"
+import useResolvedPackageId from "./useResolvedPackageId"
 
 export type TraderAccountStatus = "idle" | "loading" | "success" | "error"
 
@@ -27,6 +28,7 @@ const useTraderAccountOverview = (
   refreshToken?: number
 ) => {
   const suiClient = useSuiClient()
+  const ammPackageId = useResolvedPackageId()
   const [state, setState] = useState<TraderAccountState>(
     emptyTraderAccountState()
   )
@@ -34,7 +36,7 @@ const useTraderAccountOverview = (
   useEffect(() => {
     let active = true
 
-    if (!traderAccountId) {
+    if (!traderAccountId || !ammPackageId) {
       setState(emptyTraderAccountState())
       return () => {
         active = false
@@ -47,7 +49,8 @@ const useTraderAccountOverview = (
       try {
         const traderAccount = await getTraderAccountOverview(
           traderAccountId,
-          suiClient
+          suiClient,
+          ammPackageId
         )
         if (!active) return
 
@@ -70,7 +73,7 @@ const useTraderAccountOverview = (
     return () => {
       active = false
     }
-  }, [refreshToken, traderAccountId, suiClient])
+  }, [ammPackageId, refreshToken, traderAccountId, suiClient])
 
   return state
 }

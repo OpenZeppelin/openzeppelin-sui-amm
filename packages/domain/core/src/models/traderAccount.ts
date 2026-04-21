@@ -130,7 +130,8 @@ const buildTraderAccountOverviewFromObject = ({
 
 export const getTraderAccountOverview = async (
   traderAccountId: string,
-  suiClient: SuiClient
+  suiClient: SuiClient,
+  ammPackageId: string
 ): Promise<TraderAccountOverview> => {
   const { object, owner } = await getSuiObject(
     {
@@ -139,6 +140,12 @@ export const getTraderAccountOverview = async (
     },
     { suiClient }
   )
+
+  const expectedType = resolveTraderAccountType(ammPackageId)
+  if (object.type !== expectedType)
+    throw new Error(
+      `Object ${traderAccountId} has unexpected type "${object.type}"; expected "${expectedType}" (likely wrong package id or not a market maker object).`
+    )
 
   return buildTraderAccountOverviewFromObject({
     traderAccountId,
