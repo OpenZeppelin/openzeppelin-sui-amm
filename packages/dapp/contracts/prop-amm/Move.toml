@@ -23,5 +23,11 @@ rename-from = "local_mock_pyth"
 override = true
 addr_substitutions = { pyth = "0x2" }
 
+[dependencies.openzeppelin_math]
+git = "https://github.com/OpenZeppelin/contracts-sui.git"
+subdir = "math/core"
+rev = "d46324849b1ba5a45b20f77630fc958466830324"
+# Not yet published.
+
 [environments]
 test-publish = "e2c3d887"
