@@ -4,31 +4,11 @@ import {
   resolveTraderAccountType,
   type TraderAccountOverview
 } from "@sui-amm/domain-core/models/traderAccount"
-import { buildCreateTraderAccountTransaction } from "@sui-amm/domain-core/ptb/deepbook"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
-import { ensureCreatedObject } from "@sui-amm/tooling-node/transactions"
-import type { TransactionSummary } from "@sui-amm/tooling-node/transactions-summary"
 
-const CREATE_TRADER_ACCOUNT_LABEL = "create-trader-account"
-
-const buildSummaryLabel = (label: string): TransactionSummary => ({
-  label,
-  objectChanges: [],
-  balanceChanges: []
-})
-
-export type ResolveOrCreateTraderAccountResult = {
-  status: "existing" | "created" | "dry-run-created"
-  traderAccount?: TraderAccountOverview
-  note?: string
-  transactionSummaries: {
-    createTraderAccount?: TransactionSummary
-  }
+export type ResolveTraderAccountResult = {
+  traderAccount: TraderAccountOverview
 }
-
-type ResolveCreateDependencies = () => Promise<{
-  adminCapId: string
-}>
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message
@@ -69,11 +49,12 @@ const loadTraderAccountOverview = async ({
   try {
     traderAccount = await getTraderAccountOverview(
       traderAccountId,
-      tooling.suiClient
+      tooling.suiClient,
+      ammPackageId
     )
   } catch (error) {
     throw buildModelError({
-      operation: "Trader account lookup",
+      operation: "Market maker lookup",
       traderAccountId,
       expectedOwner: ownerAddress,
       expectedPackageId: ammPackageId,
@@ -83,73 +64,10 @@ const loadTraderAccountOverview = async ({
 
   if (traderAccount.ownerAddress !== ownerAddress)
     throw new Error(
-      `Trader account owner mismatch for traderAccountId ${traderAccountId}. Expected owner ${ownerAddress}, found ${traderAccount.ownerAddress}, expected package ${ammPackageId}.`
+      `Market maker owner mismatch for traderAccountId ${traderAccountId}. Expected owner ${ownerAddress}, found ${traderAccount.ownerAddress}, expected package ${ammPackageId}.`
     )
 
   return traderAccount
-}
-
-const createTraderAccount = async ({
-  tooling,
-  ammPackageId,
-  resolveCreateDependencies,
-  deepbookRegistryId,
-  ownerAddress,
-  devInspect,
-  dryRun
-}: {
-  tooling: Pick<
-    Tooling,
-    | "executeTransactionWithSummary"
-    | "getImmutableSharedObject"
-    | "loadedEd25519KeyPair"
-  >
-  ammPackageId: string
-  resolveCreateDependencies: ResolveCreateDependencies
-  deepbookRegistryId: string
-  ownerAddress: string
-  devInspect?: boolean
-  dryRun?: boolean
-}): Promise<{
-  traderAccountId?: string
-  summary: TransactionSummary
-}> => {
-  const deepbookRegistry = await tooling.getImmutableSharedObject({
-    objectId: deepbookRegistryId
-  })
-  const { adminCapId } = await resolveCreateDependencies()
-  const createTransaction = buildCreateTraderAccountTransaction({
-    ammPackageId,
-    adminCapId,
-    deepbookRegistry,
-    ownerAddress
-  })
-  const createResult = await tooling.executeTransactionWithSummary({
-    transaction: createTransaction,
-    signer: tooling.loadedEd25519KeyPair,
-    summaryLabel: CREATE_TRADER_ACCOUNT_LABEL,
-    devInspect,
-    dryRun
-  })
-
-  const summary =
-    createResult.summary ?? buildSummaryLabel(CREATE_TRADER_ACCOUNT_LABEL)
-
-  if (dryRun) {
-    return { summary }
-  }
-
-  const createExecution = createResult.execution?.transactionResult
-  if (!createExecution)
-    throw new Error("Trader account creation did not execute.")
-
-  return {
-    traderAccountId: ensureCreatedObject(
-      "::executor::TraderAccount",
-      createExecution
-    ).objectId,
-    summary
-  }
 }
 
 const resolveExistingTraderAccountId = async ({
@@ -173,37 +91,23 @@ const resolveExistingTraderAccountId = async ({
 
   if (ownedTraderAccountIds.length > 1)
     throw new Error(
-      `Multiple owned trader accounts were found for the active owner (${ownedTraderAccountIds.length}). Provide --trader-account-id to choose one explicitly.`
+      `Multiple owned market makers were found for the active owner (${ownedTraderAccountIds.length}). Provide --trader-account-id to choose one explicitly.`
     )
 
   return ownedTraderAccountIds[0]
 }
 
-export const resolveOrCreateTraderAccount = async ({
+export const resolveTraderAccount = async ({
   tooling,
   ammPackageId,
-  resolveCreateDependencies,
-  deepbookRegistryId,
   ownerAddress,
-  traderAccountId,
-  devInspect,
-  dryRun
+  traderAccountId
 }: {
-  tooling: Pick<
-    Tooling,
-    | "executeTransactionWithSummary"
-    | "getImmutableSharedObject"
-    | "loadedEd25519KeyPair"
-    | "suiClient"
-  >
+  tooling: Pick<Tooling, "suiClient">
   ammPackageId: string
-  resolveCreateDependencies: ResolveCreateDependencies
-  deepbookRegistryId: string
   ownerAddress: string
   traderAccountId?: string
-  devInspect?: boolean
-  dryRun?: boolean
-}): Promise<ResolveOrCreateTraderAccountResult> => {
+}): Promise<ResolveTraderAccountResult> => {
   const resolvedTraderAccountId = await resolveExistingTraderAccountId({
     tooling,
     traderAccountId,
@@ -211,54 +115,17 @@ export const resolveOrCreateTraderAccount = async ({
     ammPackageId
   })
 
-  if (resolvedTraderAccountId) {
-    return {
-      status: "existing",
-      traderAccount: await loadTraderAccountOverview({
-        tooling,
-        traderAccountId: resolvedTraderAccountId,
-        ownerAddress,
-        ammPackageId
-      }),
-      transactionSummaries: {}
-    }
-  }
-
-  const createResult = await createTraderAccount({
-    tooling,
-    ammPackageId,
-    resolveCreateDependencies,
-    deepbookRegistryId,
-    ownerAddress,
-    devInspect,
-    dryRun
-  })
-
-  if (dryRun) {
-    return {
-      status: "dry-run-created",
-      note: "Dry-run simulated trader account creation. Created object IDs are unavailable without execution.",
-      transactionSummaries: {
-        createTraderAccount: createResult.summary
-      }
-    }
-  }
-
-  if (!createResult.traderAccountId)
+  if (!resolvedTraderAccountId)
     throw new Error(
-      "Trader account creation did not return a trader account id."
+      `No market maker found for owner ${ownerAddress} on package ${ammPackageId}. Run amm-create to create one, then re-run this script.`
     )
 
   return {
-    status: "created",
     traderAccount: await loadTraderAccountOverview({
       tooling,
-      traderAccountId: createResult.traderAccountId,
+      traderAccountId: resolvedTraderAccountId,
       ownerAddress,
       ammPackageId
-    }),
-    transactionSummaries: {
-      createTraderAccount: createResult.summary
-    }
+    })
   }
 }

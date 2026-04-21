@@ -5,7 +5,6 @@ import type {
   TTraderAccountCardContent,
   TTraderAccountCardViewModel
 } from "../types/TTraderAccountCard"
-import Button from "./Button"
 import CopyableId from "./CopyableId"
 import Loading from "./Loading"
 
@@ -30,7 +29,7 @@ const InfoTile = ({
 
 const assertUnreachable = (value: never): never => {
   throw new Error(
-    `Unhandled trader account content state: ${JSON.stringify(value)}`
+    `Unhandled market maker content state: ${JSON.stringify(value)}`
   )
 }
 
@@ -121,8 +120,7 @@ const TraderAccountCardView = ({
   description,
   explorerUrl,
   traderAccountId,
-  content,
-  headerAction
+  content
 }: TTraderAccountCardViewModel) => {
   return (
     <section className="w-full max-w-4xl px-4">
@@ -136,31 +134,18 @@ const TraderAccountCardView = ({
               {description}
             </p>
           </div>
-          {headerAction ? (
-            <div className="ml-auto">
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={headerAction.disabled}
-                tooltip={headerAction.tooltip}
-                onClick={headerAction.onClick}
-              >
-                {headerAction.label}
-              </Button>
-            </div>
-          ) : null}
         </div>
         <div className="space-y-4 px-6 py-5">
           <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
             {traderAccountId ? (
               <CopyableId
                 value={traderAccountId}
-                label="Trader account"
+                label="Market maker"
                 explorerUrl={explorerUrl}
               />
             ) : (
               <span className="text-slate-400 dark:text-slate-200/60">
-                No trader account detected
+                No market maker detected
               </span>
             )}
           </div>

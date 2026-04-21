@@ -2,11 +2,12 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 import {
-  AMM_CONFIG_TYPE_SUFFIX,
+  AMM_ADMIN_CAP_TYPE_SUFFIX,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
+import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import {
-  buildCreateAmmConfigTransaction,
+  buildCreateMarketMakerTransaction,
   parsePythPriceFeedIdBytes
 } from "@sui-amm/domain-core/ptb/amm"
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
@@ -21,10 +22,7 @@ import {
   createSuiScriptRunner,
   parseJsonFromScriptOutput
 } from "@sui-amm/tooling-node/testing/scripts"
-import {
-  DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID,
-  resolveAmmAdminCapIdFromPublishDigest
-} from "../../../utils/amm.ts"
+import { DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID } from "../../../utils/amm.ts"
 
 type AmmViewOutput = {
   ammConfig?: AmmConfigOverview
@@ -41,10 +39,12 @@ type CreatedAmmConfigSnapshot = {
   ammConfigId: string
   baseSpreadBps: bigint
   initialSharedVersion: string
-  pythPriceFeedIdHex: string
-  useLaser: boolean
+  basePythPriceFeedIdHex: string
   volatilitySpreadBps: bigint
 }
+
+const ZERO_POOL_ID =
+  "0x0000000000000000000000000000000000000000000000000000000000000000"
 
 const resolveKeepTemp = () => process.env.SUI_IT_KEEP_TEMP === "1"
 
@@ -90,27 +90,30 @@ describe("amm-view script", () => {
         { withUnpublishedDependencies: true }
       )
       const rootArtifact = pickRootPublishArtifact(publishArtifacts)
-      const adminCapId = await resolveAmmAdminCapIdFromPublishDigest({
-        publishDigest: rootArtifact.digest,
-        suiClient: context.suiClient
-      })
 
       const createAmmConfig = async ({
         baseSpreadBps,
         volatilitySpreadBps,
-        useLaser,
-        pythPriceFeedIdHex
+        basePythPriceFeedIdHex
       }: Omit<
         CreatedAmmConfigSnapshot,
         "ammConfigId" | "initialSharedVersion"
       >) => {
-        const createTransaction = buildCreateAmmConfigTransaction({
+        const createTransaction = buildCreateMarketMakerTransaction({
           packageId: rootArtifact.packageId,
-          adminCapId,
+          poolId: ZERO_POOL_ID,
+          senderAddress: publisher.address,
           baseSpreadBps,
           volatilitySpreadBps,
-          useLaser,
-          pythPriceFeedIdBytes: parsePythPriceFeedIdBytes(pythPriceFeedIdHex)
+          basePythPriceFeedIdBytes: parsePythPriceFeedIdBytes(
+            basePythPriceFeedIdHex
+          ),
+          quotePythPriceFeedIdBytes: parsePythPriceFeedIdBytes(
+            basePythPriceFeedIdHex
+          ),
+          orderExpirationTimeMs: 86400000n,
+          maxPriceAgeSecs: 60n,
+          maxConfRatioBps: 1000n
         })
 
         const createResult = await context.signAndExecuteTransaction(
@@ -120,7 +123,7 @@ describe("amm-view script", () => {
         await context.waitForFinality(createResult.digest)
 
         const createdConfig = ensureCreatedObject(
-          AMM_CONFIG_TYPE_SUFFIX,
+          MARKET_MAKER_TYPE_SUFFIX,
           createResult
         )
         const initialSharedVersion = extractInitialSharedVersion(createdConfig)
@@ -130,12 +133,14 @@ describe("amm-view script", () => {
           )
         }
 
+        // Consume AdminCap to avoid unused object errors in subsequent transactions
+        ensureCreatedObject(AMM_ADMIN_CAP_TYPE_SUFFIX, createResult)
+
         return {
           ammConfigId: createdConfig.objectId,
           baseSpreadBps,
           initialSharedVersion,
-          pythPriceFeedIdHex,
-          useLaser,
+          basePythPriceFeedIdHex,
           volatilitySpreadBps
         }
       }
@@ -143,14 +148,12 @@ describe("amm-view script", () => {
       await createAmmConfig({
         baseSpreadBps: 37n,
         volatilitySpreadBps: 420n,
-        useLaser: false,
-        pythPriceFeedIdHex: DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
+        basePythPriceFeedIdHex: DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
       })
       const latestAmmConfig = await createAmmConfig({
         baseSpreadBps: 58n,
         volatilitySpreadBps: 777n,
-        useLaser: true,
-        pythPriceFeedIdHex: DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
+        basePythPriceFeedIdHex: DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
       })
 
       const scriptRunner = createSuiScriptRunner(context)
@@ -182,10 +185,9 @@ describe("amm-view script", () => {
       expect(parsed.ammConfig.volatilitySpreadBps).toBe(
         latestAmmConfig.volatilitySpreadBps.toString()
       )
-      expect(parsed.ammConfig.useLaser).toBe(latestAmmConfig.useLaser)
-      expect(parsed.ammConfig.tradingPaused).toBe(false)
-      expect(normalizeHex(parsed.ammConfig.pythPriceFeedIdHex)).toBe(
-        normalizeHex(latestAmmConfig.pythPriceFeedIdHex)
+      expect(parsed.ammConfig.active).toBe(true)
+      expect(normalizeHex(parsed.ammConfig.basePythPriceFeedIdHex)).toBe(
+        normalizeHex(latestAmmConfig.basePythPriceFeedIdHex)
       )
       expect(parsed.initialSharedVersion).toBe(
         latestAmmConfig.initialSharedVersion

@@ -1,43 +1,33 @@
 /**
- * Resolves or creates a trader account for shared networks.
+ * Resolves the market maker for shared networks.
  */
 import yargs from "yargs"
 
 import {
-  isBalanceManagerMapInitialized,
-  isPropAmmAppAuthorizedInRegistry,
   resolveDeepbookNetworkIds,
   resolveDeepbookPackageId,
   resolveDeepbookRegistryId
 } from "@sui-amm/domain-core/models/deepbook"
 import { resolveAmmPackageId } from "@sui-amm/domain-node/amm"
-import {
-  resolveOwnerAddress,
-  resolveSignerAddress
-} from "@sui-amm/tooling-node/account"
+import { resolveOwnerAddress } from "@sui-amm/tooling-node/account"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
 import {
   logTraderAccountResult,
   toTraderAccountResultView
 } from "../../utils/deepbook-registration-script.ts"
-import { resolveSignerAmmAdminCapId } from "../../utils/amm.ts"
-import { resolveOrCreateTraderAccount } from "../../utils/deepbook-registration.ts"
+import { resolveTraderAccount } from "../../utils/deepbook-registration.ts"
 import {
-  withAdminCapIdOption,
   withAmmPackageIdOption,
   withCommonRegistrationOptions
 } from "../../utils/register-script-options.ts"
 
 type RegisterAmmCliArgs = {
   ammPackageId?: string
-  adminCapId?: string
   deepbookPackageId?: string
   deepbookRegistryId?: string
   ownerAddress?: string
   traderAccountId?: string
-  devInspect?: boolean
-  dryRun?: boolean
   json?: boolean
 }
 
@@ -76,7 +66,6 @@ runSuiScript(
       cliArguments.ownerAddress,
       tooling.suiConfig.network
     )
-    const signerAddress = resolveSignerAddress(tooling.loadedEd25519KeyPair)
 
     const ammPackageId = await resolveAmmPackageId({
       networkName: tooling.network.networkName,
@@ -88,48 +77,11 @@ runSuiScript(
       deepbookRegistryId: cliArguments.deepbookRegistryId
     })
 
-    let resolvedAdminCapId: string | undefined
-
-    const traderAccountResult = await resolveOrCreateTraderAccount({
+    const traderAccountResult = await resolveTraderAccount({
       tooling,
       ammPackageId,
-      resolveCreateDependencies: async () => {
-        const isBalanceManagerMapReady = await isBalanceManagerMapInitialized({
-          suiClient: tooling.suiClient,
-          deepbookRegistryId,
-          deepbookPackageId
-        })
-        if (!isBalanceManagerMapReady)
-          throw new Error(
-            "DeepBook registry balance manager map is not initialized. Ask the registry admin to initialize it before creating trader accounts."
-          )
-
-        const isAuthorized = await isPropAmmAppAuthorizedInRegistry({
-          suiClient: tooling.suiClient,
-          deepbookRegistryId,
-          deepbookPackageId,
-          ammPackageId
-        })
-
-        if (!isAuthorized)
-          throw new Error(
-            "PropAmmApp is not authorized in the DeepBook registry. Request authorization from the registry admin before proceeding."
-          )
-
-        resolvedAdminCapId ??= await resolveSignerAmmAdminCapId({
-          tooling,
-          ammPackageId,
-          signerAddress,
-          adminCapId: cliArguments.adminCapId
-        })
-
-        return { adminCapId: resolvedAdminCapId }
-      },
-      deepbookRegistryId,
       ownerAddress,
-      traderAccountId: cliArguments.traderAccountId,
-      devInspect: cliArguments.devInspect,
-      dryRun: cliArguments.dryRun
+      traderAccountId: cliArguments.traderAccountId
     })
 
     const traderAccountResultView =
@@ -140,7 +92,6 @@ runSuiScript(
         {
           ownerAddress,
           ammPackageId,
-          adminCapId: resolvedAdminCapId,
           deepbookPackageId,
           deepbookRegistryId,
           ...traderAccountResultView
@@ -153,17 +104,12 @@ runSuiScript(
     logTraderAccountResult({
       ownerAddress,
       ammPackageId,
-      adminCapId: resolvedAdminCapId,
       deepbookPackageId,
       deepbookRegistryId,
       traderAccountResult
     })
   },
-  withAdminCapIdOption(
-    withCommonRegistrationOptions(withAmmPackageIdOption(yargs()), {
-      includeDebugAlias: true
-    })
-  )
+  withCommonRegistrationOptions(withAmmPackageIdOption(yargs()))
     .option("deepbookPackageId", {
       alias: ["deepbook-package-id"],
       type: "string",

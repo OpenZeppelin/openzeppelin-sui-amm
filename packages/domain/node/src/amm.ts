@@ -5,11 +5,11 @@ import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
-  AMM_CONFIG_TYPE_SUFFIX,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { buildCreateAmmConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { buildCreateMarketMakerTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import {
   getAllOwnedObjectsByFilter,
   normalizeIdOrThrow
@@ -119,7 +119,7 @@ export const resolveAmmConfigId = async ({
     networkName,
     errorMessage:
       "An AMM config id is required; create an AMM config first or provide --amm-config-id.",
-    resolveArtifact: getLatestObjectFromArtifact(AMM_CONFIG_TYPE_SUFFIX),
+    resolveArtifact: getLatestObjectFromArtifact(MARKET_MAKER_TYPE_SUFFIX),
     getArtifactId: (artifact) => artifact?.objectId
   })
 }
@@ -190,7 +190,7 @@ export const resolveExistingAmmConfigIdFromArtifacts = async ({
   ) {
     const artifact = objectArtifacts[artifactIndex]
 
-    if (!artifact?.objectType?.endsWith(AMM_CONFIG_TYPE_SUFFIX)) {
+    if (!artifact?.objectType?.endsWith(MARKET_MAKER_TYPE_SUFFIX)) {
       continue
     }
 
@@ -215,28 +215,35 @@ export const resolveExistingAmmConfigIdFromArtifacts = async ({
 export const createAmmConfigSnapshot = async ({
   tooling,
   ammPackageId,
-  adminCapId,
+  poolId,
   ammConfigInputs
 }: {
   tooling: Tooling
   ammPackageId: string
-  adminCapId: string
+  poolId: string
   ammConfigInputs: AmmConfigInputs
 }): Promise<{
   ammConfigSnapshot: AmmConfigSnapshot
+  adminCapId: string
   transactionSummary?: { label?: string }
 }> => {
-  const createAmmTransaction = buildCreateAmmConfigTransaction({
+  const senderAddress = tooling.loadedEd25519KeyPair.toSuiAddress()
+
+  const createMarketMakerTransaction = buildCreateMarketMakerTransaction({
     packageId: ammPackageId,
-    adminCapId,
+    poolId,
+    senderAddress,
     baseSpreadBps: ammConfigInputs.baseSpreadBps,
     volatilitySpreadBps: ammConfigInputs.volatilitySpreadBps,
-    useLaser: ammConfigInputs.useLaser,
-    pythPriceFeedIdBytes: ammConfigInputs.pythPriceFeedIdBytes
+    basePythPriceFeedIdBytes: ammConfigInputs.basePythPriceFeedIdBytes,
+    quotePythPriceFeedIdBytes: ammConfigInputs.quotePythPriceFeedIdBytes,
+    orderExpirationTimeMs: ammConfigInputs.orderExpirationTimeMs,
+    maxPriceAgeSecs: ammConfigInputs.maxPriceAgeSecs,
+    maxConfRatioBps: ammConfigInputs.maxConfRatioBps
   })
 
   const { execution, summary } = await tooling.executeTransactionWithSummary({
-    transaction: createAmmTransaction,
+    transaction: createMarketMakerTransaction,
     signer: tooling.loadedEd25519KeyPair,
     summaryLabel: "create-amm"
   })
@@ -247,8 +254,14 @@ export const createAmmConfigSnapshot = async ({
 
   const ammConfigId = requireCreatedArtifactIdBySuffix({
     createdArtifacts: execution.objectArtifacts.created,
-    suffix: AMM_CONFIG_TYPE_SUFFIX,
-    label: "AMM config"
+    suffix: MARKET_MAKER_TYPE_SUFFIX,
+    label: "AMM market maker"
+  })
+
+  const adminCapId = requireCreatedArtifactIdBySuffix({
+    createdArtifacts: execution.objectArtifacts.created,
+    suffix: AMM_ADMIN_CAP_TYPE_SUFFIX,
+    label: "AMM admin cap"
   })
 
   return {
@@ -256,6 +269,7 @@ export const createAmmConfigSnapshot = async ({
       tooling,
       ammConfigId
     }),
+    adminCapId,
     transactionSummary: summary
   }
 }
@@ -263,41 +277,53 @@ export const createAmmConfigSnapshot = async ({
 export const createAmmConfigSnapshotFromArgs = async ({
   tooling,
   ammPackageId,
-  adminCapId,
-  pythPriceFeedIdHex,
+  poolId,
+  basePythPriceFeedIdHex,
+  quotePythPriceFeedIdHex,
   baseSpreadBps,
   volatilitySpreadBps,
-  useLaser
+  orderExpirationTimeMs,
+  maxPriceAgeSecs,
+  maxConfRatioBps
 }: {
   tooling: Tooling
   ammPackageId: string
-  adminCapId: string
-  pythPriceFeedIdHex: string
+  poolId: string
+  basePythPriceFeedIdHex: string
+  quotePythPriceFeedIdHex: string
   baseSpreadBps?: string
   volatilitySpreadBps?: string
-  useLaser?: boolean
+  orderExpirationTimeMs?: string
+  maxPriceAgeSecs?: string
+  maxConfRatioBps?: string
 }): Promise<{
   ammConfigSnapshot: AmmConfigSnapshot
-  pythPriceFeedIdHex: string
+  adminCapId: string
+  basePythPriceFeedIdHex: string
+  quotePythPriceFeedIdHex: string
   transactionSummary?: { label?: string }
 }> => {
   const ammConfigInputs = resolveAmmConfigInputs({
-    pythPriceFeedIdHex,
+    basePythPriceFeedIdHex,
+    quotePythPriceFeedIdHex,
     volatilitySpreadBps,
     baseSpreadBps,
-    useLaser
+    orderExpirationTimeMs,
+    maxPriceAgeSecs,
+    maxConfRatioBps
   })
 
   const createdAmmConfig = await createAmmConfigSnapshot({
     tooling,
     ammPackageId,
-    adminCapId,
+    poolId,
     ammConfigInputs
   })
 
   return {
     ...createdAmmConfig,
-    pythPriceFeedIdHex: ammConfigInputs.pythPriceFeedIdHex
+    basePythPriceFeedIdHex: ammConfigInputs.basePythPriceFeedIdHex,
+    quotePythPriceFeedIdHex: ammConfigInputs.quotePythPriceFeedIdHex
   }
 }
 

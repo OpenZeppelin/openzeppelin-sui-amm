@@ -27,7 +27,7 @@ const emptyResolutionState = (): TraderAccountIdResolutionState => ({
 const pickTraderAccountId = (traderAccountIds: string[]) => traderAccountIds[0]
 
 const resolveUnexpectedErrorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "Unable to resolve trader account."
+  error instanceof Error ? error.message : "Unable to resolve market maker."
 
 const useResolvedTraderAccountId = (
   refreshToken?: number

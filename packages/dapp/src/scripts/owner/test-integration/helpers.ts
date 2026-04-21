@@ -13,7 +13,7 @@ export type AmmSeedOutput = {
   ammConfig?: AmmConfigOverview
   ammConfigId?: string
   initialSharedVersion?: string
-  pythPriceFeedIdHex?: string
+  basePythPriceFeedIdHex?: string
   publishDigest?: string
   transactionSummary?: { label?: string }
   didPublish?: boolean
@@ -31,7 +31,6 @@ export type AmmSeedScriptArguments = {
   json: boolean
   baseSpreadBps?: string
   volatilitySpreadBps?: string
-  useLaser?: boolean
   pythPriceFeedId?: string
 }
 

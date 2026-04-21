@@ -3,4 +3,4 @@ name = "local_mock_coin"
 edition = "2024"
 
 [environments]
-test-publish = "9947f38b"
+test-publish = "e2c3d887"

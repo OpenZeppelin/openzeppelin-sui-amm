@@ -3,11 +3,9 @@ import type { Argv } from "yargs"
 const AMM_PACKAGE_ID_DESCRIPTION =
   "Package ID for the PropAmm Move package; inferred from the latest publish entry when omitted."
 const OWNER_ADDRESS_DESCRIPTION =
-  "Owner address that will receive the trader account; defaults to the active signer."
-const ADMIN_CAP_ID_DESCRIPTION =
-  "AMM admin cap id required for trader-account creation; defaults to an AMM admin cap owned by the active signer."
-const TRADER_ACCOUNT_ID_DESCRIPTION =
-  "Existing trader account id; when omitted the flow reuses an owned trader account first and only creates one if none exists."
+  "Owner address that owns the market maker; defaults to the active signer."
+const MARKET_MAKER_ID_DESCRIPTION =
+  "Existing market maker id; when omitted the flow resolves an owned market maker."
 const DEV_INSPECT_DESCRIPTION = "Run a dev-inspect and log VM error details."
 const DRY_RUN_DESCRIPTION =
   "Run dev-inspect and exit without executing transactions."
@@ -21,18 +19,7 @@ export const withAmmPackageIdOption = <T>(yargsInstance: Argv<T>) =>
     demandOption: false
   })
 
-export const withAdminCapIdOption = <T>(yargsInstance: Argv<T>) =>
-  yargsInstance.option("adminCapId", {
-    alias: ["admin-cap-id"],
-    type: "string",
-    description: ADMIN_CAP_ID_DESCRIPTION,
-    demandOption: false
-  })
-
-export const withCommonRegistrationOptions = <T>(
-  yargsInstance: Argv<T>,
-  { includeDebugAlias = false }: { includeDebugAlias?: boolean } = {}
-) =>
+export const withCommonRegistrationOptions = <T>(yargsInstance: Argv<T>) =>
   yargsInstance
     .option("ownerAddress", {
       alias: ["owner-address"],
@@ -43,9 +30,20 @@ export const withCommonRegistrationOptions = <T>(
     .option("traderAccountId", {
       alias: ["trader-account-id"],
       type: "string",
-      description: TRADER_ACCOUNT_ID_DESCRIPTION,
+      description: MARKET_MAKER_ID_DESCRIPTION,
       demandOption: false
     })
+    .option("json", {
+      type: "boolean",
+      default: false,
+      description: JSON_OUTPUT_DESCRIPTION
+    })
+
+export const withTransactionExecutionOptions = <T>(
+  yargsInstance: Argv<T>,
+  { includeDebugAlias = false }: { includeDebugAlias?: boolean } = {}
+) =>
+  yargsInstance
     .option("devInspect", {
       alias: includeDebugAlias ? ["dev-inspect", "debug"] : ["dev-inspect"],
       type: "boolean",
@@ -57,9 +55,4 @@ export const withCommonRegistrationOptions = <T>(
       type: "boolean",
       default: false,
       description: DRY_RUN_DESCRIPTION
-    })
-    .option("json", {
-      type: "boolean",
-      default: false,
-      description: JSON_OUTPUT_DESCRIPTION
     })

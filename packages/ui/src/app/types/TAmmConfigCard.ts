@@ -8,9 +8,9 @@ export type TAmmConfigBadge = {
 export type TAmmConfigDetails = {
   baseSpreadBps: string
   volatilitySpreadBps: string
-  laserBadge: TAmmConfigBadge
   tradingBadge: TAmmConfigBadge
-  pythPriceFeedIdHex?: string
+  basePythPriceFeedIdHex?: string
+  quotePythPriceFeedIdHex?: string
 }
 
 export type TAmmConfigCardContent =

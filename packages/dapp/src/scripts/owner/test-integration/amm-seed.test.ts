@@ -15,14 +15,12 @@ import { resolveOnChainSharedVersion } from "./test-helpers.ts"
 
 const SEEDED_BASE_SPREAD_BPS = "37"
 const SEEDED_VOLATILITY_SPREAD_BPS = "420"
-const SEEDED_USE_LASER = true
 const SEEDED_PYTH_PRICE_FEED_ID = DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
 
 const SEED_ARGS: AmmSeedScriptArguments = {
   json: true,
   baseSpreadBps: SEEDED_BASE_SPREAD_BPS,
   volatilitySpreadBps: SEEDED_VOLATILITY_SPREAD_BPS,
-  useLaser: SEEDED_USE_LASER,
   pythPriceFeedId: SEEDED_PYTH_PRICE_FEED_ID
 }
 
@@ -32,15 +30,14 @@ const expectSeededAmmConfigValues = (output: CompleteAmmSeedOutput) => {
   expect(output.ammConfig.volatilitySpreadBps).toBe(
     SEEDED_VOLATILITY_SPREAD_BPS
   )
-  expect(output.ammConfig.useLaser).toBe(SEEDED_USE_LASER)
-  expect(output.ammConfig.tradingPaused).toBe(false)
-  expect(normalizeHex(output.ammConfig.pythPriceFeedIdHex)).toBe(
+  expect(output.ammConfig.active).toBe(true)
+  expect(normalizeHex(output.ammConfig.basePythPriceFeedIdHex)).toBe(
     normalizeHex(SEEDED_PYTH_PRICE_FEED_ID)
   )
-  const { pythPriceFeedIdHex } = output
-  expect(pythPriceFeedIdHex).toBeDefined()
+  const { basePythPriceFeedIdHex } = output
+  expect(basePythPriceFeedIdHex).toBeDefined()
   // @ts-expect-error Would have throw before so it is defined
-  expect(normalizeHex(pythPriceFeedIdHex)).toBe(
+  expect(normalizeHex(basePythPriceFeedIdHex)).toBe(
     normalizeHex(SEEDED_PYTH_PRICE_FEED_ID)
   )
 }

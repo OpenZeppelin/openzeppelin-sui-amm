@@ -8,14 +8,12 @@ import {
   useState,
   type ReactNode
 } from "react"
-import useCreateTraderAccountAction from "../hooks/useCreateTraderAccountAction"
 import useResolvedTraderAccountId from "../hooks/useResolvedTraderAccountId"
 import useTraderAccountOverview from "../hooks/useTraderAccountOverview"
 
 type TraderAccountContextValue = {
   resolution: ReturnType<typeof useResolvedTraderAccountId>
   overview: ReturnType<typeof useTraderAccountOverview>
-  createAction: ReturnType<typeof useCreateTraderAccountAction>
   refreshTraderAccount: () => void
 }
 
@@ -38,18 +36,14 @@ export const TraderAccountProvider = ({
     resolution.traderAccountId,
     refreshToken
   )
-  const createAction = useCreateTraderAccountAction({
-    onCreated: refreshTraderAccount
-  })
 
   const value = useMemo(
     () => ({
       resolution,
       overview,
-      createAction,
       refreshTraderAccount
     }),
-    [createAction, overview, refreshTraderAccount, resolution]
+    [overview, refreshTraderAccount, resolution]
   )
 
   return (
