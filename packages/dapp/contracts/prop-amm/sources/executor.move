@@ -13,6 +13,7 @@ use deepbook::constants;
 use deepbook::pool::Pool;
 use openzeppelin_market_maker::config::AMMConfig;
 use openzeppelin_market_maker::events;
+use openzeppelin_market_maker::info::{Self, Info};
 use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
 use pyth::pyth;
@@ -76,6 +77,8 @@ public struct MarketMaker has key, store {
     balance_manager: BalanceManager,
     /// Pool onchain configuration.
     config: AMMConfig,
+    /// Accounting info (cumulative volume and cached balances).
+    info: Info,
 }
 
 /// Balance manager caps owned by the market maker owner.
@@ -120,6 +123,7 @@ public fun create(config: AMMConfig, ctx: &mut TxContext): (MarketMaker, AdminCa
         },
         balance_manager,
         config,
+        info: info::empty(),
     };
 
     (market_maker, market_maker_cap)
@@ -172,6 +176,11 @@ public fun pause<BaseAsset, QuoteAsset>(
     // Update balance manager, to reflect previous settled limit orders in balance.
     pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
 
+    // Update trading information.
+    market_maker.info.set_volume_base(volume_base(&market_maker.balance_manager, pool));
+    market_maker.info.set_quote_balance(market_maker.balance_manager.balance<QuoteAsset>());
+    market_maker.info.set_base_balance(market_maker.balance_manager.balance<BaseAsset>());
+
     // Emit paused event.
     events::emit_market_maker_paused(market_maker.id());
 
@@ -190,6 +199,9 @@ public fun unpause(market_maker: &mut MarketMaker, cap: &AdminCap) {
     // Unpause config.
     market_maker.config.unpause();
 }
+
+// TODO#q: how base_balance and quote_balance should be updated after deposit and withdrawal?
+// TODO#q: how should we track if base or quote withdrawal processed?
 
 /// Deposit funds into a balance manager.
 /// Deepbook's `BalanceEvent` emitted after successful deposit.
@@ -287,6 +299,23 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     market_maker.config.set_base_price_publish_time(base_pyth_price.get_timestamp());
     market_maker.config.set_quote_price_publish_time(quote_pyth_price.get_timestamp());
 
+    // Generate trade proof.
+    let trade_proof = market_maker
+        .balance_manager
+        .generate_proof_as_trader(&market_maker.caps.trade_cap, ctx);
+
+    // Cancel all previous active orders.
+    pool.cancel_all_orders(
+        &mut market_maker.balance_manager,
+        &trade_proof,
+        clock,
+        ctx,
+    );
+
+    // Update balance manager to reflect previous settled limit orders in balance,
+    // before using balance in quantity computation for the next orders.
+    pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
+
     // Calculate precise spreads using Base/Quote = (Base/USD) / (Quote/USD).
     let oracle_mid_price = deepbook_price(
         base_pyth_price,
@@ -333,30 +362,11 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     let ask_outer_quantity = compute_quantity(ask_outer_raw, lot_size, min_size);
     let ask_inner_quantity = compute_quantity(ask_inner_raw, lot_size, min_size);
 
-    // Generate trade proof.
-    let trade_proof = market_maker
-        .balance_manager
-        .generate_proof_as_trader(&market_maker.caps.trade_cap, ctx);
-
-    // TODO#q: include settled balances into smart contract and event to calculate volume (volume calculation based on events off-chain is complex, since we should keep all the events).
-    // let account = pool.account(&market_maker.balance_manager);
-    // let settled: Balances = account.settled_balances();
-    // let base = settled.base(); // u64
-    // let quote = settled.quote(); // u64
-    // let deep = settled.deep(); // u64
-
-    // Cancel all previous active orders.
-    pool.cancel_all_orders(
-        &mut market_maker.balance_manager,
-        &trade_proof,
-        clock,
-        ctx,
-    );
-
-    // Update balance manager, to reflect previous settled limit orders in balance.
-    pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
-
     // TODO#q: include total balance after being settled into event
+    // Update trading information.
+    market_maker.info.set_volume_base(volume_base(&market_maker.balance_manager, pool));
+    market_maker.info.set_quote_balance(quote_balance);
+    market_maker.info.set_base_balance(base_balance);
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
     market_maker.try_place_limit_order(
@@ -445,6 +455,11 @@ public fun config(market_maker: &MarketMaker): &AMMConfig {
     &market_maker.config
 }
 
+/// Returns the market maker accounting info.
+public fun info(market_maker: &MarketMaker): &Info {
+    &market_maker.info
+}
+
 /// Returns the market maker capability object ID.
 public fun cap_id(amm_cap: &AdminCap): ID {
     amm_cap.id.to_inner()
@@ -472,6 +487,19 @@ fun is_quote_price_stale(market_maker: &MarketMaker, price: Price): bool {
         .quote_price_publish_time()
         .map!(|publish_time| publish_time >= price.get_timestamp())
         .destroy_or!(false)
+}
+
+/// Returns the current epoch's base-asset volume from DeepBook,
+/// or `0` if the account has not been created yet in the pool's state.
+fun volume_base<BaseAsset, QuoteAsset>(
+    balance_manager: &BalanceManager,
+    pool: &Pool<BaseAsset, QuoteAsset>,
+): u128 {
+    if (pool.account_exists(balance_manager)) {
+        pool.account(balance_manager).total_volume()
+    } else {
+        0
+    }
 }
 
 /// Compute bid price based on `mid_price`, `spread`
