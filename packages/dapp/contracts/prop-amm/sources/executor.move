@@ -18,6 +18,7 @@ use openzeppelin_market_maker::market::Market;
 use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
 use pyth::pyth;
+use std::type_name;
 use sui::clock::Clock;
 use sui::coin::Coin;
 use sui::package;
@@ -210,24 +211,28 @@ public fun unpause(executor: &mut Executor, cap: &AdminCap) {
 }
 
 // TODO#q: how base_balance and quote_balance should be updated after deposit and withdrawal?
-// TODO#q: how should we track if base or quote withdrawal processed? Store base and quote currency type and use match assertion?
 
 /// Deposit funds into a balance manager.
+/// Tracks cumulative deposits against the configured base or quote asset; deposits of any
+/// other coin type (e.g., DEEP used for fees) flow through without accounting updates.
 /// Deepbook's `BalanceEvent` emitted after successful deposit.
-public fun deposit<T>(
-    executor: &mut Executor,
-    cap: &AdminCap,
-    coin: Coin<T>,
-    ctx: &mut TxContext,
-) {
+public fun deposit<T>(executor: &mut Executor, cap: &AdminCap, coin: Coin<T>, ctx: &mut TxContext) {
     assert!(executor.id() == cap.executor_id, EInvalidCap);
 
-    // TODO#q: record how much we deposited in quote (with base price conversion).
+    let coin_type = type_name::with_defining_ids<T>();
+    let amount = coin.value();
+    if (coin_type == executor.market.base_type()) {
+        executor.info.add_base_deposited(amount);
+    } else if (coin_type == executor.market.quote_type()) {
+        executor.info.add_quote_deposited(amount);
+    };
 
     executor.balance_manager.deposit_with_cap(&executor.caps.deposit_cap, coin, ctx)
 }
 
 /// Withdraw funds from a balance manager.
+/// Tracks cumulative withdrawals against the configured base or quote asset; withdrawals of
+/// any other coin type flow through without accounting updates.
 /// Fails if the market maker executor is not paused.
 /// Deepbook's `BalanceEvent` emitted after successful withdrawal.
 ///
@@ -236,17 +241,20 @@ public fun deposit<T>(
 public fun withdraw<T>(
     executor: &mut Executor,
     cap: &AdminCap,
-    withdraw_amount: u64,
+    amount: u64,
     ctx: &mut TxContext,
 ): Coin<T> {
     assert!(executor.id() == cap.executor_id, EInvalidCap);
     assert!(!executor.active, ENotPaused);
 
-    // TODO#q: record how much we withdrawed in quote (with base price conversion).
+    let coin_type = type_name::with_defining_ids<T>();
+    if (coin_type == executor.market.base_type()) {
+        executor.info.add_base_withdrawn(amount);
+    } else if (coin_type == executor.market.quote_type()) {
+        executor.info.add_quote_withdrawn(amount);
+    };
 
-    executor
-        .balance_manager
-        .withdraw_with_cap(&executor.caps.withdraw_cap, withdraw_amount, ctx)
+    executor.balance_manager.withdraw_with_cap(&executor.caps.withdraw_cap, amount, ctx)
 }
 
 // TODO#q: refresh quotes api with laser api.

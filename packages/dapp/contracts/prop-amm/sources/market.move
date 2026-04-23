@@ -4,6 +4,7 @@ module openzeppelin_market_maker::market;
 use deepbook::pool::Pool;
 use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
+use std::type_name::{Self, TypeName};
 use sui::coin_registry::Currency;
 
 // === Errors ===
@@ -25,6 +26,10 @@ const MAX_DECIMAL_POWER: u8 = 38;
 public struct Market has drop, store {
     /// ID of the associated pool.
     pool_id: ID,
+    /// Base asset type (`BaseAsset`) used to route deposits and withdrawals.
+    base_type: TypeName,
+    /// Quote asset type (`QuoteAsset`) used to route deposits and withdrawals.
+    quote_type: TypeName,
     /// Cached base asset decimals (read from `Currency<BaseAsset>` at creation time).
     base_decimals: u8,
     /// Cached quote asset decimals (read from `Currency<QuoteAsset>` at creation time).
@@ -74,6 +79,8 @@ public fun new<BaseAsset, QuoteAsset>(
 
     Market {
         pool_id: object::id(pool),
+        base_type: type_name::with_defining_ids<BaseAsset>(),
+        quote_type: type_name::with_defining_ids<QuoteAsset>(),
         base_decimals,
         quote_decimals,
         base_pyth_price_feed_id,
@@ -96,6 +103,16 @@ public fun has_valid_pool<BaseAsset, QuoteAsset>(
     pool: &Pool<BaseAsset, QuoteAsset>,
 ): bool {
     market.pool_id == object::id(pool)
+}
+
+/// Returns the base asset type.
+public fun base_type(market: &Market): TypeName {
+    market.base_type
+}
+
+/// Returns the quote asset type.
+public fun quote_type(market: &Market): TypeName {
+    market.quote_type
 }
 
 /// Returns the cached base asset decimals.
