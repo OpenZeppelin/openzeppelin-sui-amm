@@ -28,13 +28,10 @@ const HUNDRED_PERCENT_BPS: u64 = 10_000;
 
 // === Structs ===
 
-// TODO#q: move `active` flag to Executor
 // TODO#q: add balance aware pricing configuration
 
 /// AMM configuration shared across pools.
 public struct AMMConfig has drop, store {
-    /// Whether trading is active.
-    active: bool,
     /// Base spread in basis points.
     base_spread_bps: u64,
     /// Volatility spread in basis points.
@@ -76,7 +73,6 @@ public fun new(
     AMMConfig {
         base_spread_bps,
         volatility_spread_bps,
-        active: true,
         order_expiration_time_ms,
         max_price_age_secs,
         max_conf_ratio_bps,
@@ -93,11 +89,6 @@ public fun base_spread_bps(config: &AMMConfig): u64 {
 /// Returns the volatility spread in basis points.
 public fun volatility_spread_bps(config: &AMMConfig): u64 {
     config.volatility_spread_bps
-}
-
-/// Returns whether trading is paused.
-public fun active(config: &AMMConfig): bool {
-    config.active
 }
 
 /// Returns the order expiration duration in milliseconds.
@@ -125,14 +116,4 @@ public(package) fun base_spread(config: &AMMConfig, mid_price: u64): u64 {
 /// Compute the volatility spread in price terms for a given mid price.
 public(package) fun volatility_spread(config: &AMMConfig, mid_price: u64): u64 {
     ((mid_price as u128) * (config.volatility_spread_bps as u128) / HUNDRED_PERCENT_BPS_U128) as u64
-}
-
-/// Pauses trading by setting `active` to false.
-public(package) fun pause(config: &mut AMMConfig) {
-    config.active = false
-}
-
-/// Activate trading by setting `active` to true.
-public(package) fun unpause(config: &mut AMMConfig) {
-    config.active = true
 }

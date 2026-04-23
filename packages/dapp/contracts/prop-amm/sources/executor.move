@@ -72,6 +72,8 @@ public struct AdminCap has key, store {
 public struct MarketMaker has key, store {
     /// Unique ID for the account object.
     id: UID,
+    /// Whether trading is active.
+    active: bool,
     /// Deepbook capabilities retained by the owner.
     caps: Caps,
     /// Balance manager linked to the market maker.
@@ -119,6 +121,7 @@ public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Mark
     let market_maker_cap = AdminCap { id: object::new(ctx), executor_id: id.to_inner() };
     let market_maker = MarketMaker {
         id,
+        active: true,
         caps: Caps {
             trade_cap,
             deposit_cap,
@@ -133,19 +136,15 @@ public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Mark
     (market_maker, market_maker_cap)
 }
 
-/// Replaces the market maker configuration, and unpause trading.
+/// Replaces the market maker configuration. Resets the cached Pyth publish timestamps so the
+/// next `refresh_quotes` call re-prices even when the oracle timestamp has not advanced.
 /// Requires the matching market maker capability.
 public fun update_config(market_maker: &mut MarketMaker, cap: &AdminCap, config: AMMConfig) {
     assert!(market_maker.id() == cap.executor_id, EInvalidCap);
 
-    // When market maker is paused, emit unpaused event since `AMMConfig` can be created active
-    // only.
-    if (!market_maker.config.active()) {
-        events::emit_market_maker_unpaused(market_maker.id());
-    };
-
     events::emit_market_maker_config_updated(market_maker.id());
 
+    market_maker.market.reset_price_publish_times();
     market_maker.config = config;
 }
 
@@ -154,10 +153,11 @@ public fun update_config(market_maker: &mut MarketMaker, cap: &AdminCap, config:
 /// change. Requires the matching market maker capability.
 public fun update_market(market_maker: &mut MarketMaker, cap: &AdminCap, market: Market) {
     assert!(market_maker.id() == cap.executor_id, EInvalidCap);
-    assert!(!market_maker.config.active(), EInvalidMarketUpdate);
+    assert!(!market_maker.active, EInvalidMarketUpdate);
 
     events::emit_market_updated(market_maker.id());
 
+    market_maker.info = info::empty();
     market_maker.market = market;
 }
 
@@ -170,7 +170,7 @@ public fun pause<BaseAsset, QuoteAsset>(
     ctx: &mut TxContext,
 ) {
     assert!(market_maker.id() == cap.executor_id, EInvalidCap);
-    assert!(market_maker.config.active(), EPaused);
+    assert!(market_maker.active, EPaused);
     assert!(market_maker.market.has_valid_pool(pool), EInvalidPool);
 
     // Generate trade proof.
@@ -197,20 +197,18 @@ public fun pause<BaseAsset, QuoteAsset>(
     // Emit paused event.
     events::emit_market_maker_paused(market_maker.id());
 
-    // Pause config.
-    market_maker.config.pause();
+    market_maker.active = false;
 }
 
 /// Unpauses trading, allowing new orders to be placed.
 public fun unpause(market_maker: &mut MarketMaker, cap: &AdminCap) {
     assert!(market_maker.id() == cap.executor_id, EInvalidCap);
-    assert!(!market_maker.config.active(), ENotPaused);
+    assert!(!market_maker.active, ENotPaused);
 
     // Emit unpaused event.
     events::emit_market_maker_unpaused(market_maker.id());
 
-    // Unpause config.
-    market_maker.config.unpause();
+    market_maker.active = true;
 }
 
 // TODO#q: how base_balance and quote_balance should be updated after deposit and withdrawal?
@@ -244,7 +242,7 @@ public fun withdraw<T>(
     ctx: &mut TxContext,
 ): Coin<T> {
     assert!(market_maker.id() == cap.executor_id, EInvalidCap);
-    assert!(!market_maker.config.active(), ENotPaused);
+    assert!(!market_maker.active, ENotPaused);
 
     // TODO#q: record how much we withdrawed in quote (with base price conversion).
 
@@ -276,7 +274,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Assert an input pool is valid.
     assert!(market_maker.market.has_valid_pool(pool), EInvalidPool);
     // Assert trading is active.
-    assert!(market_maker.config.active(), EPaused);
+    assert!(market_maker.active, EPaused);
     // Assert Pyth price info objects have valid configured feed ids.
     assert!(
         market_maker.market.has_valid_base_pyth_feed_id(base_price_info_object),
@@ -471,6 +469,11 @@ public fun market(market_maker: &MarketMaker): &Market {
 /// Returns the current market maker configuration.
 public fun config(market_maker: &MarketMaker): &AMMConfig {
     &market_maker.config
+}
+
+/// Returns whether trading is active.
+public fun active(market_maker: &MarketMaker): bool {
+    market_maker.active
 }
 
 /// Returns the market maker accounting info.

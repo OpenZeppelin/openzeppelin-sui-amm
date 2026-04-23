@@ -394,11 +394,11 @@ fun pause_and_unpause_emit_events_and_toggle_market_maker_activity() {
 
     market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
     assert_emitted!(market_maker_paused(market_maker_object.id()));
-    assert!(!market_maker_object.config().active());
+    assert!(!market_maker_object.active());
 
     market_maker_object.unpause(&market_maker_cap);
     assert_emitted!(market_maker_unpaused(market_maker_object.id()));
-    assert!(market_maker_object.config().active());
+    assert!(market_maker_object.active());
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(clock);
@@ -453,7 +453,7 @@ fun unpause_emits_event_in_followup_transaction() {
     market_maker_object.unpause(&market_maker_cap);
 
     assert_emitted!(market_maker_unpaused(market_maker_object.id()));
-    assert!(market_maker_object.config().active());
+    assert!(market_maker_object.active());
 
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
@@ -461,7 +461,7 @@ fun unpause_emits_event_in_followup_transaction() {
 }
 
 #[test]
-fun update_config_from_paused_emits_unpaused_event() {
+fun update_config_preserves_paused_state() {
     let sender = @0x18;
     let feed_id_byte = 14;
     let mut scenario = test_scenario::begin(sender);
@@ -498,8 +498,7 @@ fun update_config_from_paused_emits_unpaused_event() {
     market_maker_object.update_config(&market_maker_cap, updated_config);
 
     assert_emitted!(market_maker_config_updated(market_maker_object.id()));
-    assert_emitted!(market_maker_unpaused(market_maker_object.id()));
-    assert!(market_maker_object.config().active());
+    assert!(!market_maker_object.active());
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(clock);

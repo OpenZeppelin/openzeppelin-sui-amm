@@ -20,7 +20,6 @@ fun create_amm_config_builds_expected_config() {
 
     assert_eq!(amm_config.base_spread_bps(), base_spread_bps);
     assert_eq!(amm_config.volatility_spread_bps(), volatility_spread_bps);
-    assert_eq!(amm_config.active(), true);
     assert_eq!(amm_config.order_expiration_time_ms(), 30_000);
     assert_eq!(amm_config.max_price_age_secs(), 30);
     assert_eq!(amm_config.max_conf_ratio_bps(), 1000);

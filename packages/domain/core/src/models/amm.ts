@@ -37,7 +37,6 @@ export type AmmConfigOverview = {
 }
 
 type AmmConfigFields = {
-  active?: unknown
   base_spread_bps?: unknown
   volatility_spread_bps?: unknown
   order_expiration_time_ms?: unknown
@@ -54,6 +53,7 @@ type MarketFields = {
 }
 
 type MarketMakerFields = {
+  active?: unknown
   config?: { fields?: AmmConfigFields } | AmmConfigFields
   market?: { fields?: MarketFields } | MarketFields
 }
@@ -111,7 +111,7 @@ const buildAmmConfigOverviewFromObject = ({
       config.volatility_spread_bps,
       "Volatility spread bps"
     ),
-    active: requireBooleanField(config.active, "Active"),
+    active: requireBooleanField(marketMakerFields.active, "Active"),
     basePythPriceFeedIdHex: requireFeedIdHex(
       market.base_pyth_price_feed_id,
       "Base Pyth price feed id"

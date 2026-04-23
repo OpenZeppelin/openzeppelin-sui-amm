@@ -31,6 +31,8 @@ public struct Market has drop, store {
     quote_price_publish_time: Option<u64>,
 }
 
+// TODO#q: create the second struct TradingCurrency
+
 // === Public Functions ===
 
 /// Creates a new `Market` from a pool ID and the base/quote Pyth price feed identifiers.
@@ -154,4 +156,11 @@ public(package) fun set_quote_price_publish_time(
     publish_time: u64,
 ): Option<u64> {
     market.quote_price_publish_time.swap_or_fill(publish_time)
+}
+
+/// Clears cached base and quote price publish timestamps so the next oracle read is not
+/// treated as stale/replayed.
+public(package) fun reset_price_publish_times(market: &mut Market) {
+    market.base_price_publish_time = option::none();
+    market.quote_price_publish_time = option::none();
 }
