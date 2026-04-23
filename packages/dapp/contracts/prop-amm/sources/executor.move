@@ -27,21 +27,23 @@ use sui::package;
 #[error(code = 0)]
 const EPythFeedIdentifierMismatch: vector<u8> = "pyth feed identifier mismatch";
 #[error(code = 1)]
-const ETickIsTooLarge: vector<u8> = "deepbook pool tick size is too large for price calculation";
-#[error(code = 2)]
 const EInvalidPool: vector<u8> = "pool does not match the associated pool";
-#[error(code = 3)]
+#[error(code = 2)]
 const EInvalidCap: vector<u8> = "invalid market maker cap";
-#[error(code = 4)]
+#[error(code = 3)]
 const EPaused: vector<u8> = "trading paused";
-#[error(code = 5)]
+#[error(code = 4)]
 const ENotPaused: vector<u8> = "trading not paused";
-#[error(code = 6)]
+#[error(code = 5)]
 const EInvalidQuantity: vector<u8> = "can't place order due to invalid quantity";
-#[error(code = 7)]
+#[error(code = 6)]
 const EConfigUnchanged: vector<u8> = "new config is identical to the current config";
-#[error(code = 8)]
+#[error(code = 7)]
 const EMarketUnchanged: vector<u8> = "new market is identical to the current market";
+#[error(code = 8)]
+const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
+#[error(code = 9)]
+const EPriceOverflow: vector<u8> = "price higher than maximum or oveflowed";
 
 // === Structs ===
 
@@ -327,23 +329,29 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
             executor.config.max_conf_ratio_bps(),
         );
     let base_spread = executor.config.base_spread(oracle_mid_price);
+    // TODO#q: change volatility spread calculation.
     let volatility_spread = executor.config.volatility_spread(oracle_mid_price);
 
     // Fetch deepbook's pool parameters.
     let (tick, lot_size, min_size) = pool.pool_book_params();
 
-    // TODO#q: doublecheck that price will be correct and we won't get bid and ask price equal. Force to have at least 1 tick difference between those parameters.
     // TODO#q: configuration field to consider deepbook's price? (to not execute market order accidentaly)
     // Calculate bids/ask order prices.
-    let bid_inner = compute_bid_price(oracle_mid_price, base_spread, tick);
     let bid_outer = compute_bid_price(oracle_mid_price, volatility_spread, tick);
+    let bid_inner = compute_bid_price(oracle_mid_price, base_spread, tick);
     let ask_inner = compute_ask_price(oracle_mid_price, base_spread, tick);
     let ask_outer = compute_ask_price(oracle_mid_price, volatility_spread, tick);
+
+    // Cancel outer bid/ask when equal to inner.
+    let cancel_outer_bid = bid_outer == bid_inner;
+    let cancel_outer_ask = ask_outer == ask_inner;
 
     // Split bid order balance between inner and outer spread per the configured
     // `outer_balance_bps`, and compute quantity in base asset (for deepbook limit order).
     let quote_balance = executor.balance_manager.balance<QuoteAsset>();
-    let bid_outer_quantity_quote = executor.config.outer_balance(quote_balance);
+    let bid_outer_quantity_quote = if (cancel_outer_bid) { 0 } else {
+        executor.config.outer_balance(quote_balance)
+    };
     let bid_inner_quantity_quote = quote_balance - bid_outer_quantity_quote;
     let bid_outer_quantity = compute_quantity(
         quote_to_base_quantity(bid_outer_quantity_quote, bid_outer),
@@ -359,10 +367,12 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Split ask order balance between inner and outer spread per the configured
     // `outer_balance_bps`.
     let base_balance = executor.balance_manager.balance<BaseAsset>();
-    let ask_outer_raw = executor.config.outer_balance(base_balance);
-    let ask_inner_raw = base_balance - ask_outer_raw;
-    let ask_outer_quantity = compute_quantity(ask_outer_raw, lot_size, min_size);
-    let ask_inner_quantity = compute_quantity(ask_inner_raw, lot_size, min_size);
+    let ask_outer_precise_quantity = if (cancel_outer_ask) { 0 } else {
+        executor.config.outer_balance(base_balance)
+    };
+    let ask_inner_precise_quantity = base_balance - ask_outer_precise_quantity;
+    let ask_outer_quantity = compute_quantity(ask_outer_precise_quantity, lot_size, min_size);
+    let ask_inner_quantity = compute_quantity(ask_inner_precise_quantity, lot_size, min_size);
 
     // TODO#q: include total balance after being settled into event
     // Update trading information.
@@ -493,41 +503,39 @@ fun volume_base<BaseAsset, QuoteAsset>(
     }
 }
 
-/// Compute bid price based on `mid_price`, `spread`
+/// Compute bid price based on `mid_price` and `spread`
 /// to match deepbook's allowed `tick` size
-/// (rounding outside `mid_price`)
-/// Computed bid should not be more than a `mid_price`
+/// (rounding outside `mid_price`).
+/// Aborts if less than a min price.
 fun compute_bid_price(mid_price: u64, spread: u64, tick: u64): u64 {
-    // Min price is one `tick` higher than deepbook's `min_price`
-    // to avoid rounding down error.
-    let min_price = constants::min_price().checked_add(tick).destroy_or!(abort ETickIsTooLarge);
+    // Compute precise bid price.
+    let bid = mid_price.checked_sub(spread).destroy_or!(abort EPriceUnderflow);
 
-    // Compute the maximal allowed bid price.
-    let bid = mid_price.checked_sub(spread).destroy_or!(min_price).max(min_price);
+    // Round down bid to the nearest tick and assert min price constraint.
+    let bid = bid - bid % tick;
+    assert!(bid >= constants::min_price(), EPriceUnderflow);
 
-    // Round down the bid to the nearest tick.
-    bid - bid % tick
+    bid
 }
 
 /// Compute ask size based on `mid_price`, `spread`
 /// to match deepbook's allowed `tick` size
 /// (rounding outside `mid_price`).
-/// Computed ask will not be less than a `mid_price`.
+/// Aborts if more than a max price.
 fun compute_ask_price(mid_price: u64, spread: u64, tick: u64): u64 {
-    // Max price is one `tick` lower than deepbook's `max_price`
-    // to avoid rounding up error.
-    let max_price = constants::max_price().checked_sub(tick).destroy_or!(abort ETickIsTooLarge);
+    // Compute precise ask price.
+    let ask = mid_price.checked_add(spread).destroy_or!(abort EPriceOverflow);
 
-    // Compute the minimum allowed ask price.
-    let ask = mid_price.checked_add(spread).destroy_or!(max_price).min(max_price);
-
-    // Round up the ask price to the nearest tick.
+    // Round up ask to the nearest tick and assert max price constraint.
     let rem = ask % tick;
-    if (rem == 0) {
+    let ask = if (rem == 0) {
         ask
     } else {
-        ask + tick - rem
-    }
+        ask.checked_add(tick - rem).destroy_or!(abort EPriceOverflow)
+    };
+    assert!(ask <= constants::max_price(), EPriceOverflow);
+
+    ask
 }
 
 /// Round down order `quantity` to match deepbook's `lot_size`.

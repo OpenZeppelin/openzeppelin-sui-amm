@@ -75,6 +75,8 @@ public fun new(
     );
     assert!(order_expiration_time_ms > 0, EInvalidOrderExpirationTime);
     assert!(max_price_age_secs > 0, EInvalidMaxPriceAge);
+
+    // TODO#q: outer balance bps should be 0<= and <=HUNDRED_PERCENT_BPS
     assert!(outer_balance_bps < HUNDRED_PERCENT_BPS, EInvalidOuterBalanceBps);
 
     AMMConfig {
