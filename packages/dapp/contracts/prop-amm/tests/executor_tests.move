@@ -403,6 +403,7 @@ fun update_config_replaces_config_before_refreshing_quotes() {
 
     assert_emitted!(
         quote_updated(
+            executor_object.id(),
             oracle_price,
             updated_base_spread_bps,
             updated_volatility_spread_bps,
@@ -666,7 +667,99 @@ fun update_market_replaces_market_while_paused() {
     scenario.end();
 }
 
-#[test, expected_failure(abort_code = executor::EInvalidMarketUpdate)]
+#[test, expected_failure(abort_code = executor::EConfigUnchanged)]
+fun update_config_rejects_when_unchanged() {
+    let sender = @0x1b;
+    let feed_id_byte = 19;
+    let base_spread_bps = 100;
+    let volatility_spread_bps = 200;
+    let mut scenario = test_scenario::begin(sender);
+
+    executor::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (mut executor_object, executor_cap) = create_executor_for_pool(
+        &mut scenario,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        base_spread_bps,
+        volatility_spread_bps,
+        feed_id_byte,
+    );
+
+    // Build a config identical to the one `create_executor_for_pool` used.
+    let identical_config = config::new(base_spread_bps, volatility_spread_bps, 30_000, 30, 1000);
+    executor_object.update_config(&executor_cap, identical_config);
+
+    abort
+}
+
+#[test, expected_failure(abort_code = executor::EMarketUnchanged)]
+fun update_market_rejects_when_unchanged() {
+    let sender = @0x1c;
+    let feed_id_byte = 20;
+    let mut scenario = test_scenario::begin(sender);
+
+    executor::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    // Reuse currencies across both `market::new` calls; test-only currency creation cannot
+    // run twice against the same legacy metadata.
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
+        &mut scenario,
+        sender,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        100,
+        200,
+        feed_id_byte,
+    );
+
+    test_scenario::return_shared(pool);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+
+    executor_object.pause(&executor_cap, &mut pool, &clock, scenario.ctx());
+
+    let identical_market = market::new(
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        build_pyth_price_feed_id(feed_id_byte),
+        build_pyth_price_feed_id(feed_id_byte),
+    );
+    executor_object.update_market(&executor_cap, identical_market);
+
+    abort
+}
+
+#[test, expected_failure(abort_code = executor::ENotPaused)]
 fun update_market_rejects_while_active() {
     let sender = @0x1a;
     let feed_id_byte = 17;
@@ -771,7 +864,9 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
         scenario.ctx(),
     );
 
-    assert_emitted!(quote_updated(oracle_price, base_spread_bps, volatility_spread_bps));
+    assert_emitted!(
+        quote_updated(executor_object.id(), oracle_price, base_spread_bps, volatility_spread_bps),
+    );
 
     // Verify all 4 limit orders were placed (2 bids + 2 asks),
     // and assert on their actual placed_quantity.
@@ -1069,7 +1164,9 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
         scenario.ctx(),
     );
 
-    assert_emitted!(quote_updated(oracle_price, base_spread_bps, volatility_spread_bps));
+    assert_emitted!(
+        quote_updated(executor_object.id(), oracle_price, base_spread_bps, volatility_spread_bps),
+    );
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(price_info_object);

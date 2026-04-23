@@ -13,6 +13,8 @@ public struct ExecutorCreated has copy, drop {
 
 /// Emitted whenever quote levels are recomputed from oracle input.
 public struct QuoteUpdated has copy, drop {
+    /// ID of the market maker executor object.
+    executor_id: ID,
     /// Mid price used for quote generation (DeepBook fixed-point format).
     price: u64,
     /// Effective spread in bps used for this update.
@@ -34,16 +36,12 @@ public struct ExecutorUnpaused has copy, drop {
 }
 
 /// Emitted when the market maker executor configuration is updated.
-///
-/// NOTE: Can be emitted when update triggered even without actual changes to config.
 public struct ExecutorConfigUpdated has copy, drop {
     /// ID of the market maker executor object.
     executor_id: ID,
 }
 
 /// Emitted when the market maker executor's market metadata is updated.
-///
-/// NOTE: Can be emitted when update triggered even without actual changes to market.
 public struct MarketUpdated has copy, drop {
     /// ID of the market maker executor object.
     executor_id: ID,
@@ -58,11 +56,12 @@ public(package) fun emit_executor_created(executor_id: ID) {
 
 /// Emit a `QuoteUpdated` event.
 public(package) fun emit_quote_updated(
+    executor_id: ID,
     price: u64,
     base_spread_bps: u64,
     volatility_spread_bps: u64,
 ) {
-    event::emit(QuoteUpdated { price, base_spread_bps, volatility_spread_bps });
+    event::emit(QuoteUpdated { executor_id, price, base_spread_bps, volatility_spread_bps });
 }
 
 /// Emit an `ExecutorPaused` event.
@@ -96,11 +95,12 @@ public(package) fun executor_created(executor_id: ID): ExecutorCreated {
 /// Builds a `QuoteUpdated` payload.
 #[test_only]
 public(package) fun quote_updated(
+    executor_id: ID,
     price: u64,
     base_spread_bps: u64,
     volatility_spread_bps: u64,
 ): QuoteUpdated {
-    QuoteUpdated { price, base_spread_bps, volatility_spread_bps }
+    QuoteUpdated { executor_id, price, base_spread_bps, volatility_spread_bps }
 }
 
 /// Builds an `ExecutorPaused` payload.

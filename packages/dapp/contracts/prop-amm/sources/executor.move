@@ -37,9 +37,11 @@ const EPaused: vector<u8> = "trading paused";
 #[error(code = 5)]
 const ENotPaused: vector<u8> = "trading not paused";
 #[error(code = 6)]
-const EInvalidMarketUpdate: vector<u8> = "should update market while trading paused";
-#[error(code = 7)]
 const EInvalidQuantity: vector<u8> = "can't place order due to invalid quantity";
+#[error(code = 7)]
+const EConfigUnchanged: vector<u8> = "new config is identical to the current config";
+#[error(code = 8)]
+const EMarketUnchanged: vector<u8> = "new market is identical to the current market";
 
 // === Structs ===
 
@@ -124,6 +126,7 @@ public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Exec
 /// Requires the matching market maker executor capability.
 public fun update_config(executor: &mut Executor, cap: &AdminCap, config: AMMConfig) {
     assert!(executor.id() == cap.executor_id, EInvalidCap);
+    assert!(&executor.config != &config, EConfigUnchanged);
 
     events::emit_executor_config_updated(executor.id());
 
@@ -136,7 +139,8 @@ public fun update_config(executor: &mut Executor, cap: &AdminCap, config: AMMCon
 /// change. Requires the matching market maker capability.
 public fun update_market(executor: &mut Executor, cap: &AdminCap, market: Market) {
     assert!(executor.id() == cap.executor_id, EInvalidCap);
-    assert!(!executor.active, EInvalidMarketUpdate);
+    assert!(!executor.active, ENotPaused);
+    assert!(&executor.market != &market, EMarketUnchanged);
 
     events::emit_market_updated(executor.id());
 
@@ -315,11 +319,13 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     pool.withdraw_settled_amounts(&mut executor.balance_manager, &trade_proof);
 
     // Calculate precise spreads using Base/Quote = (Base/USD) / (Quote/USD).
-    let oracle_mid_price = executor.market.deepbook_price(
-        base_pyth_price,
-        quote_pyth_price,
-        executor.config.max_conf_ratio_bps(),
-    );
+    let oracle_mid_price = executor
+        .market
+        .deepbook_price(
+            base_pyth_price,
+            quote_pyth_price,
+            executor.config.max_conf_ratio_bps(),
+        );
     let base_spread = executor.config.base_spread(oracle_mid_price);
     let volatility_spread = executor.config.volatility_spread(oracle_mid_price);
 
@@ -408,6 +414,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // TODO#q: emit placed order ids (will be used to retrieve info about matched orders)
     events::emit_quote_updated(
+        executor.id(),
         oracle_mid_price,
         executor.config.base_spread_bps(),
         executor.config.volatility_spread_bps(),
