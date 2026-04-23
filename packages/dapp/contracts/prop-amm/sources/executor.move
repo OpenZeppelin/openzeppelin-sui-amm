@@ -20,7 +20,6 @@ use pyth::price_info::PriceInfoObject;
 use pyth::pyth;
 use sui::clock::Clock;
 use sui::coin::Coin;
-use sui::coin_registry::Currency;
 use sui::package;
 
 // === Errors ===
@@ -250,7 +249,6 @@ public fun withdraw<T>(
         .withdraw_with_cap(&executor.caps.withdraw_cap, withdraw_amount, ctx)
 }
 
-// TODO#q: move decimals retrieved from Currency to market module (or config/market).
 // TODO#q: refresh quotes api with laser api.
 
 /// Public quote refresh entrypoint for bot-driven PTBs.
@@ -263,8 +261,6 @@ public fun withdraw<T>(
 public fun refresh_quotes<BaseAsset, QuoteAsset>(
     executor: &mut Executor,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
-    base_currency: &Currency<BaseAsset>,
-    quote_currency: &Currency<QuoteAsset>,
     base_price_info_object: &PriceInfoObject,
     quote_price_info_object: &PriceInfoObject,
     clock: &Clock,
@@ -330,8 +326,8 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     let oracle_mid_price = deepbook_price(
         base_pyth_price,
         quote_pyth_price,
-        base_currency.decimals(),
-        quote_currency.decimals(),
+        executor.market.base_decimals(),
+        executor.market.quote_decimals(),
         executor.config.max_conf_ratio_bps(),
     );
     let base_spread = executor.config.base_spread(oracle_mid_price);
@@ -619,6 +615,8 @@ fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8) {
 // TODO#q: probably rename since we should have a function that can retrieve deepbook real price
 
 /// Derive the DeepBook base/quote price from base and quote USD prices.
+/// Caller must guarantee `base_decimals` and `quote_decimals` are within
+/// `market::max_decimal_power()`; `market::new` enforces this at construction time.
 fun deepbook_price(
     base_price: Price,
     quote_price: Price,
@@ -626,9 +624,6 @@ fun deepbook_price(
     quote_decimals: u8,
     max_conf_ratio_bps: u64,
 ): u64 {
-    assert!(base_decimals <= MAX_DECIMAL_POWER, EExponentTooLarge);
-    assert!(quote_decimals <= MAX_DECIMAL_POWER, EExponentTooLarge);
-
     let (base_mantissa, base_exponent) = deepbook_usd_price(base_price, max_conf_ratio_bps);
     let (quote_mantissa, quote_exponent) = deepbook_usd_price(quote_price, max_conf_ratio_bps);
 

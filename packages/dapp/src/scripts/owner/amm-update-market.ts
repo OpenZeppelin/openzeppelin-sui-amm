@@ -21,6 +21,8 @@ import {
   resolveAmmConfigId,
   resolveAmmPackageId
 } from "@sui-amm/domain-node/amm"
+import { deriveCurrencyObjectId } from "@sui-amm/tooling-core/coin-registry"
+import { SUI_COIN_REGISTRY_ID } from "@sui-amm/tooling-core/constants"
 import { normalizeIdOrThrow } from "@sui-amm/tooling-core/object"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
@@ -179,15 +181,39 @@ runSuiScript(
       currentOverview
     })
 
+    // When the new pool matches the current pool, reuse the already-fetched shared ref.
+    const newPool =
+      newMarketInputs.poolId === currentOverview.poolId
+        ? currentPoolSharedObject
+        : await tooling.getImmutableSharedObject({
+            objectId: newMarketInputs.poolId
+          })
+    const [baseCurrency, quoteCurrency] = await Promise.all([
+      tooling.getImmutableSharedObject({
+        objectId: deriveCurrencyObjectId(
+          baseAssetTypeTag,
+          SUI_COIN_REGISTRY_ID
+        )
+      }),
+      tooling.getImmutableSharedObject({
+        objectId: deriveCurrencyObjectId(
+          quoteAssetTypeTag,
+          SUI_COIN_REGISTRY_ID
+        )
+      })
+    ])
+
     const updateMarketTransaction = buildUpdateMarketWithPauseTransaction({
       packageId: ammPackageId,
       executor: ammConfigSharedObject,
       adminCapId,
       currentActive: currentOverview.active,
       currentPool: currentPoolSharedObject,
+      pool: newPool,
+      baseCurrency,
+      quoteCurrency,
       baseAssetTypeTag,
       quoteAssetTypeTag,
-      newPoolId: newMarketInputs.poolId,
       basePythPriceFeedIdBytes: newMarketInputs.basePythPriceFeedIdBytes,
       quotePythPriceFeedIdBytes: newMarketInputs.quotePythPriceFeedIdBytes
     })

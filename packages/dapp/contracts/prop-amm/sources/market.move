@@ -4,23 +4,31 @@ module openzeppelin_market_maker::market;
 use deepbook::pool::Pool;
 use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
+use sui::coin_registry::Currency;
 
 // === Errors ===
 
 #[error(code = 0)]
 const EInvalidPythPriceFeedIdLength: vector<u8> = "pyth price feed id must be 32 bytes";
+#[error(code = 1)]
+const EDecimalsTooLarge: vector<u8> = "currency decimals too large";
 
 // === Constants ===
 
 const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
+const MAX_DECIMAL_POWER: u8 = 38;
 
 // === Structs ===
 
-/// Market metadata: pool identity, Pyth feed identifiers, and the latest observed publish
-/// timestamps used to detect replayed oracle prices.
+/// Market metadata: pool identity, cached asset decimals, Pyth feed identifiers, and the
+/// latest observed publish timestamps used to detect replayed oracle prices.
 public struct Market has drop, store {
     /// ID of the associated pool.
     pool_id: ID,
+    /// Cached base asset decimals (read from `Currency<BaseAsset>` at creation time).
+    base_decimals: u8,
+    /// Cached quote asset decimals (read from `Currency<QuoteAsset>` at creation time).
+    quote_decimals: u8,
     /// Pyth price feed identifier bytes for the base asset.
     base_pyth_price_feed_id: vector<u8>,
     /// Pyth price feed identifier bytes for the quote asset.
@@ -31,17 +39,22 @@ public struct Market has drop, store {
     quote_price_publish_time: Option<u64>,
 }
 
-// TODO#q: create the second struct TradingCurrency
-
 // === Public Functions ===
 
-/// Creates a new `Market` from a pool ID and the base/quote Pyth price feed identifiers.
-/// Useful for PTBs that cannot pass pool objects with generic type arguments.
+/// Creates a new `Market` bound to the asset pair traded on `pool`.
 ///
-/// Pass the returned value into `executor::create` when creating a new market maker executor or into
-/// `executor::update_market` when replacing the configured market.
-public fun new(
-    pool_id: ID,
+/// The `BaseAsset`/`QuoteAsset` generic parameters of `pool`, `base_currency`, and
+/// `quote_currency` must all match — this is what guarantees that the cached decimals and
+/// the pool identity are for the same asset pair. The resulting `Market` value is not
+/// generically typed; the returned struct carries only the derived `pool_id`, the cached
+/// decimals, and the Pyth feed identifiers, so downstream executor state stays non-generic.
+///
+/// Pass the returned value into `executor::create` when creating a new market maker executor
+/// or into `executor::update_market` when replacing the configured market.
+public fun new<BaseAsset, QuoteAsset>(
+    pool: &Pool<BaseAsset, QuoteAsset>,
+    base_currency: &Currency<BaseAsset>,
+    quote_currency: &Currency<QuoteAsset>,
     base_pyth_price_feed_id: vector<u8>,
     quote_pyth_price_feed_id: vector<u8>,
 ): Market {
@@ -54,8 +67,15 @@ public fun new(
         EInvalidPythPriceFeedIdLength,
     );
 
+    let base_decimals = base_currency.decimals();
+    let quote_decimals = quote_currency.decimals();
+    assert!(base_decimals <= MAX_DECIMAL_POWER, EDecimalsTooLarge);
+    assert!(quote_decimals <= MAX_DECIMAL_POWER, EDecimalsTooLarge);
+
     Market {
-        pool_id,
+        pool_id: object::id(pool),
+        base_decimals,
+        quote_decimals,
         base_pyth_price_feed_id,
         quote_pyth_price_feed_id,
         base_price_publish_time: option::none(),
@@ -76,6 +96,16 @@ public fun has_valid_pool<BaseAsset, QuoteAsset>(
     pool: &Pool<BaseAsset, QuoteAsset>,
 ): bool {
     market.pool_id == object::id(pool)
+}
+
+/// Returns the cached base asset decimals.
+public fun base_decimals(market: &Market): u8 {
+    market.base_decimals
+}
+
+/// Returns the cached quote asset decimals.
+public fun quote_decimals(market: &Market): u8 {
+    market.quote_decimals
 }
 
 /// Returns the Pyth base asset price feed ID bytes.
@@ -140,6 +170,11 @@ public fun is_quote_price_stale(market: &Market, price: Price): bool {
 /// Returns the required Pyth price feed identifier length.
 public(package) fun pyth_price_identifier_length(): u64 {
     PYTH_PRICE_IDENTIFIER_LENGTH
+}
+
+/// Returns the maximum supported decimal power for cached asset decimals.
+public(package) fun max_decimal_power(): u8 {
+    MAX_DECIMAL_POWER
 }
 
 /// Sets new base `publish_time` and returns the previous base price publish time, if any.

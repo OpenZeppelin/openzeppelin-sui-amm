@@ -32,7 +32,11 @@ export const parsePythPriceFeedIdBytes = (
 
 export const buildCreateExecutorTransaction = ({
   packageId,
-  poolId,
+  pool,
+  baseCurrency,
+  quoteCurrency,
+  baseAssetTypeTag,
+  quoteAssetTypeTag,
   senderAddress,
   baseSpreadBps,
   volatilitySpreadBps,
@@ -43,7 +47,11 @@ export const buildCreateExecutorTransaction = ({
   maxConfRatioBps
 }: {
   packageId: string
-  poolId: string
+  pool: WrappedSuiSharedObject
+  baseCurrency: WrappedSuiSharedObject
+  quoteCurrency: WrappedSuiSharedObject
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
   senderAddress: string
   baseSpreadBps: bigint | number
   volatilitySpreadBps: bigint | number
@@ -67,8 +75,11 @@ export const buildCreateExecutorTransaction = ({
 
   const market = transaction.moveCall({
     target: `${packageId}::market::new`,
+    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
     arguments: [
-      transaction.pure.address(poolId),
+      transaction.sharedObjectRef(pool.sharedRef),
+      transaction.sharedObjectRef(baseCurrency.sharedRef),
+      transaction.sharedObjectRef(quoteCurrency.sharedRef),
       transaction.pure.vector("u8", validatedBasePythPriceFeedIdBytes),
       transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes)
     ]
@@ -149,22 +160,30 @@ export const buildUpdateConfigTransaction = ({
 }
 
 /**
- * Builds a transaction that replaces the market maker's `Market` (pool id and Pyth feed ids).
- * The on-chain `executor::update_market` call requires the market maker to be paused, so the
- * caller is responsible for pausing before signing and unpausing afterwards.
+ * Builds a transaction that replaces the market maker's `Market` (pool + Pyth feed ids + cached
+ * decimals). The on-chain `executor::update_market` call requires the market maker to be paused,
+ * so the caller is responsible for pausing before signing and unpausing afterwards.
  */
 export const buildUpdateMarketTransaction = ({
   packageId,
   executor,
   adminCapId,
-  poolId,
+  pool,
+  baseCurrency,
+  quoteCurrency,
+  baseAssetTypeTag,
+  quoteAssetTypeTag,
   basePythPriceFeedIdBytes,
   quotePythPriceFeedIdBytes
 }: {
   packageId: string
   executor: WrappedSuiSharedObject
   adminCapId: string
-  poolId: string
+  pool: WrappedSuiSharedObject
+  baseCurrency: WrappedSuiSharedObject
+  quoteCurrency: WrappedSuiSharedObject
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
   basePythPriceFeedIdBytes: number[]
   quotePythPriceFeedIdBytes: number[]
 }) => {
@@ -182,8 +201,11 @@ export const buildUpdateMarketTransaction = ({
 
   const market = transaction.moveCall({
     target: `${packageId}::market::new`,
+    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
     arguments: [
-      transaction.pure.address(poolId),
+      transaction.sharedObjectRef(pool.sharedRef),
+      transaction.sharedObjectRef(baseCurrency.sharedRef),
+      transaction.sharedObjectRef(quoteCurrency.sharedRef),
       transaction.pure.vector("u8", validatedBasePythPriceFeedIdBytes),
       transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes)
     ]
@@ -212,6 +234,9 @@ export const buildUpdateMarketTransaction = ({
  *
  * Otherwise (market maker already paused), the PTB only emits `market::new` +
  * `executor::update_market`, leaving the market maker paused.
+ *
+ * The new `Market` is built from `pool` + `baseCurrency` + `quoteCurrency`; the type tags
+ * (used for the `pause` call's type arguments) must match `pool`'s parameterization.
  */
 export const buildUpdateMarketWithPauseTransaction = ({
   packageId,
@@ -219,9 +244,11 @@ export const buildUpdateMarketWithPauseTransaction = ({
   adminCapId,
   currentActive,
   currentPool,
+  pool,
+  baseCurrency,
+  quoteCurrency,
   baseAssetTypeTag,
   quoteAssetTypeTag,
-  newPoolId,
   basePythPriceFeedIdBytes,
   quotePythPriceFeedIdBytes
 }: {
@@ -230,9 +257,11 @@ export const buildUpdateMarketWithPauseTransaction = ({
   adminCapId: string
   currentActive: boolean
   currentPool: WrappedSuiSharedObject
+  pool: WrappedSuiSharedObject
+  baseCurrency: WrappedSuiSharedObject
+  quoteCurrency: WrappedSuiSharedObject
   baseAssetTypeTag: string
   quoteAssetTypeTag: string
-  newPoolId: string
   basePythPriceFeedIdBytes: number[]
   quotePythPriceFeedIdBytes: number[]
 }) => {
@@ -263,8 +292,11 @@ export const buildUpdateMarketWithPauseTransaction = ({
 
   const market = transaction.moveCall({
     target: `${packageId}::market::new`,
+    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
     arguments: [
-      transaction.pure.address(newPoolId),
+      transaction.sharedObjectRef(pool.sharedRef),
+      transaction.sharedObjectRef(baseCurrency.sharedRef),
+      transaction.sharedObjectRef(quoteCurrency.sharedRef),
       transaction.pure.vector("u8", validatedBasePythPriceFeedIdBytes),
       transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes)
     ]

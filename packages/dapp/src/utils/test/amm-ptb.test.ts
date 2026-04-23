@@ -23,6 +23,11 @@ const expectMoveCall = (
 
 const FEED_BYTES = Array.from({ length: 32 }, (_, index) => index)
 
+const BASE_ASSET_TYPE_TAG =
+  "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI"
+const QUOTE_ASSET_TYPE_TAG =
+  "0x0000000000000000000000000000000000000000000000000000000000000abc::usdc::USDC"
+
 const EXECUTOR: WrappedSuiSharedObject = {
   object: {
     objectId: "0x789",
@@ -33,6 +38,19 @@ const EXECUTOR: WrappedSuiSharedObject = {
     objectId: "0x789",
     initialSharedVersion: "5",
     mutable: true
+  }
+} as WrappedSuiSharedObject
+
+const POOL: WrappedSuiSharedObject = {
+  object: {
+    objectId: "0x456",
+    version: "3",
+    digest: "digest"
+  },
+  sharedRef: {
+    objectId: "0x456",
+    initialSharedVersion: "2",
+    mutable: false
   }
 } as WrappedSuiSharedObject
 
@@ -49,11 +67,41 @@ const CURRENT_POOL: WrappedSuiSharedObject = {
   }
 } as WrappedSuiSharedObject
 
+const BASE_CURRENCY: WrappedSuiSharedObject = {
+  object: {
+    objectId: "0xb00",
+    version: "1",
+    digest: "digest"
+  },
+  sharedRef: {
+    objectId: "0xb00",
+    initialSharedVersion: "1",
+    mutable: false
+  }
+} as WrappedSuiSharedObject
+
+const QUOTE_CURRENCY: WrappedSuiSharedObject = {
+  object: {
+    objectId: "0xc00",
+    version: "1",
+    digest: "digest"
+  },
+  sharedRef: {
+    objectId: "0xc00",
+    initialSharedVersion: "1",
+    mutable: false
+  }
+} as WrappedSuiSharedObject
+
 describe("amm PTB builders", () => {
   it("builds create with market::new + config::new + executor::create + share + transfer", () => {
     const transaction = buildCreateExecutorTransaction({
       packageId: "0x123",
-      poolId: "0x456",
+      pool: POOL,
+      baseCurrency: BASE_CURRENCY,
+      quoteCurrency: QUOTE_CURRENCY,
+      baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+      quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
       senderAddress: "0x789",
       baseSpreadBps: 25n,
       volatilitySpreadBps: 200n,
@@ -74,6 +122,10 @@ describe("amm PTB builders", () => {
       module: "market",
       function: "new"
     })
+    expect(marketCall.typeArguments).toEqual([
+      BASE_ASSET_TYPE_TAG,
+      QUOTE_ASSET_TYPE_TAG
+    ])
 
     const configCall = expectMoveCall(transactionData.commands[1])
     expect(configCall).toMatchObject({
@@ -106,7 +158,11 @@ describe("amm PTB builders", () => {
     expect(() =>
       buildCreateExecutorTransaction({
         packageId: "0x123",
-        poolId: "0x456",
+        pool: POOL,
+        baseCurrency: BASE_CURRENCY,
+        quoteCurrency: QUOTE_CURRENCY,
+        baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+        quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
         senderAddress: "0x789",
         baseSpreadBps: 25n,
         volatilitySpreadBps: 200n,
@@ -166,7 +222,11 @@ describe("amm PTB builders", () => {
       packageId: "0x123",
       executor: EXECUTOR,
       adminCapId: "0x456",
-      poolId: "0xabc",
+      pool: POOL,
+      baseCurrency: BASE_CURRENCY,
+      quoteCurrency: QUOTE_CURRENCY,
+      baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+      quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
       basePythPriceFeedIdBytes: FEED_BYTES,
       quotePythPriceFeedIdBytes: FEED_BYTES
     })
@@ -181,6 +241,10 @@ describe("amm PTB builders", () => {
       module: "market",
       function: "new"
     })
+    expect(marketCall.typeArguments).toEqual([
+      BASE_ASSET_TYPE_TAG,
+      QUOTE_ASSET_TYPE_TAG
+    ])
 
     const updateCall = expectMoveCall(transactionData.commands[1])
     expect(updateCall).toMatchObject({
@@ -205,7 +269,11 @@ describe("amm PTB builders", () => {
         packageId: "0x123",
         executor: EXECUTOR,
         adminCapId: "0x456",
-        poolId: "0xabc",
+        pool: POOL,
+        baseCurrency: BASE_CURRENCY,
+        quoteCurrency: QUOTE_CURRENCY,
+        baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+        quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
         basePythPriceFeedIdBytes: FEED_BYTES,
         quotePythPriceFeedIdBytes: Array.from({ length: 31 }, (_, i) => i)
       })
@@ -221,11 +289,11 @@ describe("amm PTB builders", () => {
       adminCapId: "0x456",
       currentActive: true,
       currentPool: CURRENT_POOL,
-      baseAssetTypeTag:
-        "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
-      quoteAssetTypeTag:
-        "0x0000000000000000000000000000000000000000000000000000000000000abc::usdc::USDC",
-      newPoolId: "0xdef",
+      pool: POOL,
+      baseCurrency: BASE_CURRENCY,
+      quoteCurrency: QUOTE_CURRENCY,
+      baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+      quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
       basePythPriceFeedIdBytes: FEED_BYTES,
       quotePythPriceFeedIdBytes: FEED_BYTES
     })
@@ -241,8 +309,8 @@ describe("amm PTB builders", () => {
       function: "pause"
     })
     expect(pauseCall.typeArguments).toEqual([
-      "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
-      "0x0000000000000000000000000000000000000000000000000000000000000abc::usdc::USDC"
+      BASE_ASSET_TYPE_TAG,
+      QUOTE_ASSET_TYPE_TAG
     ])
 
     const marketCall = expectMoveCall(transactionData.commands[1])
@@ -252,6 +320,10 @@ describe("amm PTB builders", () => {
       module: "market",
       function: "new"
     })
+    expect(marketCall.typeArguments).toEqual([
+      BASE_ASSET_TYPE_TAG,
+      QUOTE_ASSET_TYPE_TAG
+    ])
 
     const updateCall = expectMoveCall(transactionData.commands[2])
     expect(updateCall).toMatchObject({
@@ -277,11 +349,11 @@ describe("amm PTB builders", () => {
       adminCapId: "0x456",
       currentActive: false,
       currentPool: CURRENT_POOL,
-      baseAssetTypeTag:
-        "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
-      quoteAssetTypeTag:
-        "0x0000000000000000000000000000000000000000000000000000000000000abc::usdc::USDC",
-      newPoolId: "0xdef",
+      pool: POOL,
+      baseCurrency: BASE_CURRENCY,
+      quoteCurrency: QUOTE_CURRENCY,
+      baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+      quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
       basePythPriceFeedIdBytes: FEED_BYTES,
       quotePythPriceFeedIdBytes: FEED_BYTES
     })
@@ -310,11 +382,11 @@ describe("amm PTB builders", () => {
         adminCapId: "0x456",
         currentActive: true,
         currentPool: CURRENT_POOL,
-        baseAssetTypeTag:
-          "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
-        quoteAssetTypeTag:
-          "0x0000000000000000000000000000000000000000000000000000000000000abc::usdc::USDC",
-        newPoolId: "0xdef",
+        pool: POOL,
+        baseCurrency: BASE_CURRENCY,
+        quoteCurrency: QUOTE_CURRENCY,
+        baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+        quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
         basePythPriceFeedIdBytes: Array.from({ length: 31 }, (_, i) => i),
         quotePythPriceFeedIdBytes: FEED_BYTES
       })

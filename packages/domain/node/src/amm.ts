@@ -1,7 +1,11 @@
 import path from "node:path"
 
 import type { SuiClient } from "@mysten/sui/client"
-import { normalizeSuiObjectId } from "@mysten/sui/utils"
+import {
+  normalizeStructTag,
+  normalizeSuiObjectId,
+  parseStructTag
+} from "@mysten/sui/utils"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
@@ -10,6 +14,8 @@ import {
 } from "@sui-amm/domain-core/models/amm"
 import { buildCreateExecutorTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { EXECUTOR_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
+import { deriveCurrencyObjectId } from "@sui-amm/tooling-core/coin-registry"
+import { SUI_COIN_REGISTRY_ID } from "@sui-amm/tooling-core/constants"
 import {
   getAllOwnedObjectsByFilter,
   normalizeIdOrThrow
@@ -212,6 +218,22 @@ export const resolveExistingAmmConfigIdFromArtifacts = async ({
   return undefined
 }
 
+const extractPoolAssetTypeTags = (
+  poolType: string
+): { baseAssetTypeTag: string; quoteAssetTypeTag: string } => {
+  const structTag = parseStructTag(poolType)
+  if (structTag.typeParams.length !== 2) {
+    throw new Error(
+      `Expected DeepBook pool type to have two type params, got ${poolType}.`
+    )
+  }
+
+  return {
+    baseAssetTypeTag: normalizeStructTag(structTag.typeParams[0]),
+    quoteAssetTypeTag: normalizeStructTag(structTag.typeParams[1])
+  }
+}
+
 export const createAmmConfigSnapshot = async ({
   tooling,
   ammPackageId,
@@ -229,9 +251,30 @@ export const createAmmConfigSnapshot = async ({
 }> => {
   const senderAddress = tooling.loadedEd25519KeyPair.toSuiAddress()
 
+  const pool = await tooling.getImmutableSharedObject({ objectId: poolId })
+  const poolType = pool.object.type
+  if (!poolType) {
+    throw new Error(`DeepBook pool ${poolId} has no resolvable Move type.`)
+  }
+  const { baseAssetTypeTag, quoteAssetTypeTag } =
+    extractPoolAssetTypeTags(poolType)
+
+  const [baseCurrency, quoteCurrency] = await Promise.all([
+    tooling.getImmutableSharedObject({
+      objectId: deriveCurrencyObjectId(baseAssetTypeTag, SUI_COIN_REGISTRY_ID)
+    }),
+    tooling.getImmutableSharedObject({
+      objectId: deriveCurrencyObjectId(quoteAssetTypeTag, SUI_COIN_REGISTRY_ID)
+    })
+  ])
+
   const createExecutorTransaction = buildCreateExecutorTransaction({
     packageId: ammPackageId,
-    poolId,
+    pool,
+    baseCurrency,
+    quoteCurrency,
+    baseAssetTypeTag,
+    quoteAssetTypeTag,
     senderAddress,
     baseSpreadBps: ammConfigInputs.baseSpreadBps,
     volatilitySpreadBps: ammConfigInputs.volatilitySpreadBps,

@@ -9,9 +9,11 @@ use openzeppelin_market_maker::test_helpers::{
     USDC,
     build_invalid_pyth_price_feed_id,
     build_pyth_price_feed_id,
-    create_pool
+    create_pool,
+    create_sui_currency,
+    create_usdc_currency
 };
-use std::unit_test::assert_eq;
+use std::unit_test::{assert_eq, destroy};
 use sui::sui::SUI;
 use sui::test_scenario;
 
@@ -34,13 +36,20 @@ fun create_market_builds_expected_market() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
     let market = market::new(
-        object::id(&pool),
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         base_pyth_price_feed_id,
         quote_pyth_price_feed_id,
     );
 
     assert_eq!(market.pool_id(), object::id(&pool));
+    assert_eq!(market.base_decimals(), sui_currency.decimals());
+    assert_eq!(market.quote_decimals(), usdc_currency.decimals());
     assert_eq!(market.base_pyth_price_feed_id(), base_pyth_price_feed_id);
     assert_eq!(market.quote_pyth_price_feed_id(), quote_pyth_price_feed_id);
     assert_eq!(market.base_price_publish_time(), option::none());
@@ -48,6 +57,8 @@ fun create_market_builds_expected_market() {
     assert!(market.has_valid_pool(&pool));
 
     test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
     scenario.end();
 }
 
@@ -59,8 +70,14 @@ fun create_market_rejects_empty_base_feed_id() {
 
     scenario.next_tx(sender);
 
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
     let _market = market::new(
-        pool_id,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         vector[],
         build_pyth_price_feed_id(1),
     );
@@ -76,8 +93,14 @@ fun create_market_rejects_invalid_base_feed_id_length() {
 
     scenario.next_tx(sender);
 
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
     let _market = market::new(
-        pool_id,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         build_invalid_pyth_price_feed_id(),
         build_pyth_price_feed_id(1),
     );
@@ -93,8 +116,14 @@ fun create_market_rejects_invalid_quote_feed_id_length() {
 
     scenario.next_tx(sender);
 
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
     let _market = market::new(
-        pool_id,
+        &pool,
+        &sui_currency,
+        &usdc_currency,
         build_pyth_price_feed_id(0),
         build_invalid_pyth_price_feed_id(),
     );
