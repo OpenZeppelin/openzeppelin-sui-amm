@@ -15,7 +15,6 @@ use openzeppelin_market_maker::config::AMMConfig;
 use openzeppelin_market_maker::events;
 use openzeppelin_market_maker::info::{Self, Info};
 use openzeppelin_market_maker::market::Market;
-use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
 use pyth::pyth;
 use std::type_name;
@@ -26,36 +25,21 @@ use sui::package;
 // === Errors ===
 
 #[error(code = 0)]
-const EPythPriceNonPositive: vector<u8> = "pyth price must be positive";
-#[error(code = 1)]
-const EPythExponentNonNegative: vector<u8> = "pyth price exponent_u128 must be negative";
-#[error(code = 2)]
-const EExponentTooLarge: vector<u8> = "price exponent too large";
-#[error(code = 3)]
-const EPythInvalidPriceValue: vector<u8> = "pyth price must be of valid size";
-#[error(code = 4)]
 const EPythFeedIdentifierMismatch: vector<u8> = "pyth feed identifier mismatch";
-#[error(code = 5)]
+#[error(code = 1)]
 const ETickIsTooLarge: vector<u8> = "deepbook pool tick size is too large for price calculation";
-#[error(code = 6)]
+#[error(code = 2)]
 const EInvalidPool: vector<u8> = "pool does not match the associated pool";
-#[error(code = 7)]
+#[error(code = 3)]
 const EInvalidCap: vector<u8> = "invalid market maker cap";
-#[error(code = 8)]
+#[error(code = 4)]
 const EPaused: vector<u8> = "trading paused";
-#[error(code = 9)]
+#[error(code = 5)]
 const ENotPaused: vector<u8> = "trading not paused";
-#[error(code = 10)]
+#[error(code = 6)]
 const EInvalidMarketUpdate: vector<u8> = "should update market while trading paused";
-#[error(code = 11)]
+#[error(code = 7)]
 const EInvalidQuantity: vector<u8> = "can't place order due to invalid quantity";
-#[error(code = 12)]
-const EPythPriceConfidenceTooWide: vector<u8> = "pyth price confidence interval is too wide";
-
-// === Constants ===
-
-const MAX_DECIMAL_POWER: u8 = 38;
-const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 
 // === Structs ===
 
@@ -331,11 +315,9 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     pool.withdraw_settled_amounts(&mut executor.balance_manager, &trade_proof);
 
     // Calculate precise spreads using Base/Quote = (Base/USD) / (Quote/USD).
-    let oracle_mid_price = deepbook_price(
+    let oracle_mid_price = executor.market.deepbook_price(
         base_pyth_price,
         quote_pyth_price,
-        executor.market.base_decimals(),
-        executor.market.quote_decimals(),
         executor.config.max_conf_ratio_bps(),
     );
     let base_spread = executor.config.base_spread(oracle_mid_price);
@@ -590,70 +572,6 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-}
-
-/// Extract positive USD mantissa (can be safely cast to u64) and negative exponent from a Pyth price.
-fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8) {
-    // Retrieve positive mantissa.
-    let price_i64 = price.get_price();
-    assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
-    let mantissa = price_i64.get_magnitude_if_positive() as u128;
-    assert!(mantissa != 0, EPythPriceNonPositive);
-
-    // Reject prices whose confidence interval is too wide relative to the price.
-    let max_conf_ratio_bps = max_conf_ratio_bps as u128;
-    let price_conf = price.get_conf() as u128;
-    assert!(
-        price_conf * HUNDRED_PERCENT_BPS_U128 <= mantissa * max_conf_ratio_bps,
-        EPythPriceConfidenceTooWide,
-    );
-
-    // Retrieve negative exponent.
-    let expo_i64 = price.get_expo();
-    assert!(expo_i64.get_is_negative(), EPythExponentNonNegative);
-    let exponent = expo_i64
-        .get_magnitude_if_negative()
-        .try_as_u8()
-        .destroy_or!(abort EExponentTooLarge);
-    assert!(exponent <= MAX_DECIMAL_POWER, EExponentTooLarge);
-
-    (mantissa, exponent)
-}
-
-// TODO#q: probably rename since we should have a function that can retrieve deepbook real price
-
-/// Derive the DeepBook base/quote price from base and quote USD prices.
-/// Caller must guarantee `base_decimals` and `quote_decimals` are within
-/// `market::max_decimal_power()`; `market::new` enforces this at construction time.
-fun deepbook_price(
-    base_price: Price,
-    quote_price: Price,
-    base_decimals: u8,
-    quote_decimals: u8,
-    max_conf_ratio_bps: u64,
-): u64 {
-    let (base_mantissa, base_exponent) = deepbook_usd_price(base_price, max_conf_ratio_bps);
-    let (quote_mantissa, quote_exponent) = deepbook_usd_price(quote_price, max_conf_ratio_bps);
-
-    // Convert (Base/USD)/(Quote/USD) to DeepBook price units (quote atoms per base atom),
-    // including decimal adjustment for token atom precision mismatch.
-    let mut numerator = base_mantissa * constants::float_scaling_u128();
-    let mut denominator = quote_mantissa;
-    let quote_total = quote_exponent + quote_decimals;
-    let base_total = base_exponent + base_decimals;
-    if (quote_total >= base_total) {
-        numerator = numerator * 10_u128.pow(quote_total - base_total);
-    } else {
-        denominator = denominator * 10_u128.pow(base_total - quote_total);
-    };
-    let deepbook_price = (numerator / denominator)
-        .try_as_u64()
-        .destroy_or!(abort EPythInvalidPriceValue);
-
-    assert!(deepbook_price >= constants::min_price(), EPythInvalidPriceValue);
-    assert!(deepbook_price <= constants::max_price(), EPythInvalidPriceValue);
-
-    deepbook_price
 }
 
 /// Converts a quote asset quantity to a base asset quantity using the given deepbook's price.

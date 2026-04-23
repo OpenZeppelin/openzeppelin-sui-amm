@@ -1,6 +1,7 @@
 /// Market identity and live price feed state for the traded asset pair.
 module openzeppelin_market_maker::market;
 
+use deepbook::constants;
 use deepbook::pool::Pool;
 use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
@@ -13,11 +14,22 @@ use sui::coin_registry::Currency;
 const EInvalidPythPriceFeedIdLength: vector<u8> = "pyth price feed id must be 32 bytes";
 #[error(code = 1)]
 const EDecimalsTooLarge: vector<u8> = "currency decimals too large";
+#[error(code = 2)]
+const EPythPriceNonPositive: vector<u8> = "pyth price must be positive";
+#[error(code = 3)]
+const EPythExponentNonNegative: vector<u8> = "pyth price exponent_u128 must be negative";
+#[error(code = 4)]
+const EExponentTooLarge: vector<u8> = "price exponent too large";
+#[error(code = 5)]
+const EPythInvalidPriceValue: vector<u8> = "pyth price must be of valid size";
+#[error(code = 6)]
+const EPythPriceConfidenceTooWide: vector<u8> = "pyth price confidence interval is too wide";
 
 // === Constants ===
 
 const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
 const MAX_DECIMAL_POWER: u8 = 38;
+const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 
 // === Structs ===
 
@@ -215,4 +227,66 @@ public(package) fun set_quote_price_publish_time(
 public(package) fun reset_price_publish_times(market: &mut Market) {
     market.base_price_publish_time = option::none();
     market.quote_price_publish_time = option::none();
+}
+
+/// Derive the DeepBook base/quote price from base and quote USD prices, adjusted for the
+/// cached base/quote asset decimals.
+public(package) fun deepbook_price(
+    market: &Market,
+    base_price: Price,
+    quote_price: Price,
+    max_conf_ratio_bps: u64,
+): u64 {
+    let (base_mantissa, base_exponent) = deepbook_usd_price(base_price, max_conf_ratio_bps);
+    let (quote_mantissa, quote_exponent) = deepbook_usd_price(quote_price, max_conf_ratio_bps);
+
+    // Convert (Base/USD)/(Quote/USD) to DeepBook price units (quote atoms per base atom),
+    // including decimal adjustment for token atom precision mismatch.
+    let mut numerator = base_mantissa * constants::float_scaling_u128();
+    let mut denominator = quote_mantissa;
+    let quote_total = quote_exponent + market.quote_decimals;
+    let base_total = base_exponent + market.base_decimals;
+    if (quote_total >= base_total) {
+        numerator = numerator * 10_u128.pow(quote_total - base_total);
+    } else {
+        denominator = denominator * 10_u128.pow(base_total - quote_total);
+    };
+    let deepbook_price = (numerator / denominator)
+        .try_as_u64()
+        .destroy_or!(abort EPythInvalidPriceValue);
+
+    assert!(deepbook_price >= constants::min_price(), EPythInvalidPriceValue);
+    assert!(deepbook_price <= constants::max_price(), EPythInvalidPriceValue);
+
+    deepbook_price
+}
+
+// === Private Functions ===
+
+/// Extract positive USD mantissa (can be safely cast to u64) and negative exponent from a Pyth price.
+fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8) {
+    // Retrieve positive mantissa.
+    let price_i64 = price.get_price();
+    assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
+    let mantissa = price_i64.get_magnitude_if_positive() as u128;
+    assert!(mantissa != 0, EPythPriceNonPositive);
+
+    // Reject prices whose confidence interval is too wide relative to the price.
+    let max_conf_ratio_bps = max_conf_ratio_bps as u128;
+    let price_conf = price.get_conf() as u128;
+    assert!(
+        price_conf * HUNDRED_PERCENT_BPS_U128 <= mantissa * max_conf_ratio_bps,
+        EPythPriceConfidenceTooWide,
+    );
+
+    // Retrieve negative exponent.
+    let expo_i64 = price.get_expo();
+    assert!(expo_i64.get_is_negative(), EPythExponentNonNegative);
+    let exponent = expo_i64
+        .get_magnitude_if_negative()
+        .try_as_u8()
+        .destroy_or!(abort EExponentTooLarge);
+    assert!(exponent <= MAX_DECIMAL_POWER, EExponentTooLarge);
+
+    (mantissa, exponent)
 }
