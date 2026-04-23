@@ -22,6 +22,7 @@ export const MAX_BASE_SPREAD_BPS = "10000"
 export const DEFAULT_ORDER_EXPIRATION_TIME_MS = "86400000"
 export const DEFAULT_MAX_PRICE_AGE_SECS = "60"
 export const DEFAULT_MAX_CONF_RATIO_BPS = "1000"
+export const DEFAULT_OUTER_BALANCE_BPS = "5000"
 
 export type AmmConfigOverview = {
   configId: string
@@ -34,6 +35,7 @@ export type AmmConfigOverview = {
   orderExpirationTimeMs: string
   maxPriceAgeSecs: string
   maxConfRatioBps: string
+  outerBalanceBps: string
 }
 
 type AmmConfigFields = {
@@ -42,6 +44,7 @@ type AmmConfigFields = {
   order_expiration_time_ms?: unknown
   max_price_age_secs?: unknown
   max_conf_ratio_bps?: unknown
+  outer_balance_bps?: unknown
 }
 
 type MarketFields = {
@@ -132,6 +135,10 @@ const buildAmmConfigOverviewFromObject = ({
     maxConfRatioBps: requireNumericField(
       config.max_conf_ratio_bps,
       "Max conf ratio bps"
+    ),
+    outerBalanceBps: requireNumericField(
+      config.outer_balance_bps,
+      "Outer balance bps"
     )
   }
 }
@@ -177,7 +184,8 @@ export const resolveAmmConfigInputs = ({
   quotePythPriceFeedIdHex,
   orderExpirationTimeMs,
   maxPriceAgeSecs,
-  maxConfRatioBps
+  maxConfRatioBps,
+  outerBalanceBps
 }: {
   volatilitySpreadBps?: string
   baseSpreadBps?: string
@@ -186,6 +194,7 @@ export const resolveAmmConfigInputs = ({
   orderExpirationTimeMs?: string
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
+  outerBalanceBps?: string
 }): {
   baseSpreadBps: bigint
   volatilitySpreadBps: bigint
@@ -196,6 +205,7 @@ export const resolveAmmConfigInputs = ({
   orderExpirationTimeMs: bigint
   maxPriceAgeSecs: bigint
   maxConfRatioBps: bigint
+  outerBalanceBps: bigint
 } => ({
   baseSpreadBps: resolveBaseSpreadBps(baseSpreadBps),
   volatilitySpreadBps: resolveVolatilitySpreadBps(volatilitySpreadBps),
@@ -214,5 +224,9 @@ export const resolveAmmConfigInputs = ({
   maxConfRatioBps: parsePositiveU64(
     maxConfRatioBps ?? DEFAULT_MAX_CONF_RATIO_BPS,
     "Max conf ratio bps"
+  ),
+  outerBalanceBps: parseNonNegativeU64(
+    outerBalanceBps ?? DEFAULT_OUTER_BALANCE_BPS,
+    "Outer balance bps"
   )
 })

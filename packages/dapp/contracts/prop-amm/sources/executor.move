@@ -340,11 +340,10 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     let ask_inner = compute_ask_price(oracle_mid_price, base_spread, tick);
     let ask_outer = compute_ask_price(oracle_mid_price, volatility_spread, tick);
 
-    // TODO#q: move balance distribution adjustment into config (5000 bps - default)
-    // Split bid order balance equally (almost xD) between inner and outer spread,
-    // and compute quantity in base asset (for deepbook limit order).
+    // Split bid order balance between inner and outer spread per the configured
+    // `outer_balance_bps`, and compute quantity in base asset (for deepbook limit order).
     let quote_balance = executor.balance_manager.balance<QuoteAsset>();
-    let bid_outer_quantity_quote = quote_balance / 2;
+    let bid_outer_quantity_quote = executor.config.outer_balance(quote_balance);
     let bid_inner_quantity_quote = quote_balance - bid_outer_quantity_quote;
     let bid_outer_quantity = compute_quantity(
         quote_to_base_quantity(bid_outer_quantity_quote, bid_outer),
@@ -357,9 +356,10 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         min_size,
     );
 
-    // Split ask order balance equally between inner and outer spread.
+    // Split ask order balance between inner and outer spread per the configured
+    // `outer_balance_bps`.
     let base_balance = executor.balance_manager.balance<BaseAsset>();
-    let ask_outer_raw = base_balance / 2;
+    let ask_outer_raw = executor.config.outer_balance(base_balance);
     let ask_inner_raw = base_balance - ask_outer_raw;
     let ask_outer_quantity = compute_quantity(ask_outer_raw, lot_size, min_size);
     let ask_inner_quantity = compute_quantity(ask_inner_raw, lot_size, min_size);

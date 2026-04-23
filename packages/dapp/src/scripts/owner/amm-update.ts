@@ -12,6 +12,7 @@ import {
   DEFAULT_MAX_CONF_RATIO_BPS,
   DEFAULT_MAX_PRICE_AGE_SECS,
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
+  DEFAULT_OUTER_BALANCE_BPS,
   type AmmConfigOverview,
   getAmmConfigOverview,
   resolveAmmConfigInputs
@@ -39,6 +40,7 @@ type UpdateAmmArguments = {
   orderExpirationTimeMs?: string
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
+  outerBalanceBps?: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
@@ -50,6 +52,7 @@ type ResolvedAmmUpdateInputs = {
   orderExpirationTimeMs: bigint
   maxPriceAgeSecs: bigint
   maxConfRatioBps: bigint
+  outerBalanceBps: bigint
 }
 
 const resolveExplicitAdminCapId = (adminCapId?: string): string | undefined => {
@@ -103,7 +106,9 @@ const resolveAmmUpdateInputs = ({
     maxPriceAgeSecs:
       cliArguments.maxPriceAgeSecs ?? currentOverview.maxPriceAgeSecs,
     maxConfRatioBps:
-      cliArguments.maxConfRatioBps ?? currentOverview.maxConfRatioBps
+      cliArguments.maxConfRatioBps ?? currentOverview.maxConfRatioBps,
+    outerBalanceBps:
+      cliArguments.outerBalanceBps ?? currentOverview.outerBalanceBps
   })
 
   return {
@@ -111,7 +116,8 @@ const resolveAmmUpdateInputs = ({
     volatilitySpreadBps: inputs.volatilitySpreadBps,
     orderExpirationTimeMs: inputs.orderExpirationTimeMs,
     maxPriceAgeSecs: inputs.maxPriceAgeSecs,
-    maxConfRatioBps: inputs.maxConfRatioBps
+    maxConfRatioBps: inputs.maxConfRatioBps,
+    outerBalanceBps: inputs.outerBalanceBps
   }
 }
 
@@ -149,7 +155,8 @@ runSuiScript(
       volatilitySpreadBps: updateInputs.volatilitySpreadBps,
       orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
       maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
-      maxConfRatioBps: updateInputs.maxConfRatioBps
+      maxConfRatioBps: updateInputs.maxConfRatioBps,
+      outerBalanceBps: updateInputs.outerBalanceBps
     })
 
     const { execution, summary } = await tooling.executeTransactionWithSummary({
@@ -245,6 +252,14 @@ runSuiScript(
       description:
         "Maximum acceptable confidence-to-price ratio in basis points (u64); defaults to the current config value.",
       default: DEFAULT_MAX_CONF_RATIO_BPS,
+      demandOption: false
+    })
+    .option("outerBalanceBps", {
+      alias: ["outer-balance-bps"],
+      type: "string",
+      description:
+        "Share of the settleable balance allocated to the outer (volatility) spread order in basis points (u64); defaults to the current config value.",
+      default: DEFAULT_OUTER_BALANCE_BPS,
       demandOption: false
     })
     .option("devInspect", {

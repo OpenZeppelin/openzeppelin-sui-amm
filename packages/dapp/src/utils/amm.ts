@@ -260,6 +260,7 @@ export const logAmmConfigOverview = (
   logKeyValueGreen("Order-expiry-ms")(overview.orderExpirationTimeMs)
   logKeyValueGreen("Max-age-secs")(overview.maxPriceAgeSecs)
   logKeyValueGreen("Max-conf-bps")(overview.maxConfRatioBps)
+  logKeyValueGreen("Outer-balance-bps")(overview.outerBalanceBps)
   if (options?.initialSharedVersion) {
     logKeyValueGreen("Shared-ver")(options.initialSharedVersion)
   }

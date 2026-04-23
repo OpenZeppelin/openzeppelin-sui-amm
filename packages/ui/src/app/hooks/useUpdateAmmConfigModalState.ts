@@ -125,7 +125,8 @@ const buildFallbackOverview = ({
   poolId: currentConfig?.poolId ?? "0x0",
   orderExpirationTimeMs: currentConfig?.orderExpirationTimeMs ?? "86400000",
   maxPriceAgeSecs: currentConfig?.maxPriceAgeSecs ?? "60",
-  maxConfRatioBps: currentConfig?.maxConfRatioBps ?? "1000"
+  maxConfRatioBps: currentConfig?.maxConfRatioBps ?? "1000",
+  outerBalanceBps: currentConfig?.outerBalanceBps ?? "5000"
 })
 
 const ammConfigMatches = (
@@ -321,7 +322,8 @@ export const useUpdateAmmConfigModalState = ({
         quotePythPriceFeedIdHex: ammConfig?.quotePythPriceFeedIdHex ?? "",
         orderExpirationTimeMs: ammConfig?.orderExpirationTimeMs,
         maxPriceAgeSecs: ammConfig?.maxPriceAgeSecs,
-        maxConfRatioBps: ammConfig?.maxConfRatioBps
+        maxConfRatioBps: ammConfig?.maxConfRatioBps,
+        outerBalanceBps: ammConfig?.outerBalanceBps
       })
 
       const configShared = await getSuiSharedObject(
@@ -349,7 +351,8 @@ export const useUpdateAmmConfigModalState = ({
         volatilitySpreadBps: updateInputs.volatilitySpreadBps,
         orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
         maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
-        maxConfRatioBps: updateInputs.maxConfRatioBps
+        maxConfRatioBps: updateInputs.maxConfRatioBps,
+        outerBalanceBps: updateInputs.outerBalanceBps
       })
       updateTransaction.setSender(walletAddress)
 
