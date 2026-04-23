@@ -18,6 +18,8 @@ const EInvalidMaxConfRatioBps: vector<u8> =
 const EInvalidOrderExpirationTime: vector<u8> = "order expiration time must be greater than zero";
 #[error(code = 5)]
 const EInvalidMaxPriceAge: vector<u8> = "max price age must be greater than zero";
+#[error(code = 6)]
+const EInvalidOuterBalanceBps: vector<u8> = "outer balance bps must be less than 10000";
 
 // === Constants ===
 
@@ -40,6 +42,11 @@ public struct AMMConfig has drop, store {
     max_price_age_secs: u64,
     /// Maximum acceptable confidence-to-price ratio in basis points (e.g. 1000 = 10%).
     max_conf_ratio_bps: u64,
+    /// Share of the settleable balance allocated to the outer (volatility) spread order, in
+    /// basis points (e.g. 5000 = 50%); the inner (base) spread order receives the remainder.
+    /// Valid range: `0..10_000` (exclusive upper bound). 0 disables the outer order
+    /// entirely; values >= 10_000 would starve the inner order and are rejected.
+    outer_balance_bps: u64,
 }
 
 // === Public Functions ===
@@ -54,6 +61,7 @@ public fun new(
     order_expiration_time_ms: u64,
     max_price_age_secs: u64,
     max_conf_ratio_bps: u64,
+    outer_balance_bps: u64,
 ): AMMConfig {
     assert!(base_spread_bps > 0, EInvalidBaseSpreadBps);
     assert!(base_spread_bps <= volatility_spread_bps, EBaseSpreadBpsExceedsVolatilitySpread);
@@ -67,6 +75,7 @@ public fun new(
     );
     assert!(order_expiration_time_ms > 0, EInvalidOrderExpirationTime);
     assert!(max_price_age_secs > 0, EInvalidMaxPriceAge);
+    assert!(outer_balance_bps < HUNDRED_PERCENT_BPS, EInvalidOuterBalanceBps);
 
     AMMConfig {
         base_spread_bps,
@@ -74,6 +83,7 @@ public fun new(
         order_expiration_time_ms,
         max_price_age_secs,
         max_conf_ratio_bps,
+        outer_balance_bps,
     }
 }
 
@@ -104,6 +114,14 @@ public fun max_conf_ratio_bps(config: &AMMConfig): u64 {
     config.max_conf_ratio_bps
 }
 
+/// Returns the share of the settleable balance allocated to the outer (volatility) spread
+/// order, in basis points (e.g. 5000 = 50%); the inner (base) spread order receives the
+/// remainder. Valid range: `0..10_000` (exclusive upper bound). 0 disables the outer order
+/// entirely; values >= 10_000 would starve the inner order and are rejected.
+public fun outer_balance_bps(config: &AMMConfig): u64 {
+    config.outer_balance_bps
+}
+
 // === Package Functions ===
 
 /// Compute the base spread in price terms for a given mid price.
@@ -114,4 +132,10 @@ public(package) fun base_spread(config: &AMMConfig, mid_price: u64): u64 {
 /// Compute the volatility spread in price terms for a given mid price.
 public(package) fun volatility_spread(config: &AMMConfig, mid_price: u64): u64 {
     ((mid_price as u128) * (config.volatility_spread_bps as u128) / HUNDRED_PERCENT_BPS_U128) as u64
+}
+
+/// Compute the amount of `balance` that should be allocated to the outer (volatility) spread
+/// order; the caller spends the remainder on the inner (base) spread order.
+public(package) fun outer_balance(config: &AMMConfig, balance: u64): u64 {
+    ((balance as u128) * (config.outer_balance_bps as u128) / HUNDRED_PERCENT_BPS_U128) as u64
 }

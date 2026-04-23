@@ -10,6 +10,7 @@ import {
   DEFAULT_MAX_CONF_RATIO_BPS,
   DEFAULT_MAX_PRICE_AGE_SECS,
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
+  DEFAULT_OUTER_BALANCE_BPS,
   DEFAULT_VOLATILITY_SPREAD_BPS,
   getAmmConfigOverview,
   resolveAmmConfigInputs
@@ -41,6 +42,7 @@ type CreateAmmArguments = {
   orderExpirationTimeMs?: string
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
+  outerBalanceBps?: string
   ammPackageId?: string
   devInspect?: boolean
   dryRun?: boolean
@@ -95,7 +97,8 @@ runSuiScript(
       baseSpreadBps: cliArguments.baseSpreadBps,
       orderExpirationTimeMs: cliArguments.orderExpirationTimeMs,
       maxPriceAgeSecs: cliArguments.maxPriceAgeSecs,
-      maxConfRatioBps: cliArguments.maxConfRatioBps
+      maxConfRatioBps: cliArguments.maxConfRatioBps,
+      outerBalanceBps: cliArguments.outerBalanceBps
     })
 
     const pool = await tooling.getImmutableSharedObject({ objectId: poolId })
@@ -140,7 +143,8 @@ runSuiScript(
       quotePythPriceFeedIdBytes: ammConfigInputs.quotePythPriceFeedIdBytes,
       orderExpirationTimeMs: ammConfigInputs.orderExpirationTimeMs,
       maxPriceAgeSecs: ammConfigInputs.maxPriceAgeSecs,
-      maxConfRatioBps: ammConfigInputs.maxConfRatioBps
+      maxConfRatioBps: ammConfigInputs.maxConfRatioBps,
+      outerBalanceBps: ammConfigInputs.outerBalanceBps
     })
 
     const { execution, summary } = await tooling.executeTransactionWithSummary({
@@ -277,6 +281,14 @@ runSuiScript(
       description:
         "Maximum acceptable confidence-to-price ratio in basis points (u64).",
       default: DEFAULT_MAX_CONF_RATIO_BPS,
+      demandOption: false
+    })
+    .option("outerBalanceBps", {
+      alias: ["outer-balance-bps"],
+      type: "string",
+      description:
+        "Share of the settleable balance allocated to the outer (volatility) spread order in basis points (u64).",
+      default: DEFAULT_OUTER_BALANCE_BPS,
       demandOption: false
     })
     .option("ammPackageId", {

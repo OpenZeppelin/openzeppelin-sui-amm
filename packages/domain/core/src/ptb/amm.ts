@@ -44,7 +44,8 @@ export const buildCreateExecutorTransaction = ({
   quotePythPriceFeedIdBytes,
   orderExpirationTimeMs,
   maxPriceAgeSecs,
-  maxConfRatioBps
+  maxConfRatioBps,
+  outerBalanceBps
 }: {
   packageId: string
   pool: WrappedSuiSharedObject
@@ -60,6 +61,7 @@ export const buildCreateExecutorTransaction = ({
   orderExpirationTimeMs: bigint | number
   maxPriceAgeSecs: bigint | number
   maxConfRatioBps: bigint | number
+  outerBalanceBps: bigint | number
 }) => {
   const validatedBasePythPriceFeedIdBytes = assertByteArrayLength(
     basePythPriceFeedIdBytes,
@@ -92,7 +94,8 @@ export const buildCreateExecutorTransaction = ({
       transaction.pure.u64(volatilitySpreadBps),
       transaction.pure.u64(orderExpirationTimeMs),
       transaction.pure.u64(maxPriceAgeSecs),
-      transaction.pure.u64(maxConfRatioBps)
+      transaction.pure.u64(maxConfRatioBps),
+      transaction.pure.u64(outerBalanceBps)
     ]
   })
 
@@ -123,7 +126,8 @@ export const buildUpdateConfigTransaction = ({
   volatilitySpreadBps,
   orderExpirationTimeMs,
   maxPriceAgeSecs,
-  maxConfRatioBps
+  maxConfRatioBps,
+  outerBalanceBps
 }: {
   packageId: string
   executor: WrappedSuiSharedObject
@@ -133,6 +137,7 @@ export const buildUpdateConfigTransaction = ({
   orderExpirationTimeMs: bigint | number
   maxPriceAgeSecs: bigint | number
   maxConfRatioBps: bigint | number
+  outerBalanceBps: bigint | number
 }) => {
   const transaction = newTransaction()
 
@@ -143,7 +148,8 @@ export const buildUpdateConfigTransaction = ({
       transaction.pure.u64(volatilitySpreadBps),
       transaction.pure.u64(orderExpirationTimeMs),
       transaction.pure.u64(maxPriceAgeSecs),
-      transaction.pure.u64(maxConfRatioBps)
+      transaction.pure.u64(maxConfRatioBps),
+      transaction.pure.u64(outerBalanceBps)
     ]
   })
 

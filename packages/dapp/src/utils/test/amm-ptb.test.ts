@@ -109,7 +109,8 @@ describe("amm PTB builders", () => {
       quotePythPriceFeedIdBytes: FEED_BYTES,
       orderExpirationTimeMs: 86400000n,
       maxPriceAgeSecs: 60n,
-      maxConfRatioBps: 1000n
+      maxConfRatioBps: 1000n,
+      outerBalanceBps: 5000n
     })
 
     const transactionData = transaction.getData()
@@ -170,7 +171,8 @@ describe("amm PTB builders", () => {
         quotePythPriceFeedIdBytes: FEED_BYTES,
         orderExpirationTimeMs: 86400000n,
         maxPriceAgeSecs: 60n,
-        maxConfRatioBps: 1000n
+        maxConfRatioBps: 1000n,
+        outerBalanceBps: 5000n
       })
     ).toThrowError(
       new TypeError("basePythPriceFeedIdBytes must be a 32-byte array.")
@@ -186,7 +188,8 @@ describe("amm PTB builders", () => {
       volatilitySpreadBps: 200n,
       orderExpirationTimeMs: 86400000n,
       maxPriceAgeSecs: 60n,
-      maxConfRatioBps: 1000n
+      maxConfRatioBps: 1000n,
+      outerBalanceBps: 5000n
     })
 
     const transactionData = transaction.getData()
