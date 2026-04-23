@@ -40,16 +40,22 @@ type AmmConfigFields = {
   active?: unknown
   base_spread_bps?: unknown
   volatility_spread_bps?: unknown
-  base_pyth_price_feed_id?: unknown
-  quote_pyth_price_feed_id?: unknown
-  pool_id?: unknown
   order_expiration_time_ms?: unknown
   max_price_age_secs?: unknown
   max_conf_ratio_bps?: unknown
 }
 
+type MarketFields = {
+  pool_id?: unknown
+  base_pyth_price_feed_id?: unknown
+  quote_pyth_price_feed_id?: unknown
+  base_price_publish_time?: unknown
+  quote_price_publish_time?: unknown
+}
+
 type MarketMakerFields = {
   config?: { fields?: AmmConfigFields } | AmmConfigFields
+  market?: { fields?: MarketFields } | MarketFields
 }
 
 const unwrapNestedFields = <T>(value: unknown): T | undefined => {
@@ -92,6 +98,8 @@ const buildAmmConfigOverviewFromObject = ({
   const marketMakerFields = unwrapMoveObjectFields<MarketMakerFields>(object)
   const config =
     unwrapNestedFields<AmmConfigFields>(marketMakerFields.config) ?? {}
+  const market =
+    unwrapNestedFields<MarketFields>(marketMakerFields.market) ?? {}
 
   return {
     configId,
@@ -105,14 +113,14 @@ const buildAmmConfigOverviewFromObject = ({
     ),
     active: requireBooleanField(config.active, "Active"),
     basePythPriceFeedIdHex: requireFeedIdHex(
-      config.base_pyth_price_feed_id,
+      market.base_pyth_price_feed_id,
       "Base Pyth price feed id"
     ),
     quotePythPriceFeedIdHex: requireFeedIdHex(
-      config.quote_pyth_price_feed_id,
+      market.quote_pyth_price_feed_id,
       "Quote Pyth price feed id"
     ),
-    poolId: requireStringField(config.pool_id, "Pool id"),
+    poolId: requireStringField(market.pool_id, "Pool id"),
     orderExpirationTimeMs: requireNumericField(
       config.order_expiration_time_ms,
       "Order expiration time ms"

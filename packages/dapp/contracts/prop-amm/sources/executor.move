@@ -14,6 +14,7 @@ use deepbook::pool::Pool;
 use openzeppelin_market_maker::config::AMMConfig;
 use openzeppelin_market_maker::events;
 use openzeppelin_market_maker::info::{Self, Info};
+use openzeppelin_market_maker::market::Market;
 use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
 use pyth::pyth;
@@ -45,7 +46,7 @@ const EPaused: vector<u8> = "trading paused";
 #[error(code = 9)]
 const ENotPaused: vector<u8> = "trading not paused";
 #[error(code = 10)]
-const EInvalidPoolUpdate: vector<u8> = "should update pool while trading paused";
+const EInvalidMarketUpdate: vector<u8> = "should update market while trading paused";
 #[error(code = 11)]
 const EInvalidQuantity: vector<u8> = "can't place order due to invalid quantity";
 #[error(code = 12)]
@@ -75,6 +76,8 @@ public struct MarketMaker has key, store {
     caps: Caps,
     /// Balance manager linked to the market maker.
     balance_manager: BalanceManager,
+    /// Traded market metadata (pool, feed IDs).
+    market: Market,
     /// Pool onchain configuration.
     config: AMMConfig,
     /// Accounting info (cumulative volume and cached balances).
@@ -104,7 +107,7 @@ fun init(publisher_witness: EXECUTOR, ctx: &mut TxContext) {
 // === Public Functions ===
 
 /// Creates a market maker for sender.
-public fun create(config: AMMConfig, ctx: &mut TxContext): (MarketMaker, AdminCap) {
+public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (MarketMaker, AdminCap) {
     let mut balance_manager = balance_manager::new(ctx);
     let deposit_cap = balance_manager.mint_deposit_cap(ctx);
     let withdraw_cap = balance_manager.mint_withdraw_cap(ctx);
@@ -122,6 +125,7 @@ public fun create(config: AMMConfig, ctx: &mut TxContext): (MarketMaker, AdminCa
             withdraw_cap,
         },
         balance_manager,
+        market,
         config,
         info: info::empty(),
     };
@@ -131,21 +135,30 @@ public fun create(config: AMMConfig, ctx: &mut TxContext): (MarketMaker, AdminCa
 
 /// Replaces the market maker configuration, and unpause trading.
 /// Requires the matching market maker capability.
-public fun update_market_maker(market_maker: &mut MarketMaker, cap: &AdminCap, config: AMMConfig) {
+public fun update_config(market_maker: &mut MarketMaker, cap: &AdminCap, config: AMMConfig) {
     assert!(market_maker.id() == cap.executor_id, EInvalidCap);
 
-    // When market maker active,
-    if (market_maker.config.active()) {
-        // assert we don't update pool (to settle balances properly).
-        assert!(market_maker.config.pool_id() == config.pool_id(), EInvalidPoolUpdate);
-    } else {
-        // Otherwise emit unpaused event, since `AMMConfig` can be created active only.
+    // When market maker is paused, emit unpaused event since `AMMConfig` can be created active
+    // only.
+    if (!market_maker.config.active()) {
         events::emit_market_maker_unpaused(market_maker.id());
     };
 
     events::emit_market_maker_config_updated(market_maker.id());
 
     market_maker.config = config;
+}
+
+/// Replaces the market maker's market metadata (pool, feed IDs, and cached publish timestamps).
+/// Requires the market maker to be paused so balances are settled before the pool or feeds
+/// change. Requires the matching market maker capability.
+public fun update_market(market_maker: &mut MarketMaker, cap: &AdminCap, market: Market) {
+    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
+    assert!(!market_maker.config.active(), EInvalidMarketUpdate);
+
+    events::emit_market_updated(market_maker.id());
+
+    market_maker.market = market;
 }
 
 /// Pauses trading by cancelling all existing orders and preventing new orders until next activation.
@@ -158,7 +171,7 @@ public fun pause<BaseAsset, QuoteAsset>(
 ) {
     assert!(market_maker.id() == cap.executor_id, EInvalidCap);
     assert!(market_maker.config.active(), EPaused);
-    assert!(market_maker.config.has_valid_pool(pool), EInvalidPool);
+    assert!(market_maker.market.has_valid_pool(pool), EInvalidPool);
 
     // Generate trade proof.
     let trade_proof = market_maker
@@ -201,7 +214,7 @@ public fun unpause(market_maker: &mut MarketMaker, cap: &AdminCap) {
 }
 
 // TODO#q: how base_balance and quote_balance should be updated after deposit and withdrawal?
-// TODO#q: how should we track if base or quote withdrawal processed?
+// TODO#q: how should we track if base or quote withdrawal processed? Store base and quote currency type and use match assertion?
 
 /// Deposit funds into a balance manager.
 /// Deepbook's `BalanceEvent` emitted after successful deposit.
@@ -261,16 +274,16 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     ctx: &mut TxContext,
 ) {
     // Assert an input pool is valid.
-    assert!(market_maker.config.has_valid_pool(pool), EInvalidPool);
+    assert!(market_maker.market.has_valid_pool(pool), EInvalidPool);
     // Assert trading is active.
     assert!(market_maker.config.active(), EPaused);
     // Assert Pyth price info objects have valid configured feed ids.
     assert!(
-        market_maker.config.has_valid_base_pyth_feed_id(base_price_info_object),
+        market_maker.market.has_valid_base_pyth_feed_id(base_price_info_object),
         EPythFeedIdentifierMismatch,
     );
     assert!(
-        market_maker.config.has_valid_quote_pyth_feed_id(quote_price_info_object),
+        market_maker.market.has_valid_quote_pyth_feed_id(quote_price_info_object),
         EPythFeedIdentifierMismatch,
     );
 
@@ -291,13 +304,13 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Protects from calling permissionless quote refresh with old pricing,
     // that will force market maker resubmit orders and loose priority.
     let is_price_stale =
-        market_maker.is_base_price_stale(base_pyth_price)
-        && market_maker.is_quote_price_stale(quote_pyth_price);
+        market_maker.market.is_base_price_stale(base_pyth_price)
+        && market_maker.market.is_quote_price_stale(quote_pyth_price);
     if (is_price_stale) {
         return
     };
-    market_maker.config.set_base_price_publish_time(base_pyth_price.get_timestamp());
-    market_maker.config.set_quote_price_publish_time(quote_pyth_price.get_timestamp());
+    market_maker.market.set_base_price_publish_time(base_pyth_price.get_timestamp());
+    market_maker.market.set_quote_price_publish_time(quote_pyth_price.get_timestamp());
 
     // Generate trade proof.
     let trade_proof = market_maker
@@ -450,6 +463,11 @@ public fun withdraw_cap_id(market_maker: &MarketMaker): ID {
     object::id(&market_maker.caps.withdraw_cap)
 }
 
+/// Returns the configured market metadata.
+public fun market(market_maker: &MarketMaker): &Market {
+    &market_maker.market
+}
+
 /// Returns the current market maker configuration.
 public fun config(market_maker: &MarketMaker): &AMMConfig {
     &market_maker.config
@@ -466,28 +484,6 @@ public fun cap_id(amm_cap: &AdminCap): ID {
 }
 
 // === Private Functions ===
-
-// TODO#q: move to `market` module
-/// Returns true when the cached base price publish time is at least as recent as the incoming
-/// price timestamp, meaning the base feed has not advanced.
-fun is_base_price_stale(market_maker: &MarketMaker, price: Price): bool {
-    market_maker
-        .config
-        .base_price_publish_time()
-        .map!(|publish_time| publish_time >= price.get_timestamp())
-        .destroy_or!(false)
-}
-
-// TODO#q: move to `market` module
-/// Returns true when the cached quote price publish time is at least as recent as the incoming
-/// price timestamp, meaning the quote feed has not advanced.
-fun is_quote_price_stale(market_maker: &MarketMaker, price: Price): bool {
-    market_maker
-        .config
-        .quote_price_publish_time()
-        .map!(|publish_time| publish_time >= price.get_timestamp())
-        .destroy_or!(false)
-}
 
 /// Returns the current epoch's base-asset volume from DeepBook,
 /// or `0` if the account has not been created yet in the pool's state.

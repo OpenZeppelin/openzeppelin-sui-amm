@@ -24,13 +24,9 @@ type AmmUpdateOutput = {
   ammConfig?: AmmConfigOverview
   ammConfigId?: string
   adminCapId?: string
-  basePythPriceFeedIdHex?: string
-  quotePythPriceFeedIdHex?: string
   transactionSummary?: { label?: string }
 }
 
-const UPDATED_PYTH_PRICE_FEED_ID_HEX =
-  "0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
 const UPDATED_BASE_SPREAD_BPS = "55"
 const UPDATED_VOLATILITY_SPREAD_BPS = "555"
 
@@ -43,7 +39,7 @@ const testEnv = createSuiLocalnetTestEnv({
 })
 
 describe("owner amm-update integration", () => {
-  it("updates a shared AMM market maker and returns the latest snapshot", async () => {
+  it("updates a shared AMM market maker config and returns the latest snapshot", async () => {
     await testEnv.withTestContext("owner-amm-update", async (context) => {
       const publisher = context.createAccount("publisher")
       await context.fundAccount(publisher, { minimumCoinObjects: 2 })
@@ -102,8 +98,7 @@ describe("owner amm-update integration", () => {
           ammConfigId,
           adminCapId,
           baseSpreadBps: UPDATED_BASE_SPREAD_BPS,
-          volatilitySpreadBps: UPDATED_VOLATILITY_SPREAD_BPS,
-          basePythPriceFeedId: UPDATED_PYTH_PRICE_FEED_ID_HEX
+          volatilitySpreadBps: UPDATED_VOLATILITY_SPREAD_BPS
         }
       })
 
@@ -126,11 +121,12 @@ describe("owner amm-update integration", () => {
         UPDATED_VOLATILITY_SPREAD_BPS
       )
       expect(output.ammConfig.active).toBe(true)
+      // Feed IDs are Market state and are not touched by the update-config flow.
       expect(normalizeHex(output.ammConfig.basePythPriceFeedIdHex)).toBe(
-        normalizeHex(UPDATED_PYTH_PRICE_FEED_ID_HEX)
+        normalizeHex(DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID)
       )
-      expect(normalizeHex(output.basePythPriceFeedIdHex ?? "")).toBe(
-        normalizeHex(UPDATED_PYTH_PRICE_FEED_ID_HEX)
+      expect(normalizeHex(output.ammConfig.quotePythPriceFeedIdHex)).toBe(
+        normalizeHex(DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID)
       )
     })
   })

@@ -1,3 +1,4 @@
+import { SUI_CLOCK_ID } from "@sui-amm/tooling-core/constants"
 import {
   assertByteArrayLength,
   assertBytesLength,
@@ -64,14 +65,20 @@ export const buildCreateMarketMakerTransaction = ({
   )
   const transaction = newTransaction()
 
+  const market = transaction.moveCall({
+    target: `${packageId}::market::new`,
+    arguments: [
+      transaction.pure.address(poolId),
+      transaction.pure.vector("u8", validatedBasePythPriceFeedIdBytes),
+      transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes)
+    ]
+  })
+
   const ammConfig = transaction.moveCall({
     target: `${packageId}::config::new`,
     arguments: [
-      transaction.pure.address(poolId),
       transaction.pure.u64(baseSpreadBps),
       transaction.pure.u64(volatilitySpreadBps),
-      transaction.pure.vector("u8", validatedBasePythPriceFeedIdBytes),
-      transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes),
       transaction.pure.u64(orderExpirationTimeMs),
       transaction.pure.u64(maxPriceAgeSecs),
       transaction.pure.u64(maxConfRatioBps)
@@ -80,7 +87,7 @@ export const buildCreateMarketMakerTransaction = ({
 
   const [marketMaker, adminCap] = transaction.moveCall({
     target: `${packageId}::executor::create`,
-    arguments: [ammConfig]
+    arguments: [market, ammConfig]
   })
 
   transaction.moveCall({
@@ -97,15 +104,12 @@ export const buildCreateMarketMakerTransaction = ({
   return transaction
 }
 
-export const buildUpdateMarketMakerTransaction = ({
+export const buildUpdateConfigTransaction = ({
   packageId,
   marketMaker,
   adminCapId,
-  poolId,
   baseSpreadBps,
   volatilitySpreadBps,
-  basePythPriceFeedIdBytes,
-  quotePythPriceFeedIdBytes,
   orderExpirationTimeMs,
   maxPriceAgeSecs,
   maxConfRatioBps
@@ -113,14 +117,56 @@ export const buildUpdateMarketMakerTransaction = ({
   packageId: string
   marketMaker: WrappedSuiSharedObject
   adminCapId: string
-  poolId: string
   baseSpreadBps: bigint | number
   volatilitySpreadBps: bigint | number
-  basePythPriceFeedIdBytes: number[]
-  quotePythPriceFeedIdBytes: number[]
   orderExpirationTimeMs: bigint | number
   maxPriceAgeSecs: bigint | number
   maxConfRatioBps: bigint | number
+}) => {
+  const transaction = newTransaction()
+
+  const ammConfig = transaction.moveCall({
+    target: `${packageId}::config::new`,
+    arguments: [
+      transaction.pure.u64(baseSpreadBps),
+      transaction.pure.u64(volatilitySpreadBps),
+      transaction.pure.u64(orderExpirationTimeMs),
+      transaction.pure.u64(maxPriceAgeSecs),
+      transaction.pure.u64(maxConfRatioBps)
+    ]
+  })
+
+  transaction.moveCall({
+    target: `${packageId}::executor::update_config`,
+    arguments: [
+      transaction.sharedObjectRef(marketMaker.sharedRef),
+      transaction.object(adminCapId),
+      ammConfig
+    ]
+  })
+
+  return transaction
+}
+
+/**
+ * Builds a transaction that replaces the market maker's `Market` (pool id and Pyth feed ids).
+ * The on-chain `executor::update_market` call requires the market maker to be paused, so the
+ * caller is responsible for pausing before signing and unpausing afterwards.
+ */
+export const buildUpdateMarketTransaction = ({
+  packageId,
+  marketMaker,
+  adminCapId,
+  poolId,
+  basePythPriceFeedIdBytes,
+  quotePythPriceFeedIdBytes
+}: {
+  packageId: string
+  marketMaker: WrappedSuiSharedObject
+  adminCapId: string
+  poolId: string
+  basePythPriceFeedIdBytes: number[]
+  quotePythPriceFeedIdBytes: number[]
 }) => {
   const validatedBasePythPriceFeedIdBytes = assertByteArrayLength(
     basePythPriceFeedIdBytes,
@@ -134,28 +180,114 @@ export const buildUpdateMarketMakerTransaction = ({
   )
   const transaction = newTransaction()
 
-  const ammConfig = transaction.moveCall({
-    target: `${packageId}::config::new`,
+  const market = transaction.moveCall({
+    target: `${packageId}::market::new`,
     arguments: [
       transaction.pure.address(poolId),
-      transaction.pure.u64(baseSpreadBps),
-      transaction.pure.u64(volatilitySpreadBps),
       transaction.pure.vector("u8", validatedBasePythPriceFeedIdBytes),
-      transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes),
-      transaction.pure.u64(orderExpirationTimeMs),
-      transaction.pure.u64(maxPriceAgeSecs),
-      transaction.pure.u64(maxConfRatioBps)
+      transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes)
     ]
   })
 
   transaction.moveCall({
-    target: `${packageId}::executor::update_market_maker`,
+    target: `${packageId}::executor::update_market`,
     arguments: [
       transaction.sharedObjectRef(marketMaker.sharedRef),
       transaction.object(adminCapId),
-      ammConfig
+      market
     ]
   })
+
+  return transaction
+}
+
+/**
+ * Builds an atomic transaction that replaces the market maker's `Market` and preserves its
+ * active/paused state around the `executor::update_market` call (which itself requires the
+ * market maker to be paused).
+ *
+ * If `currentActive` is true, the PTB emits:
+ *   `executor::pause` (using `currentPool`) → `market::new` → `executor::update_market` →
+ *   `executor::unpause`
+ *
+ * Otherwise (market maker already paused), the PTB only emits `market::new` +
+ * `executor::update_market`, leaving the market maker paused.
+ */
+export const buildUpdateMarketWithPauseTransaction = ({
+  packageId,
+  marketMaker,
+  adminCapId,
+  currentActive,
+  currentPool,
+  baseAssetTypeTag,
+  quoteAssetTypeTag,
+  newPoolId,
+  basePythPriceFeedIdBytes,
+  quotePythPriceFeedIdBytes
+}: {
+  packageId: string
+  marketMaker: WrappedSuiSharedObject
+  adminCapId: string
+  currentActive: boolean
+  currentPool: WrappedSuiSharedObject
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
+  newPoolId: string
+  basePythPriceFeedIdBytes: number[]
+  quotePythPriceFeedIdBytes: number[]
+}) => {
+  const validatedBasePythPriceFeedIdBytes = assertByteArrayLength(
+    basePythPriceFeedIdBytes,
+    PYTH_PRICE_FEED_ID_BYTES,
+    "basePythPriceFeedIdBytes"
+  )
+  const validatedQuotePythPriceFeedIdBytes = assertByteArrayLength(
+    quotePythPriceFeedIdBytes,
+    PYTH_PRICE_FEED_ID_BYTES,
+    "quotePythPriceFeedIdBytes"
+  )
+  const transaction = newTransaction()
+
+  if (currentActive) {
+    transaction.moveCall({
+      target: `${packageId}::executor::pause`,
+      typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
+      arguments: [
+        transaction.sharedObjectRef(marketMaker.sharedRef),
+        transaction.object(adminCapId),
+        transaction.sharedObjectRef(currentPool.sharedRef),
+        transaction.object(SUI_CLOCK_ID)
+      ]
+    })
+  }
+
+  const market = transaction.moveCall({
+    target: `${packageId}::market::new`,
+    arguments: [
+      transaction.pure.address(newPoolId),
+      transaction.pure.vector("u8", validatedBasePythPriceFeedIdBytes),
+      transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes)
+    ]
+  })
+
+  transaction.moveCall({
+    target: `${packageId}::executor::update_market`,
+    arguments: [
+      transaction.sharedObjectRef(marketMaker.sharedRef),
+      transaction.object(adminCapId),
+      market
+    ]
+  })
+
+  if (currentActive) {
+    transaction.moveCall({
+      target: `${packageId}::executor::unpause`,
+      arguments: [
+        transaction.sharedObjectRef(marketMaker.sharedRef),
+        transaction.object(adminCapId)
+      ]
+    })
+  }
 
   return transaction
 }

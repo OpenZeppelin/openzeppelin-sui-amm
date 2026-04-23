@@ -17,7 +17,7 @@ import {
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { buildUpdateMarketMakerTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { buildUpdateConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { deriveRelevantPackageId } from "@sui-amm/tooling-core/object"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
@@ -27,10 +27,7 @@ import {
 } from "@sui-amm/tooling-core/utils/utility"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { resolveAmmAdminCapId } from "../helpers/ammAdminCap"
-import {
-  resolveValidationMessage,
-  validateRequiredHexBytes
-} from "../helpers/inputValidation"
+import { resolveValidationMessage } from "../helpers/inputValidation"
 import {
   getLocalnetClient,
   makeLocalnetExecutor,
@@ -45,13 +42,9 @@ import {
 import { waitForTransactionBlock } from "../helpers/transactionWait"
 import { useIdleFieldValidation } from "./useIdleFieldValidation"
 
-const PYTH_PRICE_FEED_ID_BYTES = 32
-
 type AmmUpdateFormState = {
   baseSpreadBps: string
   volatilitySpreadBps: string
-  basePythPriceFeedIdHex: string
-  quotePythPriceFeedIdHex: string
 }
 
 type AmmUpdateFieldErrors = Partial<Record<keyof AmmUpdateFormState, string>>
@@ -73,9 +66,7 @@ type TransactionState =
 const buildFormState = (ammConfig?: AmmConfigOverview): AmmUpdateFormState => ({
   baseSpreadBps: ammConfig?.baseSpreadBps ?? DEFAULT_BASE_SPREAD_BPS,
   volatilitySpreadBps:
-    ammConfig?.volatilitySpreadBps ?? DEFAULT_VOLATILITY_SPREAD_BPS,
-  basePythPriceFeedIdHex: ammConfig?.basePythPriceFeedIdHex ?? "",
-  quotePythPriceFeedIdHex: ammConfig?.quotePythPriceFeedIdHex ?? ""
+    ammConfig?.volatilitySpreadBps ?? DEFAULT_VOLATILITY_SPREAD_BPS
 })
 
 const buildFieldErrors = (
@@ -111,20 +102,6 @@ const buildFieldErrors = (
     }
   }
 
-  const baseFeedError = validateRequiredHexBytes({
-    value: formState.basePythPriceFeedIdHex,
-    expectedBytes: PYTH_PRICE_FEED_ID_BYTES,
-    label: "Base Pyth price feed id"
-  })
-  if (baseFeedError) errors.basePythPriceFeedIdHex = baseFeedError
-
-  const quoteFeedError = validateRequiredHexBytes({
-    value: formState.quotePythPriceFeedIdHex,
-    expectedBytes: PYTH_PRICE_FEED_ID_BYTES,
-    label: "Quote Pyth price feed id"
-  })
-  if (quoteFeedError) errors.quotePythPriceFeedIdHex = quoteFeedError
-
   return errors
 }
 
@@ -132,23 +109,19 @@ const buildFallbackOverview = ({
   currentConfig,
   configId,
   baseSpreadBps,
-  volatilitySpreadBps,
-  basePythPriceFeedIdHex,
-  quotePythPriceFeedIdHex
+  volatilitySpreadBps
 }: {
   currentConfig?: AmmConfigOverview
   configId: string
   baseSpreadBps: bigint
   volatilitySpreadBps: bigint
-  basePythPriceFeedIdHex: string
-  quotePythPriceFeedIdHex: string
 }): AmmConfigOverview => ({
   configId,
   baseSpreadBps: baseSpreadBps.toString(),
   volatilitySpreadBps: volatilitySpreadBps.toString(),
   active: true,
-  basePythPriceFeedIdHex,
-  quotePythPriceFeedIdHex,
+  basePythPriceFeedIdHex: currentConfig?.basePythPriceFeedIdHex ?? "",
+  quotePythPriceFeedIdHex: currentConfig?.quotePythPriceFeedIdHex ?? "",
   poolId: currentConfig?.poolId ?? "0x0",
   orderExpirationTimeMs: currentConfig?.orderExpirationTimeMs ?? "86400000",
   maxPriceAgeSecs: currentConfig?.maxPriceAgeSecs ?? "60",
@@ -161,9 +134,7 @@ const ammConfigMatches = (
 ) =>
   first.baseSpreadBps === second.baseSpreadBps &&
   first.volatilitySpreadBps === second.volatilitySpreadBps &&
-  first.active === second.active &&
-  first.basePythPriceFeedIdHex === second.basePythPriceFeedIdHex &&
-  first.quotePythPriceFeedIdHex === second.quotePythPriceFeedIdHex
+  first.active === second.active
 
 export const useUpdateAmmConfigModalState = ({
   open,
@@ -346,8 +317,8 @@ export const useUpdateAmmConfigModalState = ({
       const updateInputs = resolveAmmConfigInputs({
         baseSpreadBps: formState.baseSpreadBps.trim(),
         volatilitySpreadBps: formState.volatilitySpreadBps.trim(),
-        basePythPriceFeedIdHex: formState.basePythPriceFeedIdHex.trim(),
-        quotePythPriceFeedIdHex: formState.quotePythPriceFeedIdHex.trim(),
+        basePythPriceFeedIdHex: ammConfig?.basePythPriceFeedIdHex ?? "",
+        quotePythPriceFeedIdHex: ammConfig?.quotePythPriceFeedIdHex ?? "",
         orderExpirationTimeMs: ammConfig?.orderExpirationTimeMs,
         maxPriceAgeSecs: ammConfig?.maxPriceAgeSecs,
         maxConfRatioBps: ammConfig?.maxConfRatioBps
@@ -370,19 +341,12 @@ export const useUpdateAmmConfigModalState = ({
           "No AMM admin capability found for the connected wallet."
         )
 
-      const poolId =
-        ammConfig?.poolId ??
-        "0x0000000000000000000000000000000000000000000000000000000000000000"
-
-      const updateTransaction = buildUpdateMarketMakerTransaction({
+      const updateTransaction = buildUpdateConfigTransaction({
         packageId,
         marketMaker: configShared,
         adminCapId,
-        poolId,
         baseSpreadBps: updateInputs.baseSpreadBps,
         volatilitySpreadBps: updateInputs.volatilitySpreadBps,
-        basePythPriceFeedIdBytes: updateInputs.basePythPriceFeedIdBytes,
-        quotePythPriceFeedIdBytes: updateInputs.quotePythPriceFeedIdBytes,
         orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
         maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
         maxConfRatioBps: updateInputs.maxConfRatioBps
@@ -415,9 +379,7 @@ export const useUpdateAmmConfigModalState = ({
         currentConfig: ammConfig,
         configId,
         baseSpreadBps: updateInputs.baseSpreadBps,
-        volatilitySpreadBps: updateInputs.volatilitySpreadBps,
-        basePythPriceFeedIdHex: updateInputs.basePythPriceFeedIdHex,
-        quotePythPriceFeedIdHex: updateInputs.quotePythPriceFeedIdHex
+        volatilitySpreadBps: updateInputs.volatilitySpreadBps
       })
 
       setTransactionState({

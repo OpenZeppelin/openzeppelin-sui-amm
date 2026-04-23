@@ -14,9 +14,11 @@ use openzeppelin_market_maker::events::{
     market_maker_created,
     market_maker_paused,
     market_maker_unpaused,
+    market_updated,
     quote_updated
 };
 use openzeppelin_market_maker::executor::{Self, MarketMaker, AdminCap};
+use openzeppelin_market_maker::market;
 use openzeppelin_market_maker::test_helpers::{
     USDC,
     USDT,
@@ -77,22 +79,19 @@ fun create_market_maker_for_pool(
     volatility_spread_bps: u64,
     feed_id_byte: u8,
 ): (MarketMaker, AdminCap) {
-    let amm_config = config::new(
+    let market = market::new(
         pool_id,
+        build_pyth_price_feed_id(feed_id_byte),
+        build_pyth_price_feed_id(feed_id_byte),
+    );
+    let amm_config = config::new(
         base_spread_bps,
         volatility_spread_bps,
-        build_pyth_price_feed_id(feed_id_byte),
-        build_pyth_price_feed_id(feed_id_byte),
         30_000,
         30,
         1000,
     );
-    let (market_maker, market_maker_cap) = executor::create(
-        amm_config,
-        scenario.ctx(),
-    );
-
-    (market_maker, market_maker_cap)
+    executor::create(market, amm_config, scenario.ctx())
 }
 
 #[test]
@@ -118,6 +117,7 @@ fun create_market_maker_sets_owner_and_emits_created_event() {
     assert_eq!(market_maker_object.owner(), sender);
     assert_eq!(market_maker_object.id(), object::id(&market_maker_object));
     assert_eq!(market_maker_cap.cap_id(), object::id(&market_maker_cap));
+    assert_eq!(market_maker_object.market().pool_id(), pool_id);
 
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
@@ -175,31 +175,25 @@ fun create_market_maker_creates_distinct_accounts_and_caps() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let amm_config_a = config::new(
+    let market_a = market::new(
         object::id(&pool),
-        100,
-        200,
         build_pyth_price_feed_id(3),
         build_pyth_price_feed_id(3),
-        30_000,
-        30,
-        1000,
     );
-    let amm_config_b = config::new(
+    let market_b = market::new(
         object::id(&pool),
-        125,
-        250,
         build_pyth_price_feed_id(4),
         build_pyth_price_feed_id(4),
-        30_000,
-        30,
-        1000,
     );
+    let amm_config_a = config::new(100, 200, 30_000, 30, 1000);
+    let amm_config_b = config::new(125, 250, 30_000, 30, 1000);
     let (market_maker_a, market_maker_cap_a) = executor::create(
+        market_a,
         amm_config_a,
         scenario.ctx(),
     );
     let (market_maker_b, market_maker_cap_b) = executor::create(
+        market_b,
         amm_config_b,
         scenario.ctx(),
     );
@@ -282,7 +276,7 @@ fun deposit_and_withdraw_updates_market_maker_balance() {
 }
 
 #[test]
-fun update_market_maker_replaces_config_before_refreshing_quotes() {
+fun update_config_replaces_config_before_refreshing_quotes() {
     let sender = @0x15;
     let updated_base_spread_bps = 150;
     let updated_volatility_spread_bps = 300;
@@ -331,16 +325,13 @@ fun update_market_maker_replaces_config_before_refreshing_quotes() {
     let usdc_currency = create_usdc_currency();
 
     let updated_config = config::new(
-        object::id(&pool),
         updated_base_spread_bps,
         updated_volatility_spread_bps,
-        build_pyth_price_feed_id(feed_id_byte),
-        build_pyth_price_feed_id(feed_id_byte),
         30_000,
         30,
         1000,
     );
-    market_maker_object.update_market_maker(&market_maker_cap, updated_config);
+    market_maker_object.update_config(&market_maker_cap, updated_config);
     assert_emitted!(market_maker_config_updated(market_maker_object.id()));
     market_maker_object.refresh_quotes(
         &mut pool,
@@ -470,7 +461,7 @@ fun unpause_emits_event_in_followup_transaction() {
 }
 
 #[test]
-fun update_market_maker_from_paused_emits_unpaused_event() {
+fun update_config_from_paused_emits_unpaused_event() {
     let sender = @0x18;
     let feed_id_byte = 14;
     let mut scenario = test_scenario::begin(sender);
@@ -503,17 +494,8 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
     market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
     assert_emitted!(market_maker_paused(market_maker_object.id()));
 
-    let updated_config = config::new(
-        object::id(&pool),
-        120,
-        240,
-        build_pyth_price_feed_id(feed_id_byte),
-        build_pyth_price_feed_id(feed_id_byte),
-        30_000,
-        30,
-        1000,
-    );
-    market_maker_object.update_market_maker(&market_maker_cap, updated_config);
+    let updated_config = config::new(120, 240, 30_000, 30, 1000);
+    market_maker_object.update_config(&market_maker_cap, updated_config);
 
     assert_emitted!(market_maker_config_updated(market_maker_object.id()));
     assert_emitted!(market_maker_unpaused(market_maker_object.id()));
@@ -524,6 +506,96 @@ fun update_market_maker_from_paused_emits_unpaused_event() {
     transfer::public_transfer(market_maker_object, sender);
     transfer::public_transfer(market_maker_cap, sender);
     scenario.end();
+}
+
+#[test]
+fun update_market_replaces_market_while_paused() {
+    let sender = @0x19;
+    let feed_id_byte = 15;
+    let updated_feed_id_byte = 16;
+    let mut scenario = test_scenario::begin(sender);
+
+    executor::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let (market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+        &mut scenario,
+        pool_id,
+        100,
+        200,
+        feed_id_byte,
+    );
+
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut market_maker_object: MarketMaker = scenario.take_from_sender();
+    let market_maker_cap: AdminCap = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+
+    market_maker_object.pause(&market_maker_cap, &mut pool, &clock, scenario.ctx());
+
+    let updated_market = market::new(
+        pool_id,
+        build_pyth_price_feed_id(updated_feed_id_byte),
+        build_pyth_price_feed_id(updated_feed_id_byte),
+    );
+    market_maker_object.update_market(&market_maker_cap, updated_market);
+
+    assert_emitted!(market_updated(market_maker_object.id()));
+    assert_eq!(
+        market_maker_object.market().base_pyth_price_feed_id(),
+        build_pyth_price_feed_id(updated_feed_id_byte),
+    );
+    assert_eq!(
+        market_maker_object.market().quote_pyth_price_feed_id(),
+        build_pyth_price_feed_id(updated_feed_id_byte),
+    );
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(clock);
+    transfer::public_transfer(market_maker_object, sender);
+    transfer::public_transfer(market_maker_cap, sender);
+    scenario.end();
+}
+
+#[test, expected_failure(abort_code = executor::EInvalidMarketUpdate)]
+fun update_market_rejects_while_active() {
+    let sender = @0x1a;
+    let feed_id_byte = 17;
+    let updated_feed_id_byte = 18;
+    let mut scenario = test_scenario::begin(sender);
+
+    executor::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let (mut market_maker_object, market_maker_cap) = create_market_maker_for_pool(
+        &mut scenario,
+        pool_id,
+        100,
+        200,
+        feed_id_byte,
+    );
+
+    let updated_market = market::new(
+        pool_id,
+        build_pyth_price_feed_id(updated_feed_id_byte),
+        build_pyth_price_feed_id(updated_feed_id_byte),
+    );
+    market_maker_object.update_market(&market_maker_cap, updated_market);
+
+    abort
 }
 
 #[test]
