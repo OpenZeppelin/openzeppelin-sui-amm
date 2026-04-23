@@ -14,21 +14,21 @@ import {
 import { resolveOnChainSharedVersion } from "./test-helpers.ts"
 
 const SEEDED_BASE_SPREAD_BPS = "37"
-const SEEDED_VOLATILITY_SPREAD_BPS = "420"
+const SEEDED_VOLATILITY_MULTIPLIER_BPS = "420"
 const SEEDED_PYTH_PRICE_FEED_ID = DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
 
 const SEED_ARGS: AmmSeedScriptArguments = {
   json: true,
   baseSpreadBps: SEEDED_BASE_SPREAD_BPS,
-  volatilitySpreadBps: SEEDED_VOLATILITY_SPREAD_BPS,
+  volatilityMultiplierBps: SEEDED_VOLATILITY_MULTIPLIER_BPS,
   pythPriceFeedId: SEEDED_PYTH_PRICE_FEED_ID
 }
 
 const expectSeededAmmConfigValues = (output: CompleteAmmSeedOutput) => {
   expect(output.ammConfigId).toBe(output.ammConfig.configId)
   expect(output.ammConfig.baseSpreadBps).toBe(SEEDED_BASE_SPREAD_BPS)
-  expect(output.ammConfig.volatilitySpreadBps).toBe(
-    SEEDED_VOLATILITY_SPREAD_BPS
+  expect(output.ammConfig.volatilityMultiplierBps).toBe(
+    SEEDED_VOLATILITY_MULTIPLIER_BPS
   )
   expect(output.ammConfig.active).toBe(true)
   expect(normalizeHex(output.ammConfig.basePythPriceFeedIdHex)).toBe(

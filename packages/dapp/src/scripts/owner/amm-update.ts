@@ -36,7 +36,7 @@ type UpdateAmmArguments = {
   adminCapId?: string
   ammPackageId?: string
   baseSpreadBps?: string
-  volatilitySpreadBps?: string
+  volatilityMultiplierBps?: string
   orderExpirationTimeMs?: string
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
@@ -48,7 +48,7 @@ type UpdateAmmArguments = {
 
 type ResolvedAmmUpdateInputs = {
   baseSpreadBps: bigint
-  volatilitySpreadBps: bigint
+  volatilityMultiplierBps: bigint
   orderExpirationTimeMs: bigint
   maxPriceAgeSecs: bigint
   maxConfRatioBps: bigint
@@ -96,8 +96,8 @@ const resolveAmmUpdateInputs = ({
 }): ResolvedAmmUpdateInputs => {
   const inputs = resolveAmmConfigInputs({
     baseSpreadBps: cliArguments.baseSpreadBps ?? currentOverview.baseSpreadBps,
-    volatilitySpreadBps:
-      cliArguments.volatilitySpreadBps ?? currentOverview.volatilitySpreadBps,
+    volatilityMultiplierBps:
+      cliArguments.volatilityMultiplierBps ?? currentOverview.volatilityMultiplierBps,
     basePythPriceFeedIdHex: currentOverview.basePythPriceFeedIdHex,
     quotePythPriceFeedIdHex: currentOverview.quotePythPriceFeedIdHex,
     orderExpirationTimeMs:
@@ -113,7 +113,7 @@ const resolveAmmUpdateInputs = ({
 
   return {
     baseSpreadBps: inputs.baseSpreadBps,
-    volatilitySpreadBps: inputs.volatilitySpreadBps,
+    volatilityMultiplierBps: inputs.volatilityMultiplierBps,
     orderExpirationTimeMs: inputs.orderExpirationTimeMs,
     maxPriceAgeSecs: inputs.maxPriceAgeSecs,
     maxConfRatioBps: inputs.maxConfRatioBps,
@@ -152,7 +152,7 @@ runSuiScript(
       executor: ammConfigSharedObject,
       adminCapId,
       baseSpreadBps: updateInputs.baseSpreadBps,
-      volatilitySpreadBps: updateInputs.volatilitySpreadBps,
+      volatilityMultiplierBps: updateInputs.volatilityMultiplierBps,
       orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
       maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
       maxConfRatioBps: updateInputs.maxConfRatioBps,
@@ -223,11 +223,11 @@ runSuiScript(
         "Base spread in basis points (u64); defaults to the current config value.",
       demandOption: false
     })
-    .option("volatilitySpreadBps", {
-      alias: ["volatility-spread-bps"],
+    .option("volatilityMultiplierBps", {
+      alias: ["volatility-multiplier-bps"],
       type: "string",
       description:
-        "Volatility spread in basis points (u64); defaults to the current config value.",
+        "Volatility multiplier in basis points applied to the combined Pyth confidence ratio (u64); defaults to the current config value.",
       demandOption: false
     })
     .option("orderExpirationTimeMs", {

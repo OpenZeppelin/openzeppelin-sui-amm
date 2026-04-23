@@ -229,16 +229,26 @@ public(package) fun reset_price_publish_times(market: &mut Market) {
     market.quote_price_publish_time = option::none();
 }
 
-/// Derive the DeepBook base/quote price from base and quote USD prices, adjusted for the
-/// cached base/quote asset decimals.
+/// Derive the DeepBook base/quote price and the combined confidence-to-price ratio (in basis
+/// points) from base and quote USD prices, adjusted for the cached base/quote asset decimals.
+///
+/// The returned confidence ratio is the linear propagation of uncertainty through the ratio:
+/// `Base/Quote = (Base/USD) / (Quote/USD)` => `d(mid)/mid ≈ d_base/base + d_quote/quote`
+/// Each constituent conf_ratio is also individually bounded by `max_conf_ratio_bps`.
 public(package) fun deepbook_price(
     market: &Market,
     base_price: Price,
     quote_price: Price,
     max_conf_ratio_bps: u64,
-): u64 {
-    let (base_mantissa, base_exponent) = deepbook_usd_price(base_price, max_conf_ratio_bps);
-    let (quote_mantissa, quote_exponent) = deepbook_usd_price(quote_price, max_conf_ratio_bps);
+): (u64, u64) {
+    let (base_mantissa, base_exponent, base_conf_ratio_bps) = deepbook_usd_price(
+        base_price,
+        max_conf_ratio_bps,
+    );
+    let (quote_mantissa, quote_exponent, quote_conf_ratio_bps) = deepbook_usd_price(
+        quote_price,
+        max_conf_ratio_bps,
+    );
 
     // Convert (Base/USD)/(Quote/USD) to DeepBook price units (quote atoms per base atom),
     // including decimal adjustment for token atom precision mismatch.
@@ -258,26 +268,26 @@ public(package) fun deepbook_price(
     assert!(deepbook_price >= constants::min_price(), EPythInvalidPriceValue);
     assert!(deepbook_price <= constants::max_price(), EPythInvalidPriceValue);
 
-    deepbook_price
+    (deepbook_price, base_conf_ratio_bps + quote_conf_ratio_bps)
 }
 
 // === Private Functions ===
 
-/// Extract positive USD mantissa (can be safely cast to u64) and negative exponent from a Pyth price.
-fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8) {
+/// Extract positive USD mantissa (can be safely cast to u64), negative exponent, and the
+/// fractional confidence-to-price ratio in basis points from a Pyth price. Aborts if the
+/// confidence interval exceeds `max_conf_ratio_bps` of the mantissa.
+fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8, u64) {
     // Retrieve positive mantissa.
     let price_i64 = price.get_price();
     assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
     let mantissa = price_i64.get_magnitude_if_positive() as u128;
     assert!(mantissa != 0, EPythPriceNonPositive);
 
-    // Reject prices whose confidence interval is too wide relative to the price.
-    let max_conf_ratio_bps = max_conf_ratio_bps as u128;
+    // Compute the confidence-to-price ratio in basis points and reject prices whose
+    // confidence interval is too wide.
     let price_conf = price.get_conf() as u128;
-    assert!(
-        price_conf * HUNDRED_PERCENT_BPS_U128 <= mantissa * max_conf_ratio_bps,
-        EPythPriceConfidenceTooWide,
-    );
+    let conf_ratio_bps = ((price_conf * HUNDRED_PERCENT_BPS_U128) / mantissa) as u64;
+    assert!(conf_ratio_bps <= max_conf_ratio_bps, EPythPriceConfidenceTooWide);
 
     // Retrieve negative exponent.
     let expo_i64 = price.get_expo();
@@ -288,5 +298,5 @@ fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8) {
         .destroy_or!(abort EExponentTooLarge);
     assert!(exponent <= MAX_DECIMAL_POWER, EExponentTooLarge);
 
-    (mantissa, exponent)
+    (mantissa, exponent, conf_ratio_bps)
 }

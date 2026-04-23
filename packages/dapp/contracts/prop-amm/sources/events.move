@@ -19,8 +19,11 @@ public struct QuoteUpdated has copy, drop {
     price: u64,
     /// Effective spread in bps used for this update.
     base_spread_bps: u64,
-    /// Volatility spread in bps used for this update.
-    volatility_spread_bps: u64,
+    /// Volatility multiplier in bps used for this update.
+    volatility_multiplier_bps: u64,
+    /// Combined Pyth confidence ratio (base/base + quote/quote) in bps observed for this
+    /// update; drives the dynamic volatility buffer on top of `base_spread_bps`.
+    conf_ratio_bps: u64,
 }
 
 /// Emitted when market maker executor trading is paused.
@@ -59,9 +62,16 @@ public(package) fun emit_quote_updated(
     executor_id: ID,
     price: u64,
     base_spread_bps: u64,
-    volatility_spread_bps: u64,
+    volatility_multiplier_bps: u64,
+    conf_ratio_bps: u64,
 ) {
-    event::emit(QuoteUpdated { executor_id, price, base_spread_bps, volatility_spread_bps });
+    event::emit(QuoteUpdated {
+        executor_id,
+        price,
+        base_spread_bps,
+        volatility_multiplier_bps,
+        conf_ratio_bps,
+    });
 }
 
 /// Emit an `ExecutorPaused` event.
@@ -98,9 +108,16 @@ public(package) fun quote_updated(
     executor_id: ID,
     price: u64,
     base_spread_bps: u64,
-    volatility_spread_bps: u64,
+    volatility_multiplier_bps: u64,
+    conf_ratio_bps: u64,
 ): QuoteUpdated {
-    QuoteUpdated { executor_id, price, base_spread_bps, volatility_spread_bps }
+    QuoteUpdated {
+        executor_id,
+        price,
+        base_spread_bps,
+        volatility_multiplier_bps,
+        conf_ratio_bps,
+    }
 }
 
 /// Builds an `ExecutorPaused` payload.

@@ -277,7 +277,7 @@ export const createAmmConfigSnapshot = async ({
     quoteAssetTypeTag,
     senderAddress,
     baseSpreadBps: ammConfigInputs.baseSpreadBps,
-    volatilitySpreadBps: ammConfigInputs.volatilitySpreadBps,
+    volatilityMultiplierBps: ammConfigInputs.volatilityMultiplierBps,
     basePythPriceFeedIdBytes: ammConfigInputs.basePythPriceFeedIdBytes,
     quotePythPriceFeedIdBytes: ammConfigInputs.quotePythPriceFeedIdBytes,
     orderExpirationTimeMs: ammConfigInputs.orderExpirationTimeMs,
@@ -325,7 +325,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
   basePythPriceFeedIdHex,
   quotePythPriceFeedIdHex,
   baseSpreadBps,
-  volatilitySpreadBps,
+  volatilityMultiplierBps,
   orderExpirationTimeMs,
   maxPriceAgeSecs,
   maxConfRatioBps,
@@ -337,7 +337,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
   basePythPriceFeedIdHex: string
   quotePythPriceFeedIdHex: string
   baseSpreadBps?: string
-  volatilitySpreadBps?: string
+  volatilityMultiplierBps?: string
   orderExpirationTimeMs?: string
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
@@ -352,7 +352,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
   const ammConfigInputs = resolveAmmConfigInputs({
     basePythPriceFeedIdHex,
     quotePythPriceFeedIdHex,
-    volatilitySpreadBps,
+    volatilityMultiplierBps,
     baseSpreadBps,
     orderExpirationTimeMs,
     maxPriceAgeSecs,

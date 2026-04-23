@@ -79,7 +79,7 @@ describe.skip("owner amm-create integration", () => {
       })
 
       const baseSpreadBps = "37"
-      const volatilitySpreadBps = "420"
+      const volatilityMultiplierBps = "420"
       const pythPriceFeedId = DEFAULT_LOCALNET_PYTH_PRICE_FEED_ID
 
       const scriptRunner = createSuiScriptRunner(context)
@@ -90,7 +90,7 @@ describe.skip("owner amm-create integration", () => {
           args: {
             json: true,
             baseSpreadBps,
-            volatilitySpreadBps
+            volatilityMultiplierBps
           }
         }
       )
@@ -114,7 +114,7 @@ describe.skip("owner amm-create integration", () => {
       expect(output.digest).toBeTruthy()
       expect(output.transactionSummary?.label).toBe("create-amm")
       expect(output.ammConfig.baseSpreadBps).toBe(baseSpreadBps)
-      expect(output.ammConfig.volatilitySpreadBps).toBe(volatilitySpreadBps)
+      expect(output.ammConfig.volatilityMultiplierBps).toBe(volatilityMultiplierBps)
       expect(output.ammConfig.active).toBe(true)
       expect(normalizeHex(output.ammConfig.basePythPriceFeedIdHex)).toBe(
         normalizeHex(pythPriceFeedId)

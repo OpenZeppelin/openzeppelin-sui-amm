@@ -62,7 +62,7 @@ const buildAmmConfigDetails = (
   ammConfig: AmmConfigOverview
 ): TAmmConfigDetails => ({
   baseSpreadBps: ammConfig.baseSpreadBps,
-  volatilitySpreadBps: ammConfig.volatilitySpreadBps,
+  volatilityMultiplierBps: ammConfig.volatilityMultiplierBps,
   tradingBadge: buildTradingBadge(ammConfig.active),
   basePythPriceFeedIdHex: ammConfig.basePythPriceFeedIdHex,
   quotePythPriceFeedIdHex: ammConfig.quotePythPriceFeedIdHex

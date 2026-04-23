@@ -13,7 +13,7 @@ import type { IdentifierString } from "@mysten/wallet-standard"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
   DEFAULT_BASE_SPREAD_BPS,
-  DEFAULT_VOLATILITY_SPREAD_BPS,
+  DEFAULT_VOLATILITY_MULTIPLIER_BPS,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
@@ -44,7 +44,7 @@ import { useIdleFieldValidation } from "./useIdleFieldValidation"
 
 type AmmUpdateFormState = {
   baseSpreadBps: string
-  volatilitySpreadBps: string
+  volatilityMultiplierBps: string
 }
 
 type AmmUpdateFieldErrors = Partial<Record<keyof AmmUpdateFormState, string>>
@@ -65,8 +65,8 @@ type TransactionState =
 
 const buildFormState = (ammConfig?: AmmConfigOverview): AmmUpdateFormState => ({
   baseSpreadBps: ammConfig?.baseSpreadBps ?? DEFAULT_BASE_SPREAD_BPS,
-  volatilitySpreadBps:
-    ammConfig?.volatilitySpreadBps ?? DEFAULT_VOLATILITY_SPREAD_BPS
+  volatilityMultiplierBps:
+    ammConfig?.volatilityMultiplierBps ?? DEFAULT_VOLATILITY_MULTIPLIER_BPS
 })
 
 const buildFieldErrors = (
@@ -74,7 +74,7 @@ const buildFieldErrors = (
 ): AmmUpdateFieldErrors => {
   const errors: AmmUpdateFieldErrors = {}
   const baseSpreadBps = formState.baseSpreadBps.trim()
-  const volatilitySpreadBps = formState.volatilitySpreadBps.trim()
+  const volatilityMultiplierBps = formState.volatilityMultiplierBps.trim()
 
   if (!baseSpreadBps) {
     errors.baseSpreadBps = "Base spread is required."
@@ -89,15 +89,15 @@ const buildFieldErrors = (
     }
   }
 
-  if (!volatilitySpreadBps) {
-    errors.volatilitySpreadBps = "Volatility spread is required."
+  if (!volatilityMultiplierBps) {
+    errors.volatilityMultiplierBps = "Volatility multiplier is required."
   } else {
     try {
-      parseNonNegativeU64(volatilitySpreadBps, "Volatility spread bps")
+      parseNonNegativeU64(volatilityMultiplierBps, "Volatility multiplier bps")
     } catch (error) {
-      errors.volatilitySpreadBps = resolveValidationMessage(
+      errors.volatilityMultiplierBps = resolveValidationMessage(
         error,
-        "Volatility spread must be a valid u64."
+        "Volatility multiplier must be a valid u64."
       )
     }
   }
@@ -109,16 +109,16 @@ const buildFallbackOverview = ({
   currentConfig,
   configId,
   baseSpreadBps,
-  volatilitySpreadBps
+  volatilityMultiplierBps
 }: {
   currentConfig?: AmmConfigOverview
   configId: string
   baseSpreadBps: bigint
-  volatilitySpreadBps: bigint
+  volatilityMultiplierBps: bigint
 }): AmmConfigOverview => ({
   configId,
   baseSpreadBps: baseSpreadBps.toString(),
-  volatilitySpreadBps: volatilitySpreadBps.toString(),
+  volatilityMultiplierBps: volatilityMultiplierBps.toString(),
   active: true,
   basePythPriceFeedIdHex: currentConfig?.basePythPriceFeedIdHex ?? "",
   quotePythPriceFeedIdHex: currentConfig?.quotePythPriceFeedIdHex ?? "",
@@ -134,7 +134,7 @@ const ammConfigMatches = (
   second: AmmConfigOverview
 ) =>
   first.baseSpreadBps === second.baseSpreadBps &&
-  first.volatilitySpreadBps === second.volatilitySpreadBps &&
+  first.volatilityMultiplierBps === second.volatilityMultiplierBps &&
   first.active === second.active
 
 export const useUpdateAmmConfigModalState = ({
@@ -317,7 +317,7 @@ export const useUpdateAmmConfigModalState = ({
     try {
       const updateInputs = resolveAmmConfigInputs({
         baseSpreadBps: formState.baseSpreadBps.trim(),
-        volatilitySpreadBps: formState.volatilitySpreadBps.trim(),
+        volatilityMultiplierBps: formState.volatilityMultiplierBps.trim(),
         basePythPriceFeedIdHex: ammConfig?.basePythPriceFeedIdHex ?? "",
         quotePythPriceFeedIdHex: ammConfig?.quotePythPriceFeedIdHex ?? "",
         orderExpirationTimeMs: ammConfig?.orderExpirationTimeMs,
@@ -348,7 +348,7 @@ export const useUpdateAmmConfigModalState = ({
         executor: configShared,
         adminCapId,
         baseSpreadBps: updateInputs.baseSpreadBps,
-        volatilitySpreadBps: updateInputs.volatilitySpreadBps,
+        volatilityMultiplierBps: updateInputs.volatilityMultiplierBps,
         orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
         maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
         maxConfRatioBps: updateInputs.maxConfRatioBps,
@@ -382,7 +382,7 @@ export const useUpdateAmmConfigModalState = ({
         currentConfig: ammConfig,
         configId,
         baseSpreadBps: updateInputs.baseSpreadBps,
-        volatilitySpreadBps: updateInputs.volatilitySpreadBps
+        volatilityMultiplierBps: updateInputs.volatilityMultiplierBps
       })
 
       setTransactionState({

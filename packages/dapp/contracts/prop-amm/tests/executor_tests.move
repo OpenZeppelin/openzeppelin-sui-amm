@@ -59,11 +59,13 @@ fun publish_price_feed(scenario: &mut test_scenario::Scenario, sender: address, 
     scenario.next_tx(sender);
 
     let clock_for_price_feed: Clock = scenario.take_shared();
+    // confidence = 250 → conf_ratio_bps = 250 per feed, 500 combined; keeps outer order
+    // strictly outside the inner order after tick rounding (see tests below).
     pyth::price_info::publish_price_feed(
         build_pyth_price_feed_id(feed_id_byte),
         10_000,
         false,
-        0,
+        250,
         2,
         true,
         &clock_for_price_feed,
@@ -79,7 +81,7 @@ fun create_executor_for_pool(
     base_currency: &Currency<SUI>,
     quote_currency: &Currency<USDC>,
     base_spread_bps: u64,
-    volatility_spread_bps: u64,
+    volatility_multiplier_bps: u64,
     feed_id_byte: u8,
 ): (Executor, AdminCap) {
     let market = market::new(
@@ -91,7 +93,7 @@ fun create_executor_for_pool(
     );
     let amm_config = config::new(
         base_spread_bps,
-        volatility_spread_bps,
+        volatility_multiplier_bps,
         30_000,
         30,
         1000,
@@ -332,7 +334,7 @@ fun deposit_and_withdraw_updates_executor_balance() {
 fun update_config_replaces_config_before_refreshing_quotes() {
     let sender = @0x15;
     let updated_base_spread_bps = 150;
-    let updated_volatility_spread_bps = 300;
+    let updated_volatility_multiplier_bps = 300;
     let oracle_price = constants::float_scaling() / 1_000;
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 6;
@@ -387,7 +389,7 @@ fun update_config_replaces_config_before_refreshing_quotes() {
 
     let updated_config = config::new(
         updated_base_spread_bps,
-        updated_volatility_spread_bps,
+        updated_volatility_multiplier_bps,
         30_000,
         30,
         1000,
@@ -408,7 +410,8 @@ fun update_config_replaces_config_before_refreshing_quotes() {
             executor_object.id(),
             oracle_price,
             updated_base_spread_bps,
-            updated_volatility_spread_bps,
+            updated_volatility_multiplier_bps,
+            500,
         ),
     );
 
@@ -674,7 +677,7 @@ fun update_config_rejects_when_unchanged() {
     let sender = @0x1b;
     let feed_id_byte = 19;
     let base_spread_bps = 100;
-    let volatility_spread_bps = 200;
+    let volatility_multiplier_bps = 200;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
@@ -695,14 +698,14 @@ fun update_config_rejects_when_unchanged() {
         &sui_currency,
         &usdc_currency,
         base_spread_bps,
-        volatility_spread_bps,
+        volatility_multiplier_bps,
         feed_id_byte,
     );
 
     // Build a config identical to the one `create_executor_for_pool` used.
     let identical_config = config::new(
         base_spread_bps,
-        volatility_spread_bps,
+        volatility_multiplier_bps,
         30_000,
         30,
         1000,
@@ -813,7 +816,7 @@ fun update_market_rejects_while_active() {
 fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     let sender = @0x20;
     let base_spread_bps = 100;
-    let volatility_spread_bps = 200;
+    let volatility_multiplier_bps = 200;
     let oracle_price = constants::float_scaling() / 1_000;
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 7;
@@ -837,7 +840,7 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
         &sui_currency,
         &usdc_currency,
         base_spread_bps,
-        volatility_spread_bps,
+        volatility_multiplier_bps,
         feed_id_byte,
     );
     executor_object.deposit(
@@ -874,7 +877,13 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     );
 
     assert_emitted!(
-        quote_updated(executor_object.id(), oracle_price, base_spread_bps, volatility_spread_bps),
+        quote_updated(
+            executor_object.id(),
+            oracle_price,
+            base_spread_bps,
+            volatility_multiplier_bps,
+            500,
+        ),
     );
 
     // Verify all 4 limit orders were placed (2 bids + 2 asks),
@@ -895,7 +904,7 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
 fun refresh_quotes_ignores_replayed_publish_time() {
     let sender = @0x2a;
     let base_spread_bps = 100;
-    let volatility_spread_bps = 200;
+    let volatility_multiplier_bps = 200;
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 12;
     let mut scenario = test_scenario::begin(sender);
@@ -918,7 +927,7 @@ fun refresh_quotes_ignores_replayed_publish_time() {
         &sui_currency,
         &usdc_currency,
         base_spread_bps,
-        volatility_spread_bps,
+        volatility_multiplier_bps,
         feed_id_byte,
     );
     executor_object.deposit(
@@ -1113,7 +1122,7 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     let sender = @0x23;
     let maker = @0x24;
     let base_spread_bps = 100;
-    let volatility_spread_bps = 200;
+    let volatility_multiplier_bps = 200;
     let oracle_price = constants::float_scaling() / 1_000;
     let quote_balance = 19_404_002 * constants::float_scaling();
     let feed_id_byte = 11;
@@ -1137,7 +1146,7 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
         &sui_currency,
         &usdc_currency,
         base_spread_bps,
-        volatility_spread_bps,
+        volatility_multiplier_bps,
         feed_id_byte,
     );
     executor_object.deposit(
@@ -1174,7 +1183,13 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     );
 
     assert_emitted!(
-        quote_updated(executor_object.id(), oracle_price, base_spread_bps, volatility_spread_bps),
+        quote_updated(
+            executor_object.id(),
+            oracle_price,
+            base_spread_bps,
+            volatility_multiplier_bps,
+            500,
+        ),
     );
 
     test_scenario::return_shared(pool);

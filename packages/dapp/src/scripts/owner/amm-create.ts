@@ -11,7 +11,7 @@ import {
   DEFAULT_MAX_PRICE_AGE_SECS,
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
   DEFAULT_OUTER_BALANCE_BPS,
-  DEFAULT_VOLATILITY_SPREAD_BPS,
+  DEFAULT_VOLATILITY_MULTIPLIER_BPS,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
@@ -35,7 +35,7 @@ type CreateAmmArguments = {
   baseCurrencyId?: string
   quoteCurrencyId?: string
   baseSpreadBps?: string
-  volatilitySpreadBps?: string
+  volatilityMultiplierBps?: string
   basePythPriceFeedId?: string
   quotePythPriceFeedId?: string
   pythPriceFeedLabel?: string
@@ -93,7 +93,7 @@ runSuiScript(
     const ammConfigInputs = resolveAmmConfigInputs({
       basePythPriceFeedIdHex,
       quotePythPriceFeedIdHex,
-      volatilitySpreadBps: cliArguments.volatilitySpreadBps,
+      volatilityMultiplierBps: cliArguments.volatilityMultiplierBps,
       baseSpreadBps: cliArguments.baseSpreadBps,
       orderExpirationTimeMs: cliArguments.orderExpirationTimeMs,
       maxPriceAgeSecs: cliArguments.maxPriceAgeSecs,
@@ -138,7 +138,7 @@ runSuiScript(
       quoteAssetTypeTag,
       senderAddress,
       baseSpreadBps: ammConfigInputs.baseSpreadBps,
-      volatilitySpreadBps: ammConfigInputs.volatilitySpreadBps,
+      volatilityMultiplierBps: ammConfigInputs.volatilityMultiplierBps,
       basePythPriceFeedIdBytes: ammConfigInputs.basePythPriceFeedIdBytes,
       quotePythPriceFeedIdBytes: ammConfigInputs.quotePythPriceFeedIdBytes,
       orderExpirationTimeMs: ammConfigInputs.orderExpirationTimeMs,
@@ -234,11 +234,12 @@ runSuiScript(
       default: DEFAULT_BASE_SPREAD_BPS,
       demandOption: false
     })
-    .option("volatilitySpreadBps", {
-      alias: ["volatility-spread-bps"],
+    .option("volatilityMultiplierBps", {
+      alias: ["volatility-multiplier-bps"],
       type: "string",
-      description: "Volatility spread in basis points (u64).",
-      default: DEFAULT_VOLATILITY_SPREAD_BPS,
+      description:
+        "Volatility multiplier in basis points applied to the combined Pyth confidence ratio (e.g. 10000 = 1x) (u64).",
+      default: DEFAULT_VOLATILITY_MULTIPLIER_BPS,
       demandOption: false
     })
     .option("basePythPriceFeedId", {

@@ -27,7 +27,7 @@ export const DEFAULT_OUTER_BALANCE_BPS = "5000"
 export type AmmConfigOverview = {
   configId: string
   baseSpreadBps: string
-  volatilitySpreadBps: string
+  volatilityMultiplierBps: string
   active: boolean
   basePythPriceFeedIdHex: string
   quotePythPriceFeedIdHex: string
@@ -40,7 +40,7 @@ export type AmmConfigOverview = {
 
 type AmmConfigFields = {
   base_spread_bps?: unknown
-  volatility_spread_bps?: unknown
+  volatility_multiplier_bps?: unknown
   order_expiration_time_ms?: unknown
   max_price_age_secs?: unknown
   max_conf_ratio_bps?: unknown
@@ -110,9 +110,9 @@ const buildAmmConfigOverviewFromObject = ({
       config.base_spread_bps,
       "Base spread bps"
     ),
-    volatilitySpreadBps: requireNumericField(
-      config.volatility_spread_bps,
-      "Volatility spread bps"
+    volatilityMultiplierBps: requireNumericField(
+      config.volatility_multiplier_bps,
+      "Volatility multiplier bps"
     ),
     active: requireBooleanField(executorFields.active, "Active"),
     basePythPriceFeedIdHex: requireFeedIdHex(
@@ -156,7 +156,7 @@ export const getAmmConfigOverview = async (
 }
 
 export const DEFAULT_BASE_SPREAD_BPS = "25"
-export const DEFAULT_VOLATILITY_SPREAD_BPS = "200"
+export const DEFAULT_VOLATILITY_MULTIPLIER_BPS = "10000"
 
 const resolveBaseSpreadBps = (rawValue?: string): bigint => {
   const baseSpreadBps = parsePositiveU64(
@@ -171,14 +171,14 @@ const resolveBaseSpreadBps = (rawValue?: string): bigint => {
   return baseSpreadBps
 }
 
-const resolveVolatilitySpreadBps = (rawValue?: string): bigint =>
+const resolveVolatilityMultiplierBps = (rawValue?: string): bigint =>
   parseNonNegativeU64(
-    rawValue ?? DEFAULT_VOLATILITY_SPREAD_BPS,
-    "Volatility spread bps"
+    rawValue ?? DEFAULT_VOLATILITY_MULTIPLIER_BPS,
+    "Volatility multiplier bps"
   )
 
 export const resolveAmmConfigInputs = ({
-  volatilitySpreadBps,
+  volatilityMultiplierBps,
   baseSpreadBps,
   basePythPriceFeedIdHex,
   quotePythPriceFeedIdHex,
@@ -187,7 +187,7 @@ export const resolveAmmConfigInputs = ({
   maxConfRatioBps,
   outerBalanceBps
 }: {
-  volatilitySpreadBps?: string
+  volatilityMultiplierBps?: string
   baseSpreadBps?: string
   basePythPriceFeedIdHex: string
   quotePythPriceFeedIdHex: string
@@ -197,7 +197,7 @@ export const resolveAmmConfigInputs = ({
   outerBalanceBps?: string
 }): {
   baseSpreadBps: bigint
-  volatilitySpreadBps: bigint
+  volatilityMultiplierBps: bigint
   basePythPriceFeedIdHex: string
   basePythPriceFeedIdBytes: number[]
   quotePythPriceFeedIdHex: string
@@ -208,7 +208,7 @@ export const resolveAmmConfigInputs = ({
   outerBalanceBps: bigint
 } => ({
   baseSpreadBps: resolveBaseSpreadBps(baseSpreadBps),
-  volatilitySpreadBps: resolveVolatilitySpreadBps(volatilitySpreadBps),
+  volatilityMultiplierBps: resolveVolatilityMultiplierBps(volatilityMultiplierBps),
   basePythPriceFeedIdHex,
   basePythPriceFeedIdBytes: parsePythPriceFeedIdBytes(basePythPriceFeedIdHex),
   quotePythPriceFeedIdHex,

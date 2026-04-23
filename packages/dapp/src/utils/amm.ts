@@ -252,7 +252,7 @@ export const logAmmConfigOverview = (
 ) => {
   logKeyValueGreen("Config")(overview.configId)
   logKeyValueGreen("Spread-bps")(overview.baseSpreadBps)
-  logKeyValueGreen("Vol-bps")(overview.volatilitySpreadBps)
+  logKeyValueGreen("Vol-mult-bps")(overview.volatilityMultiplierBps)
   logKeyValueGreen("Active")(overview.active ? "Yes" : "No")
   logKeyValueGreen("Base-feed")(overview.basePythPriceFeedIdHex)
   logKeyValueGreen("Quote-feed")(overview.quotePythPriceFeedIdHex)

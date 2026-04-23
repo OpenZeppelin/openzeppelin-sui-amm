@@ -39,7 +39,7 @@ export const buildCreateExecutorTransaction = ({
   quoteAssetTypeTag,
   senderAddress,
   baseSpreadBps,
-  volatilitySpreadBps,
+  volatilityMultiplierBps,
   basePythPriceFeedIdBytes,
   quotePythPriceFeedIdBytes,
   orderExpirationTimeMs,
@@ -55,7 +55,7 @@ export const buildCreateExecutorTransaction = ({
   quoteAssetTypeTag: string
   senderAddress: string
   baseSpreadBps: bigint | number
-  volatilitySpreadBps: bigint | number
+  volatilityMultiplierBps: bigint | number
   basePythPriceFeedIdBytes: number[]
   quotePythPriceFeedIdBytes: number[]
   orderExpirationTimeMs: bigint | number
@@ -91,7 +91,7 @@ export const buildCreateExecutorTransaction = ({
     target: `${packageId}::config::new`,
     arguments: [
       transaction.pure.u64(baseSpreadBps),
-      transaction.pure.u64(volatilitySpreadBps),
+      transaction.pure.u64(volatilityMultiplierBps),
       transaction.pure.u64(orderExpirationTimeMs),
       transaction.pure.u64(maxPriceAgeSecs),
       transaction.pure.u64(maxConfRatioBps),
@@ -123,7 +123,7 @@ export const buildUpdateConfigTransaction = ({
   executor,
   adminCapId,
   baseSpreadBps,
-  volatilitySpreadBps,
+  volatilityMultiplierBps,
   orderExpirationTimeMs,
   maxPriceAgeSecs,
   maxConfRatioBps,
@@ -133,7 +133,7 @@ export const buildUpdateConfigTransaction = ({
   executor: WrappedSuiSharedObject
   adminCapId: string
   baseSpreadBps: bigint | number
-  volatilitySpreadBps: bigint | number
+  volatilityMultiplierBps: bigint | number
   orderExpirationTimeMs: bigint | number
   maxPriceAgeSecs: bigint | number
   maxConfRatioBps: bigint | number
@@ -145,7 +145,7 @@ export const buildUpdateConfigTransaction = ({
     target: `${packageId}::config::new`,
     arguments: [
       transaction.pure.u64(baseSpreadBps),
-      transaction.pure.u64(volatilitySpreadBps),
+      transaction.pure.u64(volatilityMultiplierBps),
       transaction.pure.u64(orderExpirationTimeMs),
       transaction.pure.u64(maxPriceAgeSecs),
       transaction.pure.u64(maxConfRatioBps),

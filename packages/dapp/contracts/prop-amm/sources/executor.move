@@ -320,8 +320,10 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // before using balance in quantity computation for the next orders.
     pool.withdraw_settled_amounts(&mut executor.balance_manager, &trade_proof);
 
-    // Calculate precise spreads using Base/Quote = (Base/USD) / (Quote/USD).
-    let oracle_mid_price = executor
+    // Derive the DeepBook mid price and the combined confidence ratio (first-order linearized
+    // uncertainty of Base/Quote = (Base/USD) / (Quote/USD)). The confidence ratio drives the
+    // dynamic volatility buffer added on top of the base spread for the outer order.
+    let (oracle_mid_price, conf_ratio_bps) = executor
         .market
         .deepbook_price(
             base_pyth_price,
@@ -329,8 +331,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
             executor.config.max_conf_ratio_bps(),
         );
     let base_spread = executor.config.base_spread(oracle_mid_price);
-    // TODO#q: change volatility spread calculation.
-    let volatility_spread = executor.config.volatility_spread(oracle_mid_price);
+    let volatility_spread = executor.config.outer_spread(oracle_mid_price, conf_ratio_bps);
 
     // Fetch deepbook's pool parameters.
     let (tick, lot_size, min_size) = pool.pool_book_params();
@@ -427,7 +428,8 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         executor.id(),
         oracle_mid_price,
         executor.config.base_spread_bps(),
-        executor.config.volatility_spread_bps(),
+        executor.config.volatility_multiplier_bps(),
+        conf_ratio_bps,
     );
 }
 
