@@ -1,9 +1,11 @@
-/// Per-market-maker executor accounting info.
+/// Per-market-maker executor accounting information.
 module openzeppelin_market_maker::info;
 
 // === Structs ===
 
-/// Per-market-maker executor accounting snapshot.
+// TODO#q: rename to InfoSnapshot and add copy. Include it into event?
+/// Per-market-maker executor accounting information snapshot
+/// recorded from the last refresh_quotes update or withdrawal/deposit.
 public struct Info has drop, store {
     /// Cumulative base-asset volume traded within current epoch.
     volume_base: u128,
@@ -12,13 +14,13 @@ public struct Info has drop, store {
     /// Base-asset balance accounting.
     base_balance: u64,
     /// Cumulative quote-asset amount deposited into the executor.
-    quote_deposited: u64,
+    quote_deposited: u128,
     /// Cumulative base-asset amount deposited into the executor.
-    base_deposited: u64,
+    base_deposited: u128,
     /// Cumulative quote-asset amount withdrawn from the executor.
-    quote_withdrawn: u64,
+    quote_withdrawn: u128,
     /// Cumulative base-asset amount withdrawn from the executor.
-    base_withdrawn: u64,
+    base_withdrawn: u128,
 }
 
 // === Public Functions ===
@@ -39,22 +41,22 @@ public fun base_balance(self: &Info): u64 {
 }
 
 /// Cumulative quote-asset deposits into the executor.
-public fun quote_deposited(self: &Info): u64 {
+public fun quote_deposited(self: &Info): u128 {
     self.quote_deposited
 }
 
 /// Cumulative base-asset deposits into the executor.
-public fun base_deposited(self: &Info): u64 {
+public fun base_deposited(self: &Info): u128 {
     self.base_deposited
 }
 
 /// Cumulative quote-asset withdrawals from the executor.
-public fun quote_withdrawn(self: &Info): u64 {
+public fun quote_withdrawn(self: &Info): u128 {
     self.quote_withdrawn
 }
 
 /// Cumulative base-asset withdrawals from the executor.
-public fun base_withdrawn(self: &Info): u64 {
+public fun base_withdrawn(self: &Info): u128 {
     self.base_withdrawn
 }
 
@@ -88,22 +90,30 @@ public(package) fun set_base_balance(self: &mut Info, base_balance: u64) {
     self.base_balance = base_balance;
 }
 
-/// Accumulate a quote-asset deposit amount.
-public(package) fun add_quote_deposited(self: &mut Info, amount: u64) {
-    self.quote_deposited = self.quote_deposited + amount;
+/// Record a quote-asset deposit amount.
+/// Will never fail, but can record invalid value (0 or max).
+public(package) fun record_quote_deposit(self: &mut Info, amount: u64) {
+    self.quote_deposited = self.quote_deposited.saturating_add(amount as u128);
+    self.quote_balance = self.quote_balance.saturating_add(amount);
 }
 
-/// Accumulate a base-asset deposit amount.
-public(package) fun add_base_deposited(self: &mut Info, amount: u64) {
-    self.base_deposited = self.base_deposited + amount;
+/// Record a base-asset deposit amount.
+/// Will never fail, but can record invalid value (0 or max).
+public(package) fun record_base_deposit(self: &mut Info, amount: u64) {
+    self.base_deposited = self.base_deposited.saturating_add(amount as u128);
+    self.base_balance = self.base_balance.saturating_add(amount);
 }
 
-/// Accumulate a quote-asset withdrawal amount.
-public(package) fun add_quote_withdrawn(self: &mut Info, amount: u64) {
-    self.quote_withdrawn = self.quote_withdrawn + amount;
+/// Record a quote-asset withdrawal amount.
+/// Will never fail, but can record invalid value (0 or max).
+public(package) fun record_quote_withdraw(self: &mut Info, amount: u64) {
+    self.quote_withdrawn = self.quote_withdrawn.saturating_add(amount as u128);
+    self.quote_balance = self.quote_balance.saturating_sub(amount);
 }
 
-/// Accumulate a base-asset withdrawal amount.
-public(package) fun add_base_withdrawn(self: &mut Info, amount: u64) {
-    self.base_withdrawn = self.base_withdrawn + amount;
+/// Record a base-asset withdrawal amount.
+/// Will never fail, but can record invalid value (0 or max).
+public(package) fun record_base_withdraw(self: &mut Info, amount: u64) {
+    self.base_withdrawn = self.base_withdrawn.saturating_add(amount as u128);
+    self.base_balance = self.base_balance.saturating_sub(amount);
 }

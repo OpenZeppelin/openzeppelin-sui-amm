@@ -1,6 +1,7 @@
 /// Events for the AMM.
 module openzeppelin_market_maker::events;
 
+use std::type_name::TypeName;
 use sui::event;
 
 // === Events ===
@@ -24,6 +25,20 @@ public struct QuoteUpdated has copy, drop {
     /// Combined Pyth confidence ratio (base/base + quote/quote) in bps observed for this
     /// update; drives the dynamic volatility buffer on top of `base_spread_bps`.
     conf_ratio_bps: u64,
+    /// Cumulative base-asset volume within the current DeepBook epoch at the time of refresh.
+    volume_base: u128,
+    /// Quote-asset balance in the balance manager after settlement, before new orders are placed.
+    quote_balance: u64,
+    /// Base-asset balance in the balance manager after settlement, before new orders are placed.
+    base_balance: u64,
+    /// Order ID of the outer (wider-spread) bid placed in this refresh, or `None` if skipped.
+    bid_outer_order_id: Option<u128>,
+    /// Order ID of the inner bid placed in this refresh, or `None` if skipped.
+    bid_inner_order_id: Option<u128>,
+    /// Order ID of the inner ask placed in this refresh, or `None` if skipped.
+    ask_inner_order_id: Option<u128>,
+    /// Order ID of the outer (wider-spread) ask placed in this refresh, or `None` if skipped.
+    ask_outer_order_id: Option<u128>,
 }
 
 /// Emitted when market maker executor trading is paused.
@@ -50,6 +65,26 @@ public struct MarketUpdated has copy, drop {
     executor_id: ID,
 }
 
+/// Emitted when funds are deposited into the market maker executor.
+public struct Deposited has copy, drop {
+    /// ID of the market maker executor object.
+    executor_id: ID,
+    /// Type of the deposited coin.
+    coin_type: TypeName,
+    /// Amount deposited.
+    amount: u64,
+}
+
+/// Emitted when funds are withdrawn from the market maker executor.
+public struct Withdrawn has copy, drop {
+    /// ID of the market maker executor object.
+    executor_id: ID,
+    /// Type of the withdrawn coin.
+    coin_type: TypeName,
+    /// Amount withdrawn.
+    amount: u64,
+}
+
 // === Package Functions ===
 
 /// Emit an `ExecutorCreated` event.
@@ -64,6 +99,13 @@ public(package) fun emit_quote_updated(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     conf_ratio_bps: u64,
+    volume_base: u128,
+    quote_balance: u64,
+    base_balance: u64,
+    bid_outer_order_id: Option<u128>,
+    bid_inner_order_id: Option<u128>,
+    ask_inner_order_id: Option<u128>,
+    ask_outer_order_id: Option<u128>,
 ) {
     event::emit(QuoteUpdated {
         executor_id,
@@ -71,6 +113,13 @@ public(package) fun emit_quote_updated(
         base_spread_bps,
         volatility_multiplier_bps,
         conf_ratio_bps,
+        volume_base,
+        quote_balance,
+        base_balance,
+        bid_outer_order_id,
+        bid_inner_order_id,
+        ask_inner_order_id,
+        ask_outer_order_id,
     });
 }
 
@@ -94,6 +143,16 @@ public(package) fun emit_market_updated(executor_id: ID) {
     event::emit(MarketUpdated { executor_id });
 }
 
+/// Emit a `Deposited` event.
+public(package) fun emit_deposited(executor_id: ID, coin_type: TypeName, amount: u64) {
+    event::emit(Deposited { executor_id, coin_type, amount });
+}
+
+/// Emit a `Withdrawn` event.
+public(package) fun emit_withdrawn(executor_id: ID, coin_type: TypeName, amount: u64) {
+    event::emit(Withdrawn { executor_id, coin_type, amount });
+}
+
 // === Test-Only Helpers ===
 
 /// Builds an `ExecutorCreated` payload.
@@ -110,6 +169,13 @@ public(package) fun quote_updated(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
     conf_ratio_bps: u64,
+    volume_base: u128,
+    quote_balance: u64,
+    base_balance: u64,
+    bid_outer_order_id: Option<u128>,
+    bid_inner_order_id: Option<u128>,
+    ask_inner_order_id: Option<u128>,
+    ask_outer_order_id: Option<u128>,
 ): QuoteUpdated {
     QuoteUpdated {
         executor_id,
@@ -117,6 +183,13 @@ public(package) fun quote_updated(
         base_spread_bps,
         volatility_multiplier_bps,
         conf_ratio_bps,
+        volume_base,
+        quote_balance,
+        base_balance,
+        bid_outer_order_id,
+        bid_inner_order_id,
+        ask_inner_order_id,
+        ask_outer_order_id,
     }
 }
 
@@ -142,4 +215,24 @@ public(package) fun executor_config_updated(executor_id: ID): ExecutorConfigUpda
 #[test_only]
 public(package) fun market_updated(executor_id: ID): MarketUpdated {
     MarketUpdated { executor_id }
+}
+
+/// Builds a `Deposited` payload.
+#[test_only]
+public(package) fun deposited(
+    executor_id: ID,
+    coin_type: TypeName,
+    amount: u64,
+): Deposited {
+    Deposited { executor_id, coin_type, amount }
+}
+
+/// Builds a `Withdrawn` payload.
+#[test_only]
+public(package) fun withdrawn(
+    executor_id: ID,
+    coin_type: TypeName,
+    amount: u64,
+): Withdrawn {
+    Withdrawn { executor_id, coin_type, amount }
 }

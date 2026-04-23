@@ -9,6 +9,7 @@
 import yargs from "yargs"
 
 import {
+  DEFAULT_INVENTORY_SKEW_BPS,
   DEFAULT_MAX_CONF_RATIO_BPS,
   DEFAULT_MAX_PRICE_AGE_SECS,
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
@@ -41,6 +42,7 @@ type UpdateAmmArguments = {
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
   outerBalanceBps?: string
+  inventorySkewBps?: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
@@ -53,6 +55,7 @@ type ResolvedAmmUpdateInputs = {
   maxPriceAgeSecs: bigint
   maxConfRatioBps: bigint
   outerBalanceBps: bigint
+  inventorySkewBps: bigint
 }
 
 const resolveExplicitAdminCapId = (adminCapId?: string): string | undefined => {
@@ -108,7 +111,9 @@ const resolveAmmUpdateInputs = ({
     maxConfRatioBps:
       cliArguments.maxConfRatioBps ?? currentOverview.maxConfRatioBps,
     outerBalanceBps:
-      cliArguments.outerBalanceBps ?? currentOverview.outerBalanceBps
+      cliArguments.outerBalanceBps ?? currentOverview.outerBalanceBps,
+    inventorySkewBps:
+      cliArguments.inventorySkewBps ?? currentOverview.inventorySkewBps
   })
 
   return {
@@ -117,7 +122,8 @@ const resolveAmmUpdateInputs = ({
     orderExpirationTimeMs: inputs.orderExpirationTimeMs,
     maxPriceAgeSecs: inputs.maxPriceAgeSecs,
     maxConfRatioBps: inputs.maxConfRatioBps,
-    outerBalanceBps: inputs.outerBalanceBps
+    outerBalanceBps: inputs.outerBalanceBps,
+    inventorySkewBps: inputs.inventorySkewBps
   }
 }
 
@@ -156,7 +162,8 @@ runSuiScript(
       orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
       maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
       maxConfRatioBps: updateInputs.maxConfRatioBps,
-      outerBalanceBps: updateInputs.outerBalanceBps
+      outerBalanceBps: updateInputs.outerBalanceBps,
+      inventorySkewBps: updateInputs.inventorySkewBps
     })
 
     const { execution, summary } = await tooling.executeTransactionWithSummary({
@@ -260,6 +267,14 @@ runSuiScript(
       description:
         "Share of the settleable balance allocated to the outer (volatility) spread order in basis points (u64); defaults to the current config value.",
       default: DEFAULT_OUTER_BALANCE_BPS,
+      demandOption: false
+    })
+    .option("inventorySkewBps", {
+      alias: ["inventory-skew-bps"],
+      type: "string",
+      description:
+        "Inventory-driven mid-shift coefficient in basis points (u64); defaults to the current config value.",
+      default: DEFAULT_INVENTORY_SKEW_BPS,
       demandOption: false
     })
     .option("devInspect", {

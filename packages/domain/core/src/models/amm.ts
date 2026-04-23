@@ -23,6 +23,7 @@ export const DEFAULT_ORDER_EXPIRATION_TIME_MS = "86400000"
 export const DEFAULT_MAX_PRICE_AGE_SECS = "60"
 export const DEFAULT_MAX_CONF_RATIO_BPS = "1000"
 export const DEFAULT_OUTER_BALANCE_BPS = "5000"
+export const DEFAULT_INVENTORY_SKEW_BPS = "0"
 
 export type AmmConfigOverview = {
   configId: string
@@ -36,6 +37,7 @@ export type AmmConfigOverview = {
   maxPriceAgeSecs: string
   maxConfRatioBps: string
   outerBalanceBps: string
+  inventorySkewBps: string
 }
 
 type AmmConfigFields = {
@@ -45,6 +47,7 @@ type AmmConfigFields = {
   max_price_age_secs?: unknown
   max_conf_ratio_bps?: unknown
   outer_balance_bps?: unknown
+  inventory_skew_bps?: unknown
 }
 
 type MarketFields = {
@@ -139,6 +142,10 @@ const buildAmmConfigOverviewFromObject = ({
     outerBalanceBps: requireNumericField(
       config.outer_balance_bps,
       "Outer balance bps"
+    ),
+    inventorySkewBps: requireNumericField(
+      config.inventory_skew_bps,
+      "Inventory skew bps"
     )
   }
 }
@@ -185,7 +192,8 @@ export const resolveAmmConfigInputs = ({
   orderExpirationTimeMs,
   maxPriceAgeSecs,
   maxConfRatioBps,
-  outerBalanceBps
+  outerBalanceBps,
+  inventorySkewBps
 }: {
   volatilityMultiplierBps?: string
   baseSpreadBps?: string
@@ -195,6 +203,7 @@ export const resolveAmmConfigInputs = ({
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
   outerBalanceBps?: string
+  inventorySkewBps?: string
 }): {
   baseSpreadBps: bigint
   volatilityMultiplierBps: bigint
@@ -206,6 +215,7 @@ export const resolveAmmConfigInputs = ({
   maxPriceAgeSecs: bigint
   maxConfRatioBps: bigint
   outerBalanceBps: bigint
+  inventorySkewBps: bigint
 } => ({
   baseSpreadBps: resolveBaseSpreadBps(baseSpreadBps),
   volatilityMultiplierBps: resolveVolatilityMultiplierBps(volatilityMultiplierBps),
@@ -228,5 +238,9 @@ export const resolveAmmConfigInputs = ({
   outerBalanceBps: parseNonNegativeU64(
     outerBalanceBps ?? DEFAULT_OUTER_BALANCE_BPS,
     "Outer balance bps"
+  ),
+  inventorySkewBps: parseNonNegativeU64(
+    inventorySkewBps ?? DEFAULT_INVENTORY_SKEW_BPS,
+    "Inventory skew bps"
   )
 })

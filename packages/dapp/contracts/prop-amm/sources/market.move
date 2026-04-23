@@ -21,14 +21,16 @@ const EPythExponentNonNegative: vector<u8> = "pyth price exponent_u128 must be n
 #[error(code = 4)]
 const EExponentTooLarge: vector<u8> = "price exponent too large";
 #[error(code = 5)]
-const EPythInvalidPriceValue: vector<u8> = "pyth price must be of valid size";
-#[error(code = 6)]
 const EPythPriceConfidenceTooWide: vector<u8> = "pyth price confidence interval is too wide";
+#[error(code = 6)]
+const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
+#[error(code = 7)]
+const EPriceOverflow: vector<u8> = "price higher than maximum or oveflowed";
 
 // === Constants ===
 
 const PYTH_PRICE_IDENTIFIER_LENGTH: u64 = 32;
-const MAX_DECIMAL_POWER: u8 = 38;
+const MAX_DECIMAL_POWER: u8 = 19;
 const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 
 // === Structs ===
@@ -38,22 +40,22 @@ const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 public struct Market has drop, store {
     /// ID of the associated pool.
     pool_id: ID,
-    /// Base asset type (`BaseAsset`) used to route deposits and withdrawals.
-    base_type: TypeName,
-    /// Quote asset type (`QuoteAsset`) used to route deposits and withdrawals.
-    quote_type: TypeName,
-    /// Cached base asset decimals (read from `Currency<BaseAsset>` at creation time).
-    base_decimals: u8,
-    /// Cached quote asset decimals (read from `Currency<QuoteAsset>` at creation time).
-    quote_decimals: u8,
-    /// Pyth price feed identifier bytes for the base asset.
-    base_pyth_price_feed_id: vector<u8>,
-    /// Pyth price feed identifier bytes for the quote asset.
-    quote_pyth_price_feed_id: vector<u8>,
-    /// Latest observed base asset publish timestamp.
-    base_price_publish_time: Option<u64>,
-    /// Latest observed quote asset publish timestamp.
-    quote_price_publish_time: Option<u64>,
+    /// Base asset metadata.
+    base: MarketCurrency,
+    /// Quote asset metadata.
+    quote: MarketCurrency,
+}
+
+/// Per-side (base or quote) asset metadata.
+public struct MarketCurrency has drop, store {
+    /// Asset type used to route deposits and withdrawals.
+    coin_type: TypeName,
+    /// Cached asset decimals (read from the asset's `Currency` object at creation time).
+    decimals: u8,
+    /// Pyth price feed identifier bytes (32 bytes).
+    pyth_price_feed_id: vector<u8>,
+    /// Latest observed Pyth publish timestamp for this feed, if any.
+    price_publish_time: Option<u64>,
 }
 
 // === Public Functions ===
@@ -91,14 +93,18 @@ public fun new<BaseAsset, QuoteAsset>(
 
     Market {
         pool_id: object::id(pool),
-        base_type: type_name::with_defining_ids<BaseAsset>(),
-        quote_type: type_name::with_defining_ids<QuoteAsset>(),
-        base_decimals,
-        quote_decimals,
-        base_pyth_price_feed_id,
-        quote_pyth_price_feed_id,
-        base_price_publish_time: option::none(),
-        quote_price_publish_time: option::none(),
+        base: MarketCurrency {
+            coin_type: type_name::with_defining_ids<BaseAsset>(),
+            decimals: base_decimals,
+            pyth_price_feed_id: base_pyth_price_feed_id,
+            price_publish_time: option::none(),
+        },
+        quote: MarketCurrency {
+            coin_type: type_name::with_defining_ids<QuoteAsset>(),
+            decimals: quote_decimals,
+            pyth_price_feed_id: quote_pyth_price_feed_id,
+            price_publish_time: option::none(),
+        },
     }
 }
 
@@ -119,32 +125,32 @@ public fun has_valid_pool<BaseAsset, QuoteAsset>(
 
 /// Returns the base asset type.
 public fun base_type(market: &Market): TypeName {
-    market.base_type
+    market.base.coin_type
 }
 
 /// Returns the quote asset type.
 public fun quote_type(market: &Market): TypeName {
-    market.quote_type
+    market.quote.coin_type
 }
 
 /// Returns the cached base asset decimals.
 public fun base_decimals(market: &Market): u8 {
-    market.base_decimals
+    market.base.decimals
 }
 
 /// Returns the cached quote asset decimals.
 public fun quote_decimals(market: &Market): u8 {
-    market.quote_decimals
+    market.quote.decimals
 }
 
 /// Returns the Pyth base asset price feed ID bytes.
 public fun base_pyth_price_feed_id(market: &Market): vector<u8> {
-    market.base_pyth_price_feed_id
+    market.base.pyth_price_feed_id
 }
 
 /// Returns the Pyth quote asset price feed ID bytes.
 public fun quote_pyth_price_feed_id(market: &Market): vector<u8> {
-    market.quote_pyth_price_feed_id
+    market.quote.pyth_price_feed_id
 }
 
 /// Checks whether the price info object contains a Pyth base asset price feed ID matching the
@@ -152,7 +158,7 @@ public fun quote_pyth_price_feed_id(market: &Market): vector<u8> {
 public fun has_valid_base_pyth_feed_id(market: &Market, price_info_object: &PriceInfoObject): bool {
     let price_info = price_info_object.get_price_info_from_price_info_object();
     let actual_price_feed_id = price_info.get_price_identifier().get_bytes();
-    actual_price_feed_id == market.base_pyth_price_feed_id
+    actual_price_feed_id == market.base.pyth_price_feed_id
 }
 
 /// Checks whether the price info object contains a Pyth quote asset price feed ID matching the
@@ -163,35 +169,50 @@ public fun has_valid_quote_pyth_feed_id(
 ): bool {
     let price_info = price_info_object.get_price_info_from_price_info_object();
     let actual_price_feed_id = price_info.get_price_identifier().get_bytes();
-    actual_price_feed_id == market.quote_pyth_price_feed_id
+    actual_price_feed_id == market.quote.pyth_price_feed_id
 }
 
 /// Returns the latest base price publish time in seconds, if any.
 public fun base_price_publish_time(market: &Market): Option<u64> {
-    market.base_price_publish_time
+    market.base.price_publish_time
 }
 
 /// Returns the latest quote price publish time in seconds, if any.
 public fun quote_price_publish_time(market: &Market): Option<u64> {
-    market.quote_price_publish_time
+    market.quote.price_publish_time
 }
 
-/// Returns true when the cached base price publish time is at least as recent as the incoming
-/// price timestamp, meaning the base feed has not advanced.
-public fun is_base_price_stale(market: &Market, price: Price): bool {
-    market
-        .base_price_publish_time
-        .map!(|publish_time| publish_time >= price.get_timestamp())
-        .destroy_or!(false)
-}
+/// Attempts to advance the cached base and quote publish times to the incoming price
+/// timestamps.
+/// Returns `true` when at least one feed advanced.
+/// Returns `false` when both feeds are stale (no cache mutation).
+/// The caller is expected to skip any downstream refresh work when this returns `false`.
+public(package) fun try_update_publish_time(
+    market: &mut Market,
+    base_price: Price,
+    quote_price: Price,
+): bool {
+    let base_price_ts = base_price.get_timestamp();
+    let update_base_price_ts = market
+        .base
+        .price_publish_time
+        .map!(|publish_time| publish_time < base_price_ts)
+        .destroy_or!(true);
+    if (update_base_price_ts) {
+        market.base.price_publish_time.swap_or_fill(base_price_ts);
+    };
 
-/// Returns true when the cached quote price publish time is at least as recent as the incoming
-/// price timestamp, meaning the quote feed has not advanced.
-public fun is_quote_price_stale(market: &Market, price: Price): bool {
-    market
-        .quote_price_publish_time
-        .map!(|publish_time| publish_time >= price.get_timestamp())
-        .destroy_or!(false)
+    let quote_price_ts = quote_price.get_timestamp();
+    let update_quote_price_ts = market
+        .quote
+        .price_publish_time
+        .map!(|publish_time| publish_time < quote_price_ts)
+        .destroy_or!(true);
+    if (update_quote_price_ts) {
+        market.quote.price_publish_time.swap_or_fill(quote_price_ts);
+    };
+
+    update_base_price_ts || update_quote_price_ts
 }
 
 // === Package Functions ===
@@ -211,7 +232,7 @@ public(package) fun set_base_price_publish_time(
     market: &mut Market,
     publish_time: u64,
 ): Option<u64> {
-    market.base_price_publish_time.swap_or_fill(publish_time)
+    market.base.price_publish_time.swap_or_fill(publish_time)
 }
 
 /// Sets new quote `publish_time` and returns the previous quote price publish time, if any.
@@ -219,14 +240,14 @@ public(package) fun set_quote_price_publish_time(
     market: &mut Market,
     publish_time: u64,
 ): Option<u64> {
-    market.quote_price_publish_time.swap_or_fill(publish_time)
+    market.quote.price_publish_time.swap_or_fill(publish_time)
 }
 
 /// Clears cached base and quote price publish timestamps so the next oracle read is not
 /// treated as stale/replayed.
 public(package) fun reset_price_publish_times(market: &mut Market) {
-    market.base_price_publish_time = option::none();
-    market.quote_price_publish_time = option::none();
+    market.base.price_publish_time = option::none();
+    market.quote.price_publish_time = option::none();
 }
 
 /// Derive the DeepBook base/quote price and the combined confidence-to-price ratio (in basis
@@ -250,44 +271,45 @@ public(package) fun deepbook_price(
         max_conf_ratio_bps,
     );
 
-    // Convert (Base/USD)/(Quote/USD) to DeepBook price units (quote atoms per base atom),
-    // including decimal adjustment for token atom precision mismatch.
-    let mut numerator = base_mantissa * constants::float_scaling_u128();
-    let mut denominator = quote_mantissa;
-    let quote_total = quote_exponent + market.quote_decimals;
-    let base_total = base_exponent + market.base_decimals;
-    if (quote_total >= base_total) {
-        numerator = numerator * 10_u128.pow(quote_total - base_total);
+    // Convert (Base/USD)/(Quote/USD) to DeepBook price units (quote atoms per base atom).
+    let base_mantissa = base_mantissa as u128;
+    let quote_mantissa = quote_mantissa as u128;
+    let price = base_mantissa * constants::float_scaling_u128() / quote_mantissa;
+
+    // Include decimal adjustment for token precision mismatch.
+    let quote_total = quote_exponent + market.quote.decimals;
+    let base_total = base_exponent + market.base.decimals;
+    let price = if (quote_total >= base_total) {
+        price.checked_mul(10_u128.pow(quote_total - base_total)).destroy_or!(abort EPriceOverflow)
     } else {
-        denominator = denominator * 10_u128.pow(base_total - quote_total);
+        price / 10_u128.pow(base_total - quote_total)
     };
-    let deepbook_price = (numerator / denominator)
-        .try_as_u64()
-        .destroy_or!(abort EPythInvalidPriceValue);
+    let price = price.try_as_u64().destroy_or!(abort EPriceOverflow);
 
-    assert!(deepbook_price >= constants::min_price(), EPythInvalidPriceValue);
-    assert!(deepbook_price <= constants::max_price(), EPythInvalidPriceValue);
+    assert!(price >= constants::min_price(), EPriceUnderflow);
+    assert!(price <= constants::max_price(), EPriceOverflow);
 
-    (deepbook_price, base_conf_ratio_bps + quote_conf_ratio_bps)
+    (price, base_conf_ratio_bps + quote_conf_ratio_bps)
 }
 
 // === Private Functions ===
 
-/// Extract positive USD mantissa (can be safely cast to u64), negative exponent, and the
-/// fractional confidence-to-price ratio in basis points from a Pyth price. Aborts if the
-/// confidence interval exceeds `max_conf_ratio_bps` of the mantissa.
-fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u128, u8, u64) {
+/// Extract positive USD mantissa, negative exponent, and the fractional confidence-to-price ratio
+/// in basis points from a Pyth price.
+/// Aborts if the confidence interval exceeds `max_conf_ratio_bps` of the mantissa.
+fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u64, u8, u64) {
     // Retrieve positive mantissa.
     let price_i64 = price.get_price();
     assert!(!price_i64.get_is_negative(), EPythPriceNonPositive);
-    let mantissa = price_i64.get_magnitude_if_positive() as u128;
+    let mantissa = price_i64.get_magnitude_if_positive();
     assert!(mantissa != 0, EPythPriceNonPositive);
 
     // Compute the confidence-to-price ratio in basis points and reject prices whose
     // confidence interval is too wide.
     let price_conf = price.get_conf() as u128;
-    let conf_ratio_bps = ((price_conf * HUNDRED_PERCENT_BPS_U128) / mantissa) as u64;
-    assert!(conf_ratio_bps <= max_conf_ratio_bps, EPythPriceConfidenceTooWide);
+    let conf_ratio_bps = (price_conf * HUNDRED_PERCENT_BPS_U128) / (mantissa as u128);
+    assert!(conf_ratio_bps <= max_conf_ratio_bps as u128, EPythPriceConfidenceTooWide);
+    let conf_ratio_bps = conf_ratio_bps as u64;
 
     // Retrieve negative exponent.
     let expo_i64 = price.get_expo();

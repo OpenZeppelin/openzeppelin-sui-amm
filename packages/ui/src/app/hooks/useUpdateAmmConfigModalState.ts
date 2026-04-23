@@ -126,7 +126,8 @@ const buildFallbackOverview = ({
   orderExpirationTimeMs: currentConfig?.orderExpirationTimeMs ?? "86400000",
   maxPriceAgeSecs: currentConfig?.maxPriceAgeSecs ?? "60",
   maxConfRatioBps: currentConfig?.maxConfRatioBps ?? "1000",
-  outerBalanceBps: currentConfig?.outerBalanceBps ?? "5000"
+  outerBalanceBps: currentConfig?.outerBalanceBps ?? "5000",
+  inventorySkewBps: currentConfig?.inventorySkewBps ?? "0"
 })
 
 const ammConfigMatches = (
@@ -323,7 +324,8 @@ export const useUpdateAmmConfigModalState = ({
         orderExpirationTimeMs: ammConfig?.orderExpirationTimeMs,
         maxPriceAgeSecs: ammConfig?.maxPriceAgeSecs,
         maxConfRatioBps: ammConfig?.maxConfRatioBps,
-        outerBalanceBps: ammConfig?.outerBalanceBps
+        outerBalanceBps: ammConfig?.outerBalanceBps,
+        inventorySkewBps: ammConfig?.inventorySkewBps
       })
 
       const configShared = await getSuiSharedObject(
@@ -352,7 +354,8 @@ export const useUpdateAmmConfigModalState = ({
         orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
         maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
         maxConfRatioBps: updateInputs.maxConfRatioBps,
-        outerBalanceBps: updateInputs.outerBalanceBps
+        outerBalanceBps: updateInputs.outerBalanceBps,
+        inventorySkewBps: updateInputs.inventorySkewBps
       })
       updateTransaction.setSender(walletAddress)
 

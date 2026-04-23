@@ -7,6 +7,7 @@ import yargs from "yargs"
 import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
   DEFAULT_BASE_SPREAD_BPS,
+  DEFAULT_INVENTORY_SKEW_BPS,
   DEFAULT_MAX_CONF_RATIO_BPS,
   DEFAULT_MAX_PRICE_AGE_SECS,
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
@@ -43,6 +44,7 @@ type CreateAmmArguments = {
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
   outerBalanceBps?: string
+  inventorySkewBps?: string
   ammPackageId?: string
   devInspect?: boolean
   dryRun?: boolean
@@ -98,7 +100,8 @@ runSuiScript(
       orderExpirationTimeMs: cliArguments.orderExpirationTimeMs,
       maxPriceAgeSecs: cliArguments.maxPriceAgeSecs,
       maxConfRatioBps: cliArguments.maxConfRatioBps,
-      outerBalanceBps: cliArguments.outerBalanceBps
+      outerBalanceBps: cliArguments.outerBalanceBps,
+      inventorySkewBps: cliArguments.inventorySkewBps
     })
 
     const pool = await tooling.getImmutableSharedObject({ objectId: poolId })
@@ -144,7 +147,8 @@ runSuiScript(
       orderExpirationTimeMs: ammConfigInputs.orderExpirationTimeMs,
       maxPriceAgeSecs: ammConfigInputs.maxPriceAgeSecs,
       maxConfRatioBps: ammConfigInputs.maxConfRatioBps,
-      outerBalanceBps: ammConfigInputs.outerBalanceBps
+      outerBalanceBps: ammConfigInputs.outerBalanceBps,
+      inventorySkewBps: ammConfigInputs.inventorySkewBps
     })
 
     const { execution, summary } = await tooling.executeTransactionWithSummary({
@@ -290,6 +294,14 @@ runSuiScript(
       description:
         "Share of the settleable balance allocated to the outer (volatility) spread order in basis points (u64).",
       default: DEFAULT_OUTER_BALANCE_BPS,
+      demandOption: false
+    })
+    .option("inventorySkewBps", {
+      alias: ["inventory-skew-bps"],
+      type: "string",
+      description:
+        "Inventory-driven mid-shift coefficient in basis points; 0 disables skewing (u64).",
+      default: DEFAULT_INVENTORY_SKEW_BPS,
       demandOption: false
     })
     .option("ammPackageId", {
