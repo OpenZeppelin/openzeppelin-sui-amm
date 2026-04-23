@@ -1,9 +1,9 @@
-/// Per-market-maker accounting info.
+/// Per-market-maker executor accounting info.
 module openzeppelin_market_maker::info;
 
 // === Structs ===
 
-/// Per-market-maker accounting snapshot.
+/// Per-market-maker executor accounting snapshot.
 public struct Info has drop, store {
     /// Cumulative base-asset volume traded within current epoch.
     volume_base: u128,

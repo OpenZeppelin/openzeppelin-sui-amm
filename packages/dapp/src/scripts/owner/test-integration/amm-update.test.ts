@@ -4,9 +4,9 @@ import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
-import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
+import { EXECUTOR_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import {
-  buildCreateMarketMakerTransaction,
+  buildCreateExecutorTransaction,
   parsePythPriceFeedIdBytes
 } from "@sui-amm/domain-core/ptb/amm"
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
@@ -56,7 +56,7 @@ describe("owner amm-update integration", () => {
 
       await context.waitForFinality(rootArtifact.digest)
 
-      const initialCreateTransaction = buildCreateMarketMakerTransaction({
+      const initialCreateTransaction = buildCreateExecutorTransaction({
         packageId: ammPackageId,
         poolId: ZERO_POOL_ID,
         senderAddress: publisher.address,
@@ -80,7 +80,7 @@ describe("owner amm-update integration", () => {
       await context.waitForFinality(createResult.digest)
 
       const ammConfigId = ensureCreatedObject(
-        MARKET_MAKER_TYPE_SUFFIX,
+        EXECUTOR_TYPE_SUFFIX,
         createResult
       ).objectId
 

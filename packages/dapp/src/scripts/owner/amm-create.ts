@@ -1,5 +1,5 @@
 /**
- * Creates a new shared AMM market maker for the target network.
+ * Creates a new shared AMM market maker executor for the target network.
  */
 import yargs from "yargs"
 
@@ -13,8 +13,8 @@ import {
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
-import { buildCreateMarketMakerTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { EXECUTOR_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
+import { buildCreateExecutorTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { resolveAmmPackageId } from "@sui-amm/domain-node/amm"
 import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { emitJsonOutput } from "@sui-amm/tooling-node/json"
@@ -74,7 +74,7 @@ runSuiScript(
 
     const senderAddress = tooling.loadedEd25519KeyPair.toSuiAddress()
 
-    const createMarketMakerTransaction = buildCreateMarketMakerTransaction({
+    const createExecutorTransaction = buildCreateExecutorTransaction({
       packageId: ammPackageId,
       poolId,
       senderAddress,
@@ -88,7 +88,7 @@ runSuiScript(
     })
 
     const { execution, summary } = await tooling.executeTransactionWithSummary({
-      transaction: createMarketMakerTransaction,
+      transaction: createExecutorTransaction,
       signer: tooling.loadedEd25519KeyPair,
       summaryLabel: "create-amm",
       devInspect: cliArguments.devInspect,
@@ -100,18 +100,18 @@ runSuiScript(
     }
 
     const createdArtifacts = execution.objectArtifacts.created
-    const createdMarketMaker = findCreatedArtifactBySuffix(
+    const createdExecutor = findCreatedArtifactBySuffix(
       createdArtifacts,
-      MARKET_MAKER_TYPE_SUFFIX
+      EXECUTOR_TYPE_SUFFIX
     )
     const createdAdminCap = findCreatedArtifactBySuffix(
       createdArtifacts,
       AMM_ADMIN_CAP_TYPE_SUFFIX
     )
 
-    if (!createdMarketMaker) {
+    if (!createdExecutor) {
       throw new Error(
-        "Expected a MarketMaker object to be created, but it was not found in transaction artifacts."
+        "Expected an Executor object to be created, but it was not found in transaction artifacts."
       )
     }
     if (!createdAdminCap) {
@@ -121,7 +121,7 @@ runSuiScript(
     }
 
     const ammConfigOverview = await getAmmConfigOverview(
-      createdMarketMaker.objectId,
+      createdExecutor.objectId,
       tooling.suiClient
     )
 
@@ -130,8 +130,8 @@ runSuiScript(
         {
           ammConfig: ammConfigOverview,
           adminCapId: createdAdminCap.objectId,
-          digest: createdMarketMaker.digest,
-          initialSharedVersion: createdMarketMaker.initialSharedVersion,
+          digest: createdExecutor.digest,
+          initialSharedVersion: createdExecutor.initialSharedVersion,
           basePythPriceFeedIdHex: ammConfigInputs.basePythPriceFeedIdHex,
           quotePythPriceFeedIdHex: ammConfigInputs.quotePythPriceFeedIdHex,
           transactionSummary: summary
@@ -143,7 +143,7 @@ runSuiScript(
     }
 
     logAmmConfigOverview(ammConfigOverview, {
-      initialSharedVersion: createdMarketMaker.initialSharedVersion
+      initialSharedVersion: createdExecutor.initialSharedVersion
     })
   },
   yargs()

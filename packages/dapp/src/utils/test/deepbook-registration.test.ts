@@ -38,7 +38,7 @@ describe("resolveTraderAccount", () => {
     traderAccountModelMocks.getTraderAccountOverview.mockReset()
     traderAccountModelMocks.resolveTraderAccountType.mockReset()
     traderAccountModelMocks.resolveTraderAccountType.mockImplementation(
-      (packageId: string) => `${packageId}::executor::MarketMaker`
+      (packageId: string) => `${packageId}::executor::Executor`
     )
   })
 
@@ -128,7 +128,7 @@ describe("resolveTraderAccount", () => {
         traderAccountId: "0xexplicit"
       })
     ).rejects.toThrow(
-      "Market maker lookup failed for traderAccountId 0xexplicit (expected owner 0xowner, expected package 0xamm, expected type 0xamm::executor::MarketMaker). Cause: Object not found"
+      "Market maker lookup failed for traderAccountId 0xexplicit (expected owner 0xowner, expected package 0xamm, expected type 0xamm::executor::Executor). Cause: Object not found"
     )
   })
 

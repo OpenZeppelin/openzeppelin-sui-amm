@@ -343,7 +343,7 @@ export const useUpdateAmmConfigModalState = ({
 
       const updateTransaction = buildUpdateConfigTransaction({
         packageId,
-        marketMaker: configShared,
+        executor: configShared,
         adminCapId,
         baseSpreadBps: updateInputs.baseSpreadBps,
         volatilitySpreadBps: updateInputs.volatilitySpreadBps,

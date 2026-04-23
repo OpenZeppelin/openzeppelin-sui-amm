@@ -5,9 +5,9 @@ import {
   AMM_ADMIN_CAP_TYPE_SUFFIX,
   type AmmConfigOverview
 } from "@sui-amm/domain-core/models/amm"
-import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
+import { EXECUTOR_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import {
-  buildCreateMarketMakerTransaction,
+  buildCreateExecutorTransaction,
   parsePythPriceFeedIdBytes
 } from "@sui-amm/domain-core/ptb/amm"
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
@@ -99,7 +99,7 @@ describe("amm-view script", () => {
         CreatedAmmConfigSnapshot,
         "ammConfigId" | "initialSharedVersion"
       >) => {
-        const createTransaction = buildCreateMarketMakerTransaction({
+        const createTransaction = buildCreateExecutorTransaction({
           packageId: rootArtifact.packageId,
           poolId: ZERO_POOL_ID,
           senderAddress: publisher.address,
@@ -123,7 +123,7 @@ describe("amm-view script", () => {
         await context.waitForFinality(createResult.digest)
 
         const createdConfig = ensureCreatedObject(
-          MARKET_MAKER_TYPE_SUFFIX,
+          EXECUTOR_TYPE_SUFFIX,
           createResult
         )
         const initialSharedVersion = extractInitialSharedVersion(createdConfig)

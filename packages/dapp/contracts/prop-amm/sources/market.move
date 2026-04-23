@@ -38,7 +38,7 @@ public struct Market has drop, store {
 /// Creates a new `Market` from a pool ID and the base/quote Pyth price feed identifiers.
 /// Useful for PTBs that cannot pass pool objects with generic type arguments.
 ///
-/// Pass the returned value into `executor::create` when creating a new market maker or into
+/// Pass the returned value into `executor::create` when creating a new market maker executor or into
 /// `executor::update_market` when replacing the configured market.
 public fun new(
     pool_id: ID,

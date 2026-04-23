@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  buildCreateMarketMakerTransaction,
+  buildCreateExecutorTransaction,
   buildUpdateConfigTransaction,
   buildUpdateMarketTransaction,
   buildUpdateMarketWithPauseTransaction
@@ -10,7 +10,7 @@ import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object
 
 const expectMoveCall = (
   command: ReturnType<
-    ReturnType<typeof buildCreateMarketMakerTransaction>["getData"]
+    ReturnType<typeof buildCreateExecutorTransaction>["getData"]
   >["commands"][number]
 ) => {
   expect(command.$kind).toBe("MoveCall")
@@ -23,7 +23,7 @@ const expectMoveCall = (
 
 const FEED_BYTES = Array.from({ length: 32 }, (_, index) => index)
 
-const MARKET_MAKER: WrappedSuiSharedObject = {
+const EXECUTOR: WrappedSuiSharedObject = {
   object: {
     objectId: "0x789",
     version: "7",
@@ -51,7 +51,7 @@ const CURRENT_POOL: WrappedSuiSharedObject = {
 
 describe("amm PTB builders", () => {
   it("builds create with market::new + config::new + executor::create + share + transfer", () => {
-    const transaction = buildCreateMarketMakerTransaction({
+    const transaction = buildCreateExecutorTransaction({
       packageId: "0x123",
       poolId: "0x456",
       senderAddress: "0x789",
@@ -104,7 +104,7 @@ describe("amm PTB builders", () => {
 
   it("rejects create when a feed id bytes array is not 32 bytes", () => {
     expect(() =>
-      buildCreateMarketMakerTransaction({
+      buildCreateExecutorTransaction({
         packageId: "0x123",
         poolId: "0x456",
         senderAddress: "0x789",
@@ -124,7 +124,7 @@ describe("amm PTB builders", () => {
   it("builds update config with config::new + executor::update_config", () => {
     const transaction = buildUpdateConfigTransaction({
       packageId: "0x123",
-      marketMaker: MARKET_MAKER,
+      executor: EXECUTOR,
       adminCapId: "0x456",
       baseSpreadBps: 25n,
       volatilitySpreadBps: 200n,
@@ -164,7 +164,7 @@ describe("amm PTB builders", () => {
   it("builds update market with market::new + executor::update_market", () => {
     const transaction = buildUpdateMarketTransaction({
       packageId: "0x123",
-      marketMaker: MARKET_MAKER,
+      executor: EXECUTOR,
       adminCapId: "0x456",
       poolId: "0xabc",
       basePythPriceFeedIdBytes: FEED_BYTES,
@@ -203,7 +203,7 @@ describe("amm PTB builders", () => {
     expect(() =>
       buildUpdateMarketTransaction({
         packageId: "0x123",
-        marketMaker: MARKET_MAKER,
+        executor: EXECUTOR,
         adminCapId: "0x456",
         poolId: "0xabc",
         basePythPriceFeedIdBytes: FEED_BYTES,
@@ -217,7 +217,7 @@ describe("amm PTB builders", () => {
   it("builds update market with pause → market::new → update_market → unpause when active", () => {
     const transaction = buildUpdateMarketWithPauseTransaction({
       packageId: "0x123",
-      marketMaker: MARKET_MAKER,
+      executor: EXECUTOR,
       adminCapId: "0x456",
       currentActive: true,
       currentPool: CURRENT_POOL,
@@ -273,7 +273,7 @@ describe("amm PTB builders", () => {
   it("builds update market without pause/unpause when paused", () => {
     const transaction = buildUpdateMarketWithPauseTransaction({
       packageId: "0x123",
-      marketMaker: MARKET_MAKER,
+      executor: EXECUTOR,
       adminCapId: "0x456",
       currentActive: false,
       currentPool: CURRENT_POOL,
@@ -306,7 +306,7 @@ describe("amm PTB builders", () => {
     expect(() =>
       buildUpdateMarketWithPauseTransaction({
         packageId: "0x123",
-        marketMaker: MARKET_MAKER,
+        executor: EXECUTOR,
         adminCapId: "0x456",
         currentActive: true,
         currentPool: CURRENT_POOL,

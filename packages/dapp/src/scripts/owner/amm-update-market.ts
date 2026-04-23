@@ -181,7 +181,7 @@ runSuiScript(
 
     const updateMarketTransaction = buildUpdateMarketWithPauseTransaction({
       packageId: ammPackageId,
-      marketMaker: ammConfigSharedObject,
+      executor: ammConfigSharedObject,
       adminCapId,
       currentActive: currentOverview.active,
       currentPool: currentPoolSharedObject,

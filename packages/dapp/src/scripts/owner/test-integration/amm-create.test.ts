@@ -3,7 +3,7 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 import { type AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
-import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
+import { EXECUTOR_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import { normalizeHex } from "@sui-amm/tooling-core/hex"
 import { createSuiLocalnetTestEnv } from "@sui-amm/tooling-node/testing/env"
 import {
@@ -131,7 +131,7 @@ describe("owner amm-create integration", () => {
         output.ammConfig.configId
       )
       expect(
-        createdArtifact?.objectType?.endsWith(MARKET_MAKER_TYPE_SUFFIX)
+        createdArtifact?.objectType?.endsWith(EXECUTOR_TYPE_SUFFIX)
       ).toBe(true)
       expect(createdArtifact?.initialSharedVersion).toBe(
         output.initialSharedVersion

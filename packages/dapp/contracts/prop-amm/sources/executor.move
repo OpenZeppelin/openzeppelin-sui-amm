@@ -61,15 +61,14 @@ const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 
 /// Capability required to update configuration.
 public struct AdminCap has key, store {
-    /// Unique ID for the market maker capability object.
+    /// Unique ID for the market maker executor capability object.
     id: UID,
-    /// ID of the associated market maker.
+    /// ID of the associated market maker executor.
     executor_id: ID,
 }
 
-// TODO#q: rename to Executor
-/// Per-market maker state.
-public struct MarketMaker has key, store {
+/// Market maker executor state.
+public struct Executor has key, store {
     /// Unique ID for the account object.
     id: UID,
     /// Whether trading is active.
@@ -86,7 +85,7 @@ public struct MarketMaker has key, store {
     info: Info,
 }
 
-/// Balance manager caps owned by the market maker owner.
+/// Balance manager caps owned by the market maker executor owner.
 public struct Caps has store {
     /// Deepbook's trade capability.
     trade_cap: TradeCap,
@@ -108,18 +107,18 @@ fun init(publisher_witness: EXECUTOR, ctx: &mut TxContext) {
 
 // === Public Functions ===
 
-/// Creates a market maker for sender.
-public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (MarketMaker, AdminCap) {
+/// Creates a market maker executor for sender.
+public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Executor, AdminCap) {
     let mut balance_manager = balance_manager::new(ctx);
     let deposit_cap = balance_manager.mint_deposit_cap(ctx);
     let withdraw_cap = balance_manager.mint_withdraw_cap(ctx);
     let trade_cap = balance_manager.mint_trade_cap(ctx);
     let id = object::new(ctx);
 
-    events::emit_market_maker_created(id.to_inner());
+    events::emit_executor_created(id.to_inner());
 
-    let market_maker_cap = AdminCap { id: object::new(ctx), executor_id: id.to_inner() };
-    let market_maker = MarketMaker {
+    let executor_cap = AdminCap { id: object::new(ctx), executor_id: id.to_inner() };
+    let executor = Executor {
         id,
         active: true,
         caps: Caps {
@@ -133,82 +132,82 @@ public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Mark
         info: info::empty(),
     };
 
-    (market_maker, market_maker_cap)
+    (executor, executor_cap)
 }
 
-/// Replaces the market maker configuration. Resets the cached Pyth publish timestamps so the
+/// Replaces AMM configuration. Resets the cached Pyth publish timestamps so the
 /// next `refresh_quotes` call re-prices even when the oracle timestamp has not advanced.
-/// Requires the matching market maker capability.
-public fun update_config(market_maker: &mut MarketMaker, cap: &AdminCap, config: AMMConfig) {
-    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
+/// Requires the matching market maker executor capability.
+public fun update_config(executor: &mut Executor, cap: &AdminCap, config: AMMConfig) {
+    assert!(executor.id() == cap.executor_id, EInvalidCap);
 
-    events::emit_market_maker_config_updated(market_maker.id());
+    events::emit_executor_config_updated(executor.id());
 
-    market_maker.market.reset_price_publish_times();
-    market_maker.config = config;
+    executor.market.reset_price_publish_times();
+    executor.config = config;
 }
 
-/// Replaces the market maker's market metadata (pool, feed IDs, and cached publish timestamps).
-/// Requires the market maker to be paused so balances are settled before the pool or feeds
+/// Replaces market metadata (pool, feed IDs, and cached publish timestamps).
+/// Requires the market maker executor to be paused so balances are settled before the pool or feeds
 /// change. Requires the matching market maker capability.
-public fun update_market(market_maker: &mut MarketMaker, cap: &AdminCap, market: Market) {
-    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
-    assert!(!market_maker.active, EInvalidMarketUpdate);
+public fun update_market(executor: &mut Executor, cap: &AdminCap, market: Market) {
+    assert!(executor.id() == cap.executor_id, EInvalidCap);
+    assert!(!executor.active, EInvalidMarketUpdate);
 
-    events::emit_market_updated(market_maker.id());
+    events::emit_market_updated(executor.id());
 
-    market_maker.info = info::empty();
-    market_maker.market = market;
+    executor.info = info::empty();
+    executor.market = market;
 }
 
 /// Pauses trading by cancelling all existing orders and preventing new orders until next activation.
 public fun pause<BaseAsset, QuoteAsset>(
-    market_maker: &mut MarketMaker,
+    executor: &mut Executor,
     cap: &AdminCap,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
-    assert!(market_maker.active, EPaused);
-    assert!(market_maker.market.has_valid_pool(pool), EInvalidPool);
+    assert!(executor.id() == cap.executor_id, EInvalidCap);
+    assert!(executor.active, EPaused);
+    assert!(executor.market.has_valid_pool(pool), EInvalidPool);
 
     // Generate trade proof.
-    let trade_proof = market_maker
+    let trade_proof = executor
         .balance_manager
-        .generate_proof_as_trader(&market_maker.caps.trade_cap, ctx);
+        .generate_proof_as_trader(&executor.caps.trade_cap, ctx);
 
     // Cancel all previous active orders.
     pool.cancel_all_orders(
-        &mut market_maker.balance_manager,
+        &mut executor.balance_manager,
         &trade_proof,
         clock,
         ctx,
     );
 
     // Update balance manager, to reflect previous settled limit orders in balance.
-    pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
+    pool.withdraw_settled_amounts(&mut executor.balance_manager, &trade_proof);
 
     // Update trading information.
-    market_maker.info.set_volume_base(volume_base(&market_maker.balance_manager, pool));
-    market_maker.info.set_quote_balance(market_maker.balance_manager.balance<QuoteAsset>());
-    market_maker.info.set_base_balance(market_maker.balance_manager.balance<BaseAsset>());
+    executor.info.set_volume_base(volume_base(&executor.balance_manager, pool));
+    executor.info.set_quote_balance(executor.balance_manager.balance<QuoteAsset>());
+    executor.info.set_base_balance(executor.balance_manager.balance<BaseAsset>());
 
     // Emit paused event.
-    events::emit_market_maker_paused(market_maker.id());
+    events::emit_executor_paused(executor.id());
 
-    market_maker.active = false;
+    executor.active = false;
 }
 
 /// Unpauses trading, allowing new orders to be placed.
-public fun unpause(market_maker: &mut MarketMaker, cap: &AdminCap) {
-    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
-    assert!(!market_maker.active, ENotPaused);
+public fun unpause(executor: &mut Executor, cap: &AdminCap) {
+    assert!(executor.id() == cap.executor_id, EInvalidCap);
+    assert!(!executor.active, ENotPaused);
 
     // Emit unpaused event.
-    events::emit_market_maker_unpaused(market_maker.id());
+    events::emit_executor_unpaused(executor.id());
 
-    market_maker.active = true;
+    executor.active = true;
 }
 
 // TODO#q: how base_balance and quote_balance should be updated after deposit and withdrawal?
@@ -217,38 +216,38 @@ public fun unpause(market_maker: &mut MarketMaker, cap: &AdminCap) {
 /// Deposit funds into a balance manager.
 /// Deepbook's `BalanceEvent` emitted after successful deposit.
 public fun deposit<T>(
-    market_maker: &mut MarketMaker,
+    executor: &mut Executor,
     cap: &AdminCap,
     coin: Coin<T>,
     ctx: &mut TxContext,
 ) {
-    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
+    assert!(executor.id() == cap.executor_id, EInvalidCap);
 
     // TODO#q: record how much we deposited in quote (with base price conversion).
 
-    market_maker.balance_manager.deposit_with_cap(&market_maker.caps.deposit_cap, coin, ctx)
+    executor.balance_manager.deposit_with_cap(&executor.caps.deposit_cap, coin, ctx)
 }
 
 /// Withdraw funds from a balance manager.
-/// Fails if `MarketMaker` is not paused.
+/// Fails if the market maker executor is not paused.
 /// Deepbook's `BalanceEvent` emitted after successful withdrawal.
 ///
 /// NOTE: Pause step let us settle all the balances before making withdrawal.
 /// Otherwise there is a high chance there is nothing to withdraw.
 public fun withdraw<T>(
-    market_maker: &mut MarketMaker,
+    executor: &mut Executor,
     cap: &AdminCap,
     withdraw_amount: u64,
     ctx: &mut TxContext,
 ): Coin<T> {
-    assert!(market_maker.id() == cap.executor_id, EInvalidCap);
-    assert!(!market_maker.active, ENotPaused);
+    assert!(executor.id() == cap.executor_id, EInvalidCap);
+    assert!(!executor.active, ENotPaused);
 
     // TODO#q: record how much we withdrawed in quote (with base price conversion).
 
-    market_maker
+    executor
         .balance_manager
-        .withdraw_with_cap(&market_maker.caps.withdraw_cap, withdraw_amount, ctx)
+        .withdraw_with_cap(&executor.caps.withdraw_cap, withdraw_amount, ctx)
 }
 
 // TODO#q: move decimals retrieved from Currency to market module (or config/market).
@@ -262,7 +261,7 @@ public fun withdraw<T>(
 /// 3) Update balance based on all previously matched orders.
 /// 4) Re-place four fresh orders (2 bids, 2 asks) around the oracle mid.
 public fun refresh_quotes<BaseAsset, QuoteAsset>(
-    market_maker: &mut MarketMaker,
+    executor: &mut Executor,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     base_currency: &Currency<BaseAsset>,
     quote_currency: &Currency<QuoteAsset>,
@@ -272,21 +271,21 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     ctx: &mut TxContext,
 ) {
     // Assert an input pool is valid.
-    assert!(market_maker.market.has_valid_pool(pool), EInvalidPool);
+    assert!(executor.market.has_valid_pool(pool), EInvalidPool);
     // Assert trading is active.
-    assert!(market_maker.active, EPaused);
+    assert!(executor.active, EPaused);
     // Assert Pyth price info objects have valid configured feed ids.
     assert!(
-        market_maker.market.has_valid_base_pyth_feed_id(base_price_info_object),
+        executor.market.has_valid_base_pyth_feed_id(base_price_info_object),
         EPythFeedIdentifierMismatch,
     );
     assert!(
-        market_maker.market.has_valid_quote_pyth_feed_id(quote_price_info_object),
+        executor.market.has_valid_quote_pyth_feed_id(quote_price_info_object),
         EPythFeedIdentifierMismatch,
     );
 
     // Get base and quote pyth prices not older than `max_price_age_secs`.
-    let max_price_age_secs = market_maker.config.max_price_age_secs();
+    let max_price_age_secs = executor.config.max_price_age_secs();
     let base_pyth_price = pyth::get_price_no_older_than(
         base_price_info_object,
         clock,
@@ -302,22 +301,22 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Protects from calling permissionless quote refresh with old pricing,
     // that will force market maker resubmit orders and loose priority.
     let is_price_stale =
-        market_maker.market.is_base_price_stale(base_pyth_price)
-        && market_maker.market.is_quote_price_stale(quote_pyth_price);
+        executor.market.is_base_price_stale(base_pyth_price)
+        && executor.market.is_quote_price_stale(quote_pyth_price);
     if (is_price_stale) {
         return
     };
-    market_maker.market.set_base_price_publish_time(base_pyth_price.get_timestamp());
-    market_maker.market.set_quote_price_publish_time(quote_pyth_price.get_timestamp());
+    executor.market.set_base_price_publish_time(base_pyth_price.get_timestamp());
+    executor.market.set_quote_price_publish_time(quote_pyth_price.get_timestamp());
 
     // Generate trade proof.
-    let trade_proof = market_maker
+    let trade_proof = executor
         .balance_manager
-        .generate_proof_as_trader(&market_maker.caps.trade_cap, ctx);
+        .generate_proof_as_trader(&executor.caps.trade_cap, ctx);
 
     // Cancel all previous active orders.
     pool.cancel_all_orders(
-        &mut market_maker.balance_manager,
+        &mut executor.balance_manager,
         &trade_proof,
         clock,
         ctx,
@@ -325,7 +324,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // Update balance manager to reflect previous settled limit orders in balance,
     // before using balance in quantity computation for the next orders.
-    pool.withdraw_settled_amounts(&mut market_maker.balance_manager, &trade_proof);
+    pool.withdraw_settled_amounts(&mut executor.balance_manager, &trade_proof);
 
     // Calculate precise spreads using Base/Quote = (Base/USD) / (Quote/USD).
     let oracle_mid_price = deepbook_price(
@@ -333,10 +332,10 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         quote_pyth_price,
         base_currency.decimals(),
         quote_currency.decimals(),
-        market_maker.config.max_conf_ratio_bps(),
+        executor.config.max_conf_ratio_bps(),
     );
-    let base_spread = market_maker.config.base_spread(oracle_mid_price);
-    let volatility_spread = market_maker.config.volatility_spread(oracle_mid_price);
+    let base_spread = executor.config.base_spread(oracle_mid_price);
+    let volatility_spread = executor.config.volatility_spread(oracle_mid_price);
 
     // Fetch deepbook's pool parameters.
     let (tick, lot_size, min_size) = pool.pool_book_params();
@@ -352,7 +351,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // TODO#q: move balance distribution adjustment into config (5000 bps - default)
     // Split bid order balance equally (almost xD) between inner and outer spread,
     // and compute quantity in base asset (for deepbook limit order).
-    let quote_balance = market_maker.balance_manager.balance<QuoteAsset>();
+    let quote_balance = executor.balance_manager.balance<QuoteAsset>();
     let bid_outer_quantity_quote = quote_balance / 2;
     let bid_inner_quantity_quote = quote_balance - bid_outer_quantity_quote;
     let bid_outer_quantity = compute_quantity(
@@ -367,7 +366,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     );
 
     // Split ask order balance equally between inner and outer spread.
-    let base_balance = market_maker.balance_manager.balance<BaseAsset>();
+    let base_balance = executor.balance_manager.balance<BaseAsset>();
     let ask_outer_raw = base_balance / 2;
     let ask_inner_raw = base_balance - ask_outer_raw;
     let ask_outer_quantity = compute_quantity(ask_outer_raw, lot_size, min_size);
@@ -375,12 +374,12 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // TODO#q: include total balance after being settled into event
     // Update trading information.
-    market_maker.info.set_volume_base(volume_base(&market_maker.balance_manager, pool));
-    market_maker.info.set_quote_balance(quote_balance);
-    market_maker.info.set_base_balance(base_balance);
+    executor.info.set_volume_base(volume_base(&executor.balance_manager, pool));
+    executor.info.set_quote_balance(quote_balance);
+    executor.info.set_base_balance(base_balance);
 
     // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
-    market_maker.try_place_limit_order(
+    executor.try_place_limit_order(
         pool,
         &trade_proof,
         1,
@@ -390,7 +389,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-    market_maker.try_place_limit_order(
+    executor.try_place_limit_order(
         pool,
         &trade_proof,
         2,
@@ -400,7 +399,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-    market_maker.try_place_limit_order(
+    executor.try_place_limit_order(
         pool,
         &trade_proof,
         3,
@@ -410,7 +409,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
-    market_maker.try_place_limit_order(
+    executor.try_place_limit_order(
         pool,
         &trade_proof,
         4,
@@ -424,64 +423,64 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // TODO#q: emit placed order ids (will be used to retrieve info about matched orders)
     events::emit_quote_updated(
         oracle_mid_price,
-        market_maker.config.base_spread_bps(),
-        market_maker.config.volatility_spread_bps(),
+        executor.config.base_spread_bps(),
+        executor.config.volatility_spread_bps(),
     );
 }
 
 // === View helpers ===
 
-/// Returns the market maker ID.
-public fun id(market_maker: &MarketMaker): ID {
-    market_maker.id.to_inner()
+/// Returns the market maker executor ID.
+public fun id(executor: &Executor): ID {
+    executor.id.to_inner()
 }
 
-/// Returns the market maker owner.
-public fun owner(market_maker: &MarketMaker): address {
-    market_maker.balance_manager.owner()
+/// Returns the market maker executor owner.
+public fun owner(executor: &Executor): address {
+    executor.balance_manager.owner()
 }
 
 /// Returns the balance manager.
-public fun balance_manager(market_maker: &MarketMaker): &BalanceManager {
-    &market_maker.balance_manager
+public fun balance_manager(executor: &Executor): &BalanceManager {
+    &executor.balance_manager
 }
 
 /// Returns a deepbook's trade cap ID.
-public fun trade_cap_id(market_maker: &MarketMaker): ID {
-    object::id(&market_maker.caps.trade_cap)
+public fun trade_cap_id(executor: &Executor): ID {
+    object::id(&executor.caps.trade_cap)
 }
 
 /// Returns a deepbook's deposit cap ID.
-public fun deposit_cap_id(market_maker: &MarketMaker): ID {
-    object::id(&market_maker.caps.deposit_cap)
+public fun deposit_cap_id(executor: &Executor): ID {
+    object::id(&executor.caps.deposit_cap)
 }
 
 /// Returns a deepbook's withdraw cap ID.
-public fun withdraw_cap_id(market_maker: &MarketMaker): ID {
-    object::id(&market_maker.caps.withdraw_cap)
+public fun withdraw_cap_id(executor: &Executor): ID {
+    object::id(&executor.caps.withdraw_cap)
 }
 
 /// Returns the configured market metadata.
-public fun market(market_maker: &MarketMaker): &Market {
-    &market_maker.market
+public fun market(executor: &Executor): &Market {
+    &executor.market
 }
 
 /// Returns the current market maker configuration.
-public fun config(market_maker: &MarketMaker): &AMMConfig {
-    &market_maker.config
+public fun config(executor: &Executor): &AMMConfig {
+    &executor.config
 }
 
 /// Returns whether trading is active.
-public fun active(market_maker: &MarketMaker): bool {
-    market_maker.active
+public fun active(executor: &Executor): bool {
+    executor.active
 }
 
-/// Returns the market maker accounting info.
-public fun info(market_maker: &MarketMaker): &Info {
-    &market_maker.info
+/// Returns the market maker executor accounting info.
+public fun info(executor: &Executor): &Info {
+    &executor.info
 }
 
-/// Returns the market maker capability object ID.
+/// Returns the market maker executor capability object ID.
 public fun cap_id(amm_cap: &AdminCap): ID {
     amm_cap.id.to_inner()
 }
@@ -551,7 +550,7 @@ fun compute_quantity(quantity: u64, lot_size: u64, min_size: u64): u64 {
 
 /// Helper function to place a limit order if quantity is non-zero.
 fun try_place_limit_order<BaseAsset, QuoteAsset>(
-    market_maker: &mut MarketMaker,
+    executor: &mut Executor,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     trade_proof: &TradeProof,
     client_order_id: u64,
@@ -568,13 +567,13 @@ fun try_place_limit_order<BaseAsset, QuoteAsset>(
 
     // Self matching should not happen (if happens due to logic error abort taker order).
     let self_matching_option = constants::cancel_taker();
-    let expire_timestamp = clock.timestamp_ms() + market_maker.config.order_expiration_time_ms();
+    let expire_timestamp = clock.timestamp_ms() + executor.config.order_expiration_time_ms();
     let pay_with_deep = false;
     let order_type = constants::no_restriction();
 
     // Place a limit order.
     pool.place_limit_order(
-        &mut market_maker.balance_manager,
+        &mut executor.balance_manager,
         trade_proof,
         client_order_id,
         order_type,

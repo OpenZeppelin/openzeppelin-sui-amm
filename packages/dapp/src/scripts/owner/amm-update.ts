@@ -143,7 +143,7 @@ runSuiScript(
 
     const updateConfigTransaction = buildUpdateConfigTransaction({
       packageId: ammPackageId,
-      marketMaker: ammConfigSharedObject,
+      executor: ammConfigSharedObject,
       adminCapId,
       baseSpreadBps: updateInputs.baseSpreadBps,
       volatilitySpreadBps: updateInputs.volatilitySpreadBps,

@@ -1,8 +1,6 @@
 /// AMM configuration.
 module openzeppelin_market_maker::config;
 
-// TODO#q: rename module to amm_config (or config/amm)
-
 // === Errors ===
 
 #[error(code = 0)]
@@ -30,7 +28,7 @@ const HUNDRED_PERCENT_BPS: u64 = 10_000;
 
 // TODO#q: add balance aware pricing configuration
 
-/// AMM configuration shared across pools.
+/// AMM configuration for market maker executor.
 public struct AMMConfig has drop, store {
     /// Base spread in basis points.
     base_spread_bps: u64,
@@ -49,7 +47,7 @@ public struct AMMConfig has drop, store {
 /// Creates a new AMM configuration object.
 ///
 /// Pass the returned value into `executor::create` when creating a new executor or into
-/// `executor::update_config` when replacing an existing market maker configuration.
+/// `executor::update_config` when replacing an existing market maker executor configuration.
 public fun new(
     base_spread_bps: u64,
     volatility_spread_bps: u64,

@@ -30,7 +30,7 @@ export const parsePythPriceFeedIdBytes = (
   )
 }
 
-export const buildCreateMarketMakerTransaction = ({
+export const buildCreateExecutorTransaction = ({
   packageId,
   poolId,
   senderAddress,
@@ -85,15 +85,15 @@ export const buildCreateMarketMakerTransaction = ({
     ]
   })
 
-  const [marketMaker, adminCap] = transaction.moveCall({
+  const [executor, adminCap] = transaction.moveCall({
     target: `${packageId}::executor::create`,
     arguments: [market, ammConfig]
   })
 
   transaction.moveCall({
     target: "0x2::transfer::public_share_object",
-    typeArguments: [`${packageId}::executor::MarketMaker`],
-    arguments: [marketMaker]
+    typeArguments: [`${packageId}::executor::Executor`],
+    arguments: [executor]
   })
 
   transaction.transferObjects(
@@ -106,7 +106,7 @@ export const buildCreateMarketMakerTransaction = ({
 
 export const buildUpdateConfigTransaction = ({
   packageId,
-  marketMaker,
+  executor,
   adminCapId,
   baseSpreadBps,
   volatilitySpreadBps,
@@ -115,7 +115,7 @@ export const buildUpdateConfigTransaction = ({
   maxConfRatioBps
 }: {
   packageId: string
-  marketMaker: WrappedSuiSharedObject
+  executor: WrappedSuiSharedObject
   adminCapId: string
   baseSpreadBps: bigint | number
   volatilitySpreadBps: bigint | number
@@ -139,7 +139,7 @@ export const buildUpdateConfigTransaction = ({
   transaction.moveCall({
     target: `${packageId}::executor::update_config`,
     arguments: [
-      transaction.sharedObjectRef(marketMaker.sharedRef),
+      transaction.sharedObjectRef(executor.sharedRef),
       transaction.object(adminCapId),
       ammConfig
     ]
@@ -155,14 +155,14 @@ export const buildUpdateConfigTransaction = ({
  */
 export const buildUpdateMarketTransaction = ({
   packageId,
-  marketMaker,
+  executor,
   adminCapId,
   poolId,
   basePythPriceFeedIdBytes,
   quotePythPriceFeedIdBytes
 }: {
   packageId: string
-  marketMaker: WrappedSuiSharedObject
+  executor: WrappedSuiSharedObject
   adminCapId: string
   poolId: string
   basePythPriceFeedIdBytes: number[]
@@ -192,7 +192,7 @@ export const buildUpdateMarketTransaction = ({
   transaction.moveCall({
     target: `${packageId}::executor::update_market`,
     arguments: [
-      transaction.sharedObjectRef(marketMaker.sharedRef),
+      transaction.sharedObjectRef(executor.sharedRef),
       transaction.object(adminCapId),
       market
     ]
@@ -215,7 +215,7 @@ export const buildUpdateMarketTransaction = ({
  */
 export const buildUpdateMarketWithPauseTransaction = ({
   packageId,
-  marketMaker,
+  executor,
   adminCapId,
   currentActive,
   currentPool,
@@ -226,7 +226,7 @@ export const buildUpdateMarketWithPauseTransaction = ({
   quotePythPriceFeedIdBytes
 }: {
   packageId: string
-  marketMaker: WrappedSuiSharedObject
+  executor: WrappedSuiSharedObject
   adminCapId: string
   currentActive: boolean
   currentPool: WrappedSuiSharedObject
@@ -253,7 +253,7 @@ export const buildUpdateMarketWithPauseTransaction = ({
       target: `${packageId}::executor::pause`,
       typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
       arguments: [
-        transaction.sharedObjectRef(marketMaker.sharedRef),
+        transaction.sharedObjectRef(executor.sharedRef),
         transaction.object(adminCapId),
         transaction.sharedObjectRef(currentPool.sharedRef),
         transaction.object(SUI_CLOCK_ID)
@@ -273,7 +273,7 @@ export const buildUpdateMarketWithPauseTransaction = ({
   transaction.moveCall({
     target: `${packageId}::executor::update_market`,
     arguments: [
-      transaction.sharedObjectRef(marketMaker.sharedRef),
+      transaction.sharedObjectRef(executor.sharedRef),
       transaction.object(adminCapId),
       market
     ]
@@ -283,7 +283,7 @@ export const buildUpdateMarketWithPauseTransaction = ({
     transaction.moveCall({
       target: `${packageId}::executor::unpause`,
       arguments: [
-        transaction.sharedObjectRef(marketMaker.sharedRef),
+        transaction.sharedObjectRef(executor.sharedRef),
         transaction.object(adminCapId)
       ]
     })

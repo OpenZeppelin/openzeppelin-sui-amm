@@ -8,8 +8,8 @@ import {
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { buildCreateMarketMakerTransaction } from "@sui-amm/domain-core/ptb/amm"
-import { MARKET_MAKER_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
+import { buildCreateExecutorTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { EXECUTOR_TYPE_SUFFIX } from "@sui-amm/domain-core/models/traderAccount"
 import {
   getAllOwnedObjectsByFilter,
   normalizeIdOrThrow
@@ -119,7 +119,7 @@ export const resolveAmmConfigId = async ({
     networkName,
     errorMessage:
       "An AMM config id is required; create an AMM config first or provide --amm-config-id.",
-    resolveArtifact: getLatestObjectFromArtifact(MARKET_MAKER_TYPE_SUFFIX),
+    resolveArtifact: getLatestObjectFromArtifact(EXECUTOR_TYPE_SUFFIX),
     getArtifactId: (artifact) => artifact?.objectId
   })
 }
@@ -190,7 +190,7 @@ export const resolveExistingAmmConfigIdFromArtifacts = async ({
   ) {
     const artifact = objectArtifacts[artifactIndex]
 
-    if (!artifact?.objectType?.endsWith(MARKET_MAKER_TYPE_SUFFIX)) {
+    if (!artifact?.objectType?.endsWith(EXECUTOR_TYPE_SUFFIX)) {
       continue
     }
 
@@ -229,7 +229,7 @@ export const createAmmConfigSnapshot = async ({
 }> => {
   const senderAddress = tooling.loadedEd25519KeyPair.toSuiAddress()
 
-  const createMarketMakerTransaction = buildCreateMarketMakerTransaction({
+  const createExecutorTransaction = buildCreateExecutorTransaction({
     packageId: ammPackageId,
     poolId,
     senderAddress,
@@ -243,7 +243,7 @@ export const createAmmConfigSnapshot = async ({
   })
 
   const { execution, summary } = await tooling.executeTransactionWithSummary({
-    transaction: createMarketMakerTransaction,
+    transaction: createExecutorTransaction,
     signer: tooling.loadedEd25519KeyPair,
     summaryLabel: "create-amm"
   })
@@ -254,7 +254,7 @@ export const createAmmConfigSnapshot = async ({
 
   const ammConfigId = requireCreatedArtifactIdBySuffix({
     createdArtifacts: execution.objectArtifacts.created,
-    suffix: MARKET_MAKER_TYPE_SUFFIX,
+    suffix: EXECUTOR_TYPE_SUFFIX,
     label: "AMM market maker"
   })
 

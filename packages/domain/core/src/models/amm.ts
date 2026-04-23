@@ -52,7 +52,7 @@ type MarketFields = {
   quote_price_publish_time?: unknown
 }
 
-type MarketMakerFields = {
+type ExecutorFields = {
   active?: unknown
   config?: { fields?: AmmConfigFields } | AmmConfigFields
   market?: { fields?: MarketFields } | MarketFields
@@ -95,11 +95,11 @@ const buildAmmConfigOverviewFromObject = ({
   configId: string
   object: SuiObjectData
 }): AmmConfigOverview => {
-  const marketMakerFields = unwrapMoveObjectFields<MarketMakerFields>(object)
+  const executorFields = unwrapMoveObjectFields<ExecutorFields>(object)
   const config =
-    unwrapNestedFields<AmmConfigFields>(marketMakerFields.config) ?? {}
+    unwrapNestedFields<AmmConfigFields>(executorFields.config) ?? {}
   const market =
-    unwrapNestedFields<MarketFields>(marketMakerFields.market) ?? {}
+    unwrapNestedFields<MarketFields>(executorFields.market) ?? {}
 
   return {
     configId,
@@ -111,7 +111,7 @@ const buildAmmConfigOverviewFromObject = ({
       config.volatility_spread_bps,
       "Volatility spread bps"
     ),
-    active: requireBooleanField(marketMakerFields.active, "Active"),
+    active: requireBooleanField(executorFields.active, "Active"),
     basePythPriceFeedIdHex: requireFeedIdHex(
       market.base_pyth_price_feed_id,
       "Base Pyth price feed id"
