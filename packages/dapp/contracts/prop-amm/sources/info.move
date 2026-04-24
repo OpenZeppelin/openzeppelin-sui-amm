@@ -59,7 +59,7 @@ public fun base_withdrawn(self: &Info): u128 {
     self.base_withdrawn
 }
 
-// === Public Package Functions ===
+// === Package Functions ===
 
 /// Create a zero-initialized `Info`.
 public(package) fun empty(): Info {

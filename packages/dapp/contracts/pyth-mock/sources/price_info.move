@@ -122,17 +122,7 @@ public fun update_price_feed(
         );
 }
 
-// === Test-Only Helpers ===
-
-#[test_only]
-public fun new_price_info_object_for_test(
-    price_info: PriceInfo,
-    ctx: &mut TxContext,
-): PriceInfoObject {
-    new_price_info_object(price_info, ctx)
-}
-
-// === Public Getters ===
+// === View helpers ===
 
 public fun uid_to_inner(price_info_object: &PriceInfoObject): ID {
     price_info_object.id.to_inner()
@@ -156,4 +146,14 @@ public fun get_attestation_time(price_info: &PriceInfo): u64 {
 
 public fun get_arrival_time(price_info: &PriceInfo): u64 {
     price_info.arrival_time
+}
+
+// === Test-Only Helpers ===
+
+#[test_only]
+public fun new_price_info_object_for_test(
+    price_info: PriceInfo,
+    ctx: &mut TxContext,
+): PriceInfoObject {
+    new_price_info_object(price_info, ctx)
 }
