@@ -219,20 +219,12 @@ public(package) fun market_updated(executor_id: ID): MarketUpdated {
 
 /// Builds a `Deposited` payload.
 #[test_only]
-public(package) fun deposited(
-    executor_id: ID,
-    coin_type: TypeName,
-    amount: u64,
-): Deposited {
+public(package) fun deposited(executor_id: ID, coin_type: TypeName, amount: u64): Deposited {
     Deposited { executor_id, coin_type, amount }
 }
 
 /// Builds a `Withdrawn` payload.
 #[test_only]
-public(package) fun withdrawn(
-    executor_id: ID,
-    coin_type: TypeName,
-    amount: u64,
-): Withdrawn {
+public(package) fun withdrawn(executor_id: ID, coin_type: TypeName, amount: u64): Withdrawn {
     Withdrawn { executor_id, coin_type, amount }
 }

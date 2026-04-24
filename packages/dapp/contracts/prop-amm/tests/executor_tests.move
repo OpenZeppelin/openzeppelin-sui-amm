@@ -30,11 +30,11 @@ use openzeppelin_market_maker::test_helpers::{
     create_sui_currency,
     create_usdc_currency
 };
-use sui::coin_registry::Currency;
 use std::type_name;
 use std::unit_test::{assert_eq, destroy};
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, mint_for_testing};
+use sui::coin_registry::Currency;
 use sui::event;
 use sui::sui::SUI;
 use sui::test_scenario;
@@ -335,10 +335,7 @@ fun deposit_and_withdraw_updates_executor_balance() {
     );
 
     assert_eq!(withdrawn_coin.value(), withdraw_amount);
-    assert_eq!(
-        executor_object.balance_manager().balance<SUI>(),
-        deposit_amount - withdraw_amount,
-    );
+    assert_eq!(executor_object.balance_manager().balance<SUI>(), deposit_amount - withdraw_amount);
 
     test_scenario::return_shared(pool);
     test_scenario::return_shared(clock);
@@ -889,10 +886,7 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
 
     // Read the four placed order IDs from pool state; VecSet preserves insertion order,
     // so they line up with the bid_outer / bid_inner / ask_inner / ask_outer slots.
-    let live_order_ids = pool
-        .account(executor_object.balance_manager())
-        .open_orders()
-        .into_keys();
+    let live_order_ids = pool.account(executor_object.balance_manager()).open_orders().into_keys();
     assert_emitted!(
         quote_updated(
             executor_object.id(),

@@ -3,7 +3,6 @@ module openzeppelin_market_maker::info;
 
 // === Structs ===
 
-// TODO#q: rename to InfoSnapshot and add copy. Include it into event?
 /// Per-market-maker executor accounting information snapshot
 /// recorded from the last refresh_quotes update or withdrawal/deposit.
 public struct Info has drop, store {
