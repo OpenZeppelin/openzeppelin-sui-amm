@@ -43,7 +43,7 @@ const EMarketUnchanged: vector<u8> = "new market is identical to the current mar
 #[error(code = 8)]
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 9)]
-const EPriceOverflow: vector<u8> = "price higher than maximum or oveflowed";
+const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
 
 // === Structs ===
 

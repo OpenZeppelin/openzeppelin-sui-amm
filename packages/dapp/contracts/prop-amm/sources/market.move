@@ -25,7 +25,7 @@ const EPythPriceConfidenceTooWide: vector<u8> = "pyth price confidence interval 
 #[error(code = 6)]
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 7)]
-const EPriceOverflow: vector<u8> = "price higher than maximum or oveflowed";
+const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
 
 // === Constants ===
 

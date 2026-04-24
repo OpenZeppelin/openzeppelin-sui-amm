@@ -22,7 +22,7 @@ const EInvalidInventorySkewBps: vector<u8> = "inventory skew bps must be less th
 #[error(code = 6)]
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 7)]
-const EPriceOverflow: vector<u8> = "price higher than maximum or oveflowed";
+const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
 
 // === Constants ===
 
@@ -217,7 +217,8 @@ public(package) fun reservation_mid(
     let base_spread = config.base_spread(mid_price) as u128;
     let skew_bps = config.inventory_skew_bps as u128;
     let imbalance = base_balance_in_quote.diff(quote_balance);
-    let shift = base_spread.checked_mul(imbalance).destroy_or!(abort EPriceOverflow) / total_balance;
+    let shift =
+        base_spread.checked_mul(imbalance).destroy_or!(abort EPriceOverflow) / total_balance;
     let adjusted_shift = shift * skew_bps / HUNDRED_PERCENT_BPS_U128;
 
     // Apply shift to the mid_price.
