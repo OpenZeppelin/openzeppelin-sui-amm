@@ -335,3 +335,190 @@ export const buildUpdateMarketWithPauseTransaction = ({
 
   return transaction
 }
+
+/**
+ * Builds a pause transaction for a market maker executor. Cancels all open
+ * orders and settles the BalanceManager. Requires the executor to be active.
+ */
+export const buildPauseTransaction = ({
+  packageId,
+  executor,
+  adminCapId,
+  pool,
+  baseAssetTypeTag,
+  quoteAssetTypeTag
+}: {
+  packageId: string
+  executor: WrappedSuiSharedObject
+  adminCapId: string
+  pool: WrappedSuiSharedObject
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
+}) => {
+  const transaction = newTransaction()
+
+  transaction.moveCall({
+    target: `${packageId}::executor::pause`,
+    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
+    arguments: [
+      transaction.sharedObjectRef(executor.sharedRef),
+      transaction.object(adminCapId),
+      transaction.sharedObjectRef(pool.sharedRef),
+      transaction.object(SUI_CLOCK_ID)
+    ]
+  })
+
+  return transaction
+}
+
+/**
+ * Builds an unpause transaction for a market maker executor. Requires the
+ * executor to be paused; flips `active` back to true so the next
+ * `refresh_quotes` call is allowed.
+ */
+export const buildUnpauseTransaction = ({
+  packageId,
+  executor,
+  adminCapId
+}: {
+  packageId: string
+  executor: WrappedSuiSharedObject
+  adminCapId: string
+}) => {
+  const transaction = newTransaction()
+
+  transaction.moveCall({
+    target: `${packageId}::executor::unpause`,
+    arguments: [
+      transaction.sharedObjectRef(executor.sharedRef),
+      transaction.object(adminCapId)
+    ]
+  })
+
+  return transaction
+}
+
+/**
+ * Builds a deposit transaction for a market maker executor. Splits the
+ * requested `amount` from the provided source coin (or from the gas coin when
+ * `sourceCoinId` is omitted — valid only for SUI deposits) and hands the
+ * resulting coin to `executor::deposit<T>`.
+ */
+export const buildDepositTransaction = ({
+  packageId,
+  executor,
+  adminCapId,
+  coinTypeTag,
+  amount,
+  sourceCoinId
+}: {
+  packageId: string
+  executor: WrappedSuiSharedObject
+  adminCapId: string
+  coinTypeTag: string
+  amount: bigint | number
+  /**
+   * Object ID of the Coin<T> to split from. Omit for SUI deposits to split
+   * from the gas coin.
+   */
+  sourceCoinId?: string
+}) => {
+  const transaction = newTransaction()
+
+  const source = sourceCoinId
+    ? transaction.object(sourceCoinId)
+    : transaction.gas
+  const [depositCoin] = transaction.splitCoins(source, [
+    transaction.pure.u64(amount)
+  ])
+
+  transaction.moveCall({
+    target: `${packageId}::executor::deposit`,
+    typeArguments: [coinTypeTag],
+    arguments: [
+      transaction.sharedObjectRef(executor.sharedRef),
+      transaction.object(adminCapId),
+      depositCoin
+    ]
+  })
+
+  return transaction
+}
+
+/**
+ * Builds a withdraw transaction that wraps `executor::withdraw<T>` with an
+ * optional pause/unpause envelope. The on-chain withdraw requires the executor
+ * to be paused; when `currentActive` is true the PTB emits:
+ *
+ *   `pause(<Base, Quote>, executor, cap, pool, clock)` →
+ *   `withdraw<T>(executor, cap, amount)` → `transfer(withdrawn, sender)` →
+ *   `unpause(executor, cap)`
+ *
+ * Otherwise (already paused) only withdraw + transfer are emitted, leaving the
+ * executor paused.
+ */
+export const buildWithdrawWithPauseTransaction = ({
+  packageId,
+  executor,
+  adminCapId,
+  coinTypeTag,
+  amount,
+  recipientAddress,
+  currentActive,
+  pool,
+  baseAssetTypeTag,
+  quoteAssetTypeTag
+}: {
+  packageId: string
+  executor: WrappedSuiSharedObject
+  adminCapId: string
+  coinTypeTag: string
+  amount: bigint | number
+  recipientAddress: string
+  currentActive: boolean
+  pool: WrappedSuiSharedObject
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
+}) => {
+  const transaction = newTransaction()
+
+  if (currentActive) {
+    transaction.moveCall({
+      target: `${packageId}::executor::pause`,
+      typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
+      arguments: [
+        transaction.sharedObjectRef(executor.sharedRef),
+        transaction.object(adminCapId),
+        transaction.sharedObjectRef(pool.sharedRef),
+        transaction.object(SUI_CLOCK_ID)
+      ]
+    })
+  }
+
+  const [withdrawnCoin] = transaction.moveCall({
+    target: `${packageId}::executor::withdraw`,
+    typeArguments: [coinTypeTag],
+    arguments: [
+      transaction.sharedObjectRef(executor.sharedRef),
+      transaction.object(adminCapId),
+      transaction.pure.u64(amount)
+    ]
+  })
+
+  transaction.transferObjects(
+    [withdrawnCoin],
+    transaction.pure.address(recipientAddress)
+  )
+
+  if (currentActive) {
+    transaction.moveCall({
+      target: `${packageId}::executor::unpause`,
+      arguments: [
+        transaction.sharedObjectRef(executor.sharedRef),
+        transaction.object(adminCapId)
+      ]
+    })
+  }
+
+  return transaction
+}

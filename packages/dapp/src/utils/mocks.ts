@@ -23,10 +23,19 @@ export type MockArtifact = Partial<{
     metadataObjectId?: string
     mintedCoinObjectId?: string
   }[]
+  pools: {
+    poolId: string
+    baseCoinType: string
+    quoteCoinType: string
+    tickSize: string
+    lotSize: string
+    minSize: string
+  }[]
 }>
 
 export type CoinArtifact = NonNullable<MockArtifact["coins"]>[number]
 export type PriceFeedArtifact = NonNullable<MockArtifact["priceFeeds"]>[number]
+export type PoolArtifact = NonNullable<MockArtifact["pools"]>[number]
 
 /**
  * Persists mock deployment state (packages, coins, price feeds) to disk.

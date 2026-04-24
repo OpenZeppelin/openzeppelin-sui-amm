@@ -6,6 +6,7 @@ import {
   useUpdateAmmConfigModalState,
   type AmmConfigUpdateSummary
 } from "../hooks/useUpdateAmmConfigModalState"
+import AmmConfigForm from "./AmmConfigForm"
 import Button from "./Button"
 import CopyableId from "./CopyableId"
 import {
@@ -16,20 +17,9 @@ import {
   ModalHeader,
   ModalSection,
   ModalStatusHeader,
-  ModalSuccessFooter,
-  modalFieldDescriptionClassName,
-  modalFieldErrorTextClassName,
-  modalFieldInputClassName,
-  modalFieldInputErrorClassName,
-  modalFieldLabelClassName,
-  modalFieldTitleClassName
+  ModalSuccessFooter
 } from "./ModalPrimitives"
 import TransactionRecap from "./TransactionRecap"
-
-const inputClassName = (error?: string) =>
-  [modalFieldInputClassName, error ? modalFieldInputErrorClassName : ""]
-    .filter(Boolean)
-    .join(" ")
 
 const ConfigValueCard = ({
   label,
@@ -74,6 +64,26 @@ const AmmConfigSummarySection = ({
       <ConfigValueCard
         label="Volatility multiplier (bps)"
         value={summary.ammConfig.volatilityMultiplierBps}
+      />
+      <ConfigValueCard
+        label="Order expiration (ms)"
+        value={summary.ammConfig.orderExpirationTimeMs}
+      />
+      <ConfigValueCard
+        label="Max Pyth price age (s)"
+        value={summary.ammConfig.maxPriceAgeSecs}
+      />
+      <ConfigValueCard
+        label="Max conf ratio (bps)"
+        value={summary.ammConfig.maxConfRatioBps}
+      />
+      <ConfigValueCard
+        label="Outer balance (bps)"
+        value={summary.ammConfig.outerBalanceBps}
+      />
+      <ConfigValueCard
+        label="Inventory skew (bps)"
+        value={summary.ammConfig.inventorySkewBps}
       />
       <ConfigValueCard
         label="Trading status"
@@ -265,78 +275,19 @@ const UpdateAmmConfigModal = ({
 
         <ModalSection
           title="Configuration updates"
-          subtitle="Adjust spread parameters. Pool and Pyth feed updates are handled in a separate flow."
+          subtitle="Adjust AMM parameters. Pool and Pyth feed updates are handled in a separate flow."
         >
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className={modalFieldLabelClassName}>
-              <span className={modalFieldTitleClassName}>
-                Base spread (bps)
-              </span>
-              <span className={modalFieldDescriptionClassName}>
-                Must be a positive u64.
-              </span>
-              <input
-                value={formState.baseSpreadBps}
-                onChange={(event) =>
-                  handleInputChange("baseSpreadBps", event.target.value)
-                }
-                onBlur={() => markFieldBlur("baseSpreadBps")}
-                className={inputClassName(
-                  shouldShowFieldError(
-                    "baseSpreadBps",
-                    fieldErrors.baseSpreadBps
-                  )
-                    ? fieldErrors.baseSpreadBps
-                    : undefined
-                )}
-                placeholder="25"
-              />
-              {shouldShowFieldError(
-                "baseSpreadBps",
-                fieldErrors.baseSpreadBps
-              ) ? (
-                <span className={modalFieldErrorTextClassName}>
-                  {fieldErrors.baseSpreadBps}
-                </span>
-              ) : undefined}
-            </label>
-
-            <label className={modalFieldLabelClassName}>
-              <span className={modalFieldTitleClassName}>
-                Volatility multiplier (bps)
-              </span>
-              <span className={modalFieldDescriptionClassName}>
-                Zero or higher u64.
-              </span>
-              <input
-                value={formState.volatilityMultiplierBps}
-                onChange={(event) =>
-                  handleInputChange("volatilityMultiplierBps", event.target.value)
-                }
-                onBlur={() => markFieldBlur("volatilityMultiplierBps")}
-                className={inputClassName(
-                  shouldShowFieldError(
-                    "volatilityMultiplierBps",
-                    fieldErrors.volatilityMultiplierBps
-                  )
-                    ? fieldErrors.volatilityMultiplierBps
-                    : undefined
-                )}
-                placeholder="200"
-              />
-              {shouldShowFieldError(
-                "volatilityMultiplierBps",
-                fieldErrors.volatilityMultiplierBps
-              ) ? (
-                <span className={modalFieldErrorTextClassName}>
-                  {fieldErrors.volatilityMultiplierBps}
-                </span>
-              ) : undefined}
-            </label>
-          </div>
+          <AmmConfigForm
+            formState={formState}
+            fieldErrors={fieldErrors}
+            shouldShowFieldError={shouldShowFieldError}
+            handleInputChange={handleInputChange}
+            markFieldBlur={markFieldBlur}
+            disabled={transactionState.status === "processing"}
+          />
 
           {ammConfig ? (
-            <div className="grid gap-3 text-xs sm:grid-cols-1">
+            <div className="mt-4 grid gap-3 text-xs sm:grid-cols-1">
               <ConfigValueCard
                 label="Base Pyth price feed id (read-only)"
                 value={shortenId(ammConfig.basePythPriceFeedIdHex, 10, 8)}

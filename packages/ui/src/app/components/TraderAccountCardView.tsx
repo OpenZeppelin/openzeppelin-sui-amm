@@ -56,12 +56,18 @@ const renderContent = ({
       return (
         <div className="grid gap-4 md:grid-cols-2">
           <InfoTile label="Owner address">
-            <CopyableId
-              value={details.ownerAddress}
-              label="Owner"
-              showExplorer={false}
-              className="w-full"
-            />
+            {details.ownerAddress ? (
+              <CopyableId
+                value={details.ownerAddress}
+                label="Owner"
+                showExplorer={false}
+                className="w-full"
+              />
+            ) : (
+              <span className="text-slate-500 dark:text-slate-200/70">
+                Shared object (controlled via AdminCap)
+              </span>
+            )}
           </InfoTile>
           <InfoTile label="Balance manager">
             <CopyableId

@@ -52,10 +52,13 @@ type AmmConfigFields = {
 
 type MarketFields = {
   pool_id?: unknown
-  base_pyth_price_feed_id?: unknown
-  quote_pyth_price_feed_id?: unknown
-  base_price_publish_time?: unknown
-  quote_price_publish_time?: unknown
+  base?: unknown
+  quote?: unknown
+}
+
+type MarketCurrencyFields = {
+  pyth_price_feed_id?: unknown
+  price_publish_time?: unknown
 }
 
 type ExecutorFields = {
@@ -106,6 +109,10 @@ const buildAmmConfigOverviewFromObject = ({
     unwrapNestedFields<AmmConfigFields>(executorFields.config) ?? {}
   const market =
     unwrapNestedFields<MarketFields>(executorFields.market) ?? {}
+  const baseCurrency =
+    unwrapNestedFields<MarketCurrencyFields>(market.base) ?? {}
+  const quoteCurrency =
+    unwrapNestedFields<MarketCurrencyFields>(market.quote) ?? {}
 
   return {
     configId,
@@ -119,11 +126,11 @@ const buildAmmConfigOverviewFromObject = ({
     ),
     active: requireBooleanField(executorFields.active, "Active"),
     basePythPriceFeedIdHex: requireFeedIdHex(
-      market.base_pyth_price_feed_id,
+      baseCurrency.pyth_price_feed_id,
       "Base Pyth price feed id"
     ),
     quotePythPriceFeedIdHex: requireFeedIdHex(
-      market.quote_pyth_price_feed_id,
+      quoteCurrency.pyth_price_feed_id,
       "Quote Pyth price feed id"
     ),
     poolId: requireStringField(market.pool_id, "Pool id"),

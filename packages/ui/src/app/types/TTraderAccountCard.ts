@@ -1,5 +1,5 @@
 export type TTraderAccountDetails = {
-  ownerAddress: string
+  ownerAddress: string | undefined
   balanceManagerId: string
   tradeCapId?: string
   depositCapId?: string

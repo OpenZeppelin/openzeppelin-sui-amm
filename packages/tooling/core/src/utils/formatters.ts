@@ -221,6 +221,39 @@ export const formatCoinBalance = ({
 }
 
 /**
+ * Parses a human-readable decimal amount (e.g. "1.5") into its on-chain atom
+ * count (e.g. 1_500_000_000n for `decimals = 9`). Throws on non-numeric or
+ * over-precise input.
+ */
+export const parseCoinAmount = ({
+  value,
+  decimals
+}: {
+  value: string
+  decimals: number
+}): bigint => {
+  const trimmed = value.trim()
+  if (!trimmed) throw new Error("Amount is required.")
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) {
+    throw new Error("Amount must be a non-negative decimal number.")
+  }
+  if (decimals < 0) {
+    throw new Error("Decimals must be non-negative.")
+  }
+
+  const [wholePart, fractionPart = ""] = trimmed.split(".")
+  if (fractionPart.length > decimals) {
+    throw new Error(
+      `Amount has ${fractionPart.length} decimal places but ${decimals} are allowed.`
+    )
+  }
+
+  const padded = fractionPart.padEnd(decimals, "0")
+  const combined = `${wholePart}${padded}`.replace(/^0+/, "") || "0"
+  return BigInt(combined)
+}
+
+/**
  * Formats a Move struct type into its terminal label.
  */
 export const getStructLabel = (typeName?: string) => {

@@ -9,9 +9,14 @@ import {
   unwrapMoveObjectFields
 } from "@sui-amm/tooling-core/object"
 import {
+  formatOptionalNumericValue,
+  parseOptionalNumber
+} from "@sui-amm/tooling-core/utils/formatters"
+import {
   extractFieldValueByKeys,
   unwrapMoveFields
 } from "@sui-amm/tooling-core/utils/move-values"
+import { formatTypeNameFromFieldValue } from "@sui-amm/tooling-core/utils/type-name"
 
 export const EXECUTOR_TYPE_SUFFIX = "::executor::Executor"
 
@@ -20,11 +25,32 @@ export const resolveTraderAccountType = (packageId: string) =>
 
 export type TraderAccountOverview = {
   traderAccountId: string
-  ownerAddress: string
+  /**
+   * Address owner of the executor. Post-refactor the Executor is a shared
+   * object, so this is `undefined`; callers should fall back to the AdminCap
+   * holder's address when they need a "controller" to display.
+   */
+  ownerAddress: string | undefined
   balanceManagerId: string
   tradeCapId: string
   depositCapId: string
   withdrawCapId: string
+  /** Whether the executor is currently active (trading) or paused. */
+  active: boolean
+  /** Base asset Move type tag cached in the `Market`. */
+  baseCoinType: string
+  /** Quote asset Move type tag cached in the `Market`. */
+  quoteCoinType: string
+  /** Cached decimals for the base asset (from `Market.base.decimals`). */
+  baseDecimals: number
+  /** Cached decimals for the quote asset (from `Market.quote.decimals`). */
+  quoteDecimals: number
+  /** Object ID of the DeepBook pool bound to this executor's Market. */
+  poolId: string
+  /** Current base-asset balance in the BalanceManager (u64, atoms). */
+  baseBalance: string
+  /** Current quote-asset balance in the BalanceManager (u64, atoms). */
+  quoteBalance: string
 }
 
 type TraderAccountFields = {
@@ -33,6 +59,25 @@ type TraderAccountFields = {
   balance_manager_id?: unknown
   caps?: unknown
   cap_ids?: unknown
+  active?: unknown
+  market?: unknown
+  info?: unknown
+}
+
+type MarketFields = {
+  pool_id?: unknown
+  base?: unknown
+  quote?: unknown
+}
+
+type MarketCurrencyFields = {
+  coin_type?: unknown
+  decimals?: unknown
+}
+
+type InfoFields = {
+  base_balance?: unknown
+  quote_balance?: unknown
 }
 
 type TraderAccountCapFields = {
@@ -85,17 +130,102 @@ const resolveOwnerAddress = ({
 }: {
   fields: TraderAccountFields
   owner?: ObjectOwner
-}) => {
+}): string | undefined => {
   const ownerField = extractFieldValueByKeys(fields, ["owner"])
   if (typeof ownerField === "string") {
     return extractOwnerAddress({ AddressOwner: ownerField })
   }
 
-  if (owner) {
+  if (!owner) return undefined
+
+  try {
     return extractOwnerAddress(owner)
+  } catch {
+    // Shared / immutable objects are not address-owned. Post-refactor the
+    // Executor is shared, so this is expected.
+    return undefined
+  }
+}
+
+const requireDecimals = (value: unknown, label: string): number => {
+  const parsed = parseOptionalNumber(value)
+  if (parsed === undefined) throw new Error(`${label} is required.`)
+  if (parsed < 0 || parsed > 255) {
+    throw new Error(`${label} is out of range (0..255).`)
+  }
+  return parsed
+}
+
+const resolveMarketInfo = (fields: TraderAccountFields) => {
+  const marketFields = unwrapMoveFields(
+    extractFieldValueByKeys(fields, ["market"])
+  ) as MarketFields | undefined
+  if (!marketFields) {
+    throw new Error("Market maker executor market metadata is required.")
   }
 
-  throw new Error("Market maker executor owner is required.")
+  const poolId = requireIdField(
+    extractFieldValueByKeys(marketFields, ["pool_id"]),
+    "Market pool id"
+  )
+
+  const baseFields = unwrapMoveFields(
+    extractFieldValueByKeys(marketFields, ["base"])
+  ) as MarketCurrencyFields | undefined
+  const quoteFields = unwrapMoveFields(
+    extractFieldValueByKeys(marketFields, ["quote"])
+  ) as MarketCurrencyFields | undefined
+  if (!baseFields || !quoteFields) {
+    throw new Error("Market maker executor base/quote currency is required.")
+  }
+
+  const baseCoinType = formatTypeNameFromFieldValue(
+    extractFieldValueByKeys(baseFields, ["coin_type"])
+  )
+  const quoteCoinType = formatTypeNameFromFieldValue(
+    extractFieldValueByKeys(quoteFields, ["coin_type"])
+  )
+  if (!baseCoinType || !quoteCoinType) {
+    throw new Error("Market maker executor base/quote coin type is required.")
+  }
+
+  const baseDecimals = requireDecimals(
+    extractFieldValueByKeys(baseFields, ["decimals"]),
+    "Base decimals"
+  )
+  const quoteDecimals = requireDecimals(
+    extractFieldValueByKeys(quoteFields, ["decimals"]),
+    "Quote decimals"
+  )
+
+  return {
+    poolId,
+    baseCoinType,
+    quoteCoinType,
+    baseDecimals,
+    quoteDecimals
+  }
+}
+
+const resolveInfoBalances = (fields: TraderAccountFields) => {
+  const infoFields = unwrapMoveFields(
+    extractFieldValueByKeys(fields, ["info"])
+  ) as InfoFields | undefined
+  if (!infoFields) {
+    throw new Error("Market maker executor info struct is required.")
+  }
+
+  const baseBalance = formatOptionalNumericValue(
+    extractFieldValueByKeys(infoFields, ["base_balance"])
+  )
+  const quoteBalance = formatOptionalNumericValue(
+    extractFieldValueByKeys(infoFields, ["quote_balance"])
+  )
+  if (baseBalance === undefined || quoteBalance === undefined) {
+    throw new Error("Market maker executor info balances are required.")
+  }
+
+  return { baseBalance, quoteBalance }
 }
 
 const buildTraderAccountOverviewFromObject = ({
@@ -111,6 +241,12 @@ const buildTraderAccountOverviewFromObject = ({
   const capIds = resolveCapIds(
     extractFieldValueByKeys(fields, ["caps", "cap_ids"])
   )
+  const activeField = extractFieldValueByKeys(fields, ["active"])
+  if (typeof activeField !== "boolean") {
+    throw new Error("Market maker executor active flag is required.")
+  }
+  const market = resolveMarketInfo(fields)
+  const info = resolveInfoBalances(fields)
 
   return {
     traderAccountId: normalizeSuiObjectId(traderAccountId),
@@ -124,7 +260,15 @@ const buildTraderAccountOverviewFromObject = ({
     ),
     tradeCapId: capIds.tradeCapId,
     depositCapId: capIds.depositCapId,
-    withdrawCapId: capIds.withdrawCapId
+    withdrawCapId: capIds.withdrawCapId,
+    active: activeField,
+    baseCoinType: market.baseCoinType,
+    quoteCoinType: market.quoteCoinType,
+    baseDecimals: market.baseDecimals,
+    quoteDecimals: market.quoteDecimals,
+    poolId: market.poolId,
+    baseBalance: info.baseBalance,
+    quoteBalance: info.quoteBalance
   }
 }
 
