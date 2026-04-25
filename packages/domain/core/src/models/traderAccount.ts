@@ -10,6 +10,7 @@ import {
 } from "@sui-amm/tooling-core/object"
 import {
   formatOptionalNumericValue,
+  formatVectorBytesAsHex,
   parseOptionalNumber
 } from "@sui-amm/tooling-core/utils/formatters"
 import {
@@ -45,12 +46,30 @@ export type TraderAccountOverview = {
   baseDecimals: number
   /** Cached decimals for the quote asset (from `Market.quote.decimals`). */
   quoteDecimals: number
+  /**
+   * Pyth feed identifier (32-byte hex, `0x`-prefixed) for the base asset, as
+   * stored in `Market.base.pyth_price_feed_id`. Use with `SuiPythClient.
+   * getPriceFeedObjectId` to resolve the on-chain `PriceInfoObject` id.
+   */
+  basePythPriceFeedIdHex: string
+  /** Pyth feed identifier hex for the quote asset (`Market.quote.pyth_price_feed_id`). */
+  quotePythPriceFeedIdHex: string
   /** Object ID of the DeepBook pool bound to this executor's Market. */
   poolId: string
   /** Current base-asset balance in the BalanceManager (u64, atoms). */
   baseBalance: string
   /** Current quote-asset balance in the BalanceManager (u64, atoms). */
   quoteBalance: string
+  /** Cumulative base-asset deposited into the executor (u128, atoms). */
+  baseDeposited: string
+  /** Cumulative quote-asset deposited into the executor (u128, atoms). */
+  quoteDeposited: string
+  /** Cumulative base-asset withdrawn from the executor (u128, atoms). */
+  baseWithdrawn: string
+  /** Cumulative quote-asset withdrawn from the executor (u128, atoms). */
+  quoteWithdrawn: string
+  /** Cumulative base-asset volume traded within current DeepBook epoch (u128). */
+  volumeBase: string
 }
 
 type TraderAccountFields = {
@@ -73,11 +92,19 @@ type MarketFields = {
 type MarketCurrencyFields = {
   coin_type?: unknown
   decimals?: unknown
+  pyth_price_feed_id?: unknown
+}
+
+type CurrencyInfoFields = {
+  balance?: unknown
+  deposited?: unknown
+  withdrawn?: unknown
 }
 
 type InfoFields = {
-  base_balance?: unknown
-  quote_balance?: unknown
+  volume_base?: unknown
+  base?: unknown
+  quote?: unknown
 }
 
 type TraderAccountCapFields = {
@@ -198,13 +225,49 @@ const resolveMarketInfo = (fields: TraderAccountFields) => {
     "Quote decimals"
   )
 
+  const basePythPriceFeedIdHex = requireFeedIdHex(
+    extractFieldValueByKeys(baseFields, ["pyth_price_feed_id"]),
+    "Base Pyth price feed id"
+  )
+  const quotePythPriceFeedIdHex = requireFeedIdHex(
+    extractFieldValueByKeys(quoteFields, ["pyth_price_feed_id"]),
+    "Quote Pyth price feed id"
+  )
+
   return {
     poolId,
     baseCoinType,
     quoteCoinType,
     baseDecimals,
-    quoteDecimals
+    quoteDecimals,
+    basePythPriceFeedIdHex,
+    quotePythPriceFeedIdHex
   }
+}
+
+const requireFeedIdHex = (value: unknown, label: string): string => {
+  const formatted = formatVectorBytesAsHex(value)
+  if (formatted === "Unknown") throw new Error(`${label} is required.`)
+  return formatted
+}
+
+const requireInfoNumericField = (value: unknown, label: string): string => {
+  const formatted = formatOptionalNumericValue(value)
+  if (formatted === undefined) throw new Error(`${label} is required.`)
+  return formatted
+}
+
+const resolveCurrencyInfoFields = (
+  infoFields: InfoFields,
+  side: "base" | "quote"
+): CurrencyInfoFields => {
+  const sideFields = unwrapMoveFields(
+    extractFieldValueByKeys(infoFields, [side])
+  ) as CurrencyInfoFields | undefined
+  if (!sideFields) {
+    throw new Error(`Market maker executor info.${side} struct is required.`)
+  }
+  return sideFields
 }
 
 const resolveInfoBalances = (fields: TraderAccountFields) => {
@@ -215,17 +278,39 @@ const resolveInfoBalances = (fields: TraderAccountFields) => {
     throw new Error("Market maker executor info struct is required.")
   }
 
-  const baseBalance = formatOptionalNumericValue(
-    extractFieldValueByKeys(infoFields, ["base_balance"])
-  )
-  const quoteBalance = formatOptionalNumericValue(
-    extractFieldValueByKeys(infoFields, ["quote_balance"])
-  )
-  if (baseBalance === undefined || quoteBalance === undefined) {
-    throw new Error("Market maker executor info balances are required.")
-  }
+  const baseFields = resolveCurrencyInfoFields(infoFields, "base")
+  const quoteFields = resolveCurrencyInfoFields(infoFields, "quote")
 
-  return { baseBalance, quoteBalance }
+  return {
+    baseBalance: requireInfoNumericField(
+      extractFieldValueByKeys(baseFields, ["balance"]),
+      "Info.base.balance"
+    ),
+    quoteBalance: requireInfoNumericField(
+      extractFieldValueByKeys(quoteFields, ["balance"]),
+      "Info.quote.balance"
+    ),
+    baseDeposited: requireInfoNumericField(
+      extractFieldValueByKeys(baseFields, ["deposited"]),
+      "Info.base.deposited"
+    ),
+    quoteDeposited: requireInfoNumericField(
+      extractFieldValueByKeys(quoteFields, ["deposited"]),
+      "Info.quote.deposited"
+    ),
+    baseWithdrawn: requireInfoNumericField(
+      extractFieldValueByKeys(baseFields, ["withdrawn"]),
+      "Info.base.withdrawn"
+    ),
+    quoteWithdrawn: requireInfoNumericField(
+      extractFieldValueByKeys(quoteFields, ["withdrawn"]),
+      "Info.quote.withdrawn"
+    ),
+    volumeBase: requireInfoNumericField(
+      extractFieldValueByKeys(infoFields, ["volume_base"]),
+      "Info.volume_base"
+    )
+  }
 }
 
 const buildTraderAccountOverviewFromObject = ({
@@ -266,9 +351,16 @@ const buildTraderAccountOverviewFromObject = ({
     quoteCoinType: market.quoteCoinType,
     baseDecimals: market.baseDecimals,
     quoteDecimals: market.quoteDecimals,
+    basePythPriceFeedIdHex: market.basePythPriceFeedIdHex,
+    quotePythPriceFeedIdHex: market.quotePythPriceFeedIdHex,
     poolId: market.poolId,
     baseBalance: info.baseBalance,
-    quoteBalance: info.quoteBalance
+    quoteBalance: info.quoteBalance,
+    baseDeposited: info.baseDeposited,
+    quoteDeposited: info.quoteDeposited,
+    baseWithdrawn: info.baseWithdrawn,
+    quoteWithdrawn: info.quoteWithdrawn,
+    volumeBase: info.volumeBase
   }
 }
 

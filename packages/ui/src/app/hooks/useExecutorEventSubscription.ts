@@ -20,7 +20,7 @@ const safeNormalize = (value?: string) => {
  * inputs change.
  *
  * Useful for keeping the local copy of the Executor's `Info` struct fresh —
- * any state-changing call (deposit, withdraw, refresh_quotes, pause/unpause,
+ * any state-changing call (deposit, withdraw, refresh_quotes_permissionless, pause/unpause,
  * config update) emits an event that we can use as a signal to re-fetch.
  *
  * Errors during subscription setup (e.g. when the RPC endpoint doesn't
@@ -50,7 +50,7 @@ export const useExecutorEventSubscription = ({
     const start = async () => {
       try {
         const fn = await suiClient.subscribeEvent({
-          filter: { Package: packageId },
+          filter: { MoveEventModule: { package: packageId, module: "events" } },
           onMessage: (event) => {
             const parsed = event.parsedJson as
               | { executor_id?: string }

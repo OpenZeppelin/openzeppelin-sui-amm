@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 
 export type MockArtifact = Partial<{
   pythPackageId: string
+  pythStateId: string
   coinPackageId: string
   deepbookPackageId: string
   deepbookTokenPackageId: string

@@ -34,6 +34,82 @@ const buildMoveObject = (
     }
   }) as never
 
+// 32-byte Pyth feed identifier bytes used in fixtures; the model formats them
+// back as `0x...` hex.
+const BASE_FEED_ID_BYTES = Array.from({ length: 32 }, (_, index) => index)
+const QUOTE_FEED_ID_BYTES = Array.from(
+  { length: 32 },
+  (_, index) => 0xff - index
+)
+const BASE_FEED_ID_HEX = `0x${BASE_FEED_ID_BYTES.map((byte) => byte.toString(16).padStart(2, "0")).join("")}`
+const QUOTE_FEED_ID_HEX = `0x${QUOTE_FEED_ID_BYTES.map((byte) => byte.toString(16).padStart(2, "0")).join("")}`
+
+const POOL_ID = normalizeSuiObjectId("0xpool")
+const BASE_COIN_ADDRESS = normalizeSuiObjectId("0x2")
+const QUOTE_COIN_ADDRESS = normalizeSuiObjectId("0xusdc")
+const BASE_COIN_TYPE = `${BASE_COIN_ADDRESS}::sui::SUI`
+const QUOTE_COIN_TYPE = `${QUOTE_COIN_ADDRESS}::usdc::USDC`
+
+const buildMarketFields = () => ({
+  market: {
+    fields: {
+      pool_id: POOL_ID,
+      base: {
+        fields: {
+          coin_type: { fields: { name: BASE_COIN_TYPE } },
+          decimals: 9,
+          pyth_price_feed_id: BASE_FEED_ID_BYTES
+        }
+      },
+      quote: {
+        fields: {
+          coin_type: { fields: { name: QUOTE_COIN_TYPE } },
+          decimals: 6,
+          pyth_price_feed_id: QUOTE_FEED_ID_BYTES
+        }
+      }
+    }
+  },
+  info: {
+    fields: {
+      volume_base: "7",
+      base: {
+        fields: {
+          balance: "10",
+          deposited: "30",
+          withdrawn: "5"
+        }
+      },
+      quote: {
+        fields: {
+          balance: "20",
+          deposited: "40",
+          withdrawn: "6"
+        }
+      }
+    }
+  },
+  active: true
+})
+
+const expectedMarketOverviewSlice = {
+  active: true,
+  baseCoinType: BASE_COIN_TYPE,
+  quoteCoinType: QUOTE_COIN_TYPE,
+  baseDecimals: 9,
+  quoteDecimals: 6,
+  basePythPriceFeedIdHex: BASE_FEED_ID_HEX,
+  quotePythPriceFeedIdHex: QUOTE_FEED_ID_HEX,
+  poolId: POOL_ID,
+  baseBalance: "10",
+  quoteBalance: "20",
+  baseDeposited: "30",
+  quoteDeposited: "40",
+  baseWithdrawn: "5",
+  quoteWithdrawn: "6",
+  volumeBase: "7"
+}
+
 describe("market maker model compatibility", () => {
   beforeEach(() => {
     objectMocks.getSuiObject.mockReset()
@@ -55,7 +131,8 @@ describe("market maker model compatibility", () => {
             deposit_cap: { fields: { id: { id: "0xdeposit" } } },
             withdraw_cap: { fields: { id: { id: "0xwithdraw" } } }
           }
-        }
+        },
+        ...buildMarketFields()
       })
     })
 
@@ -71,7 +148,8 @@ describe("market maker model compatibility", () => {
       balanceManagerId: normalizeSuiObjectId("0xbalance"),
       tradeCapId: normalizeSuiObjectId("0xtrade"),
       depositCapId: normalizeSuiObjectId("0xdeposit"),
-      withdrawCapId: normalizeSuiObjectId("0xwithdraw")
+      withdrawCapId: normalizeSuiObjectId("0xwithdraw"),
+      ...expectedMarketOverviewSlice
     })
   })
 
@@ -87,7 +165,8 @@ describe("market maker model compatibility", () => {
             deposit_cap_id: "0xdeposit",
             withdraw_cap_id: "0xwithdraw"
           }
-        }
+        },
+        ...buildMarketFields()
       })
     })
 
@@ -103,7 +182,8 @@ describe("market maker model compatibility", () => {
       balanceManagerId: normalizeSuiObjectId("0xbalance"),
       tradeCapId: normalizeSuiObjectId("0xtrade"),
       depositCapId: normalizeSuiObjectId("0xdeposit"),
-      withdrawCapId: normalizeSuiObjectId("0xwithdraw")
+      withdrawCapId: normalizeSuiObjectId("0xwithdraw"),
+      ...expectedMarketOverviewSlice
     })
   })
 

@@ -41,7 +41,7 @@ export const TraderAccountProvider = ({
   const packageId = useResolvedPackageId()
 
   // Re-fetch the executor whenever it emits an event (deposit/withdraw/
-  // refresh_quotes/etc.). Falls back silently when the RPC doesn't support
+  // refresh_quotes_permissionless/etc.). Falls back silently when the RPC doesn't support
   // WebSocket subscriptions.
   useExecutorEventSubscription({
     packageId,

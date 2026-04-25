@@ -29,8 +29,7 @@ export const createEmptyCustomNetworkDraft = (): TCustomNetworkDraft => ({
   label: "",
   rpcUrl: "",
   explorerUrl: "",
-  contractPackageId: "",
-  ammConfigId: ""
+  contractPackageId: ""
 })
 
 export const normalizeCustomNetworkDraft = (
@@ -40,8 +39,7 @@ export const normalizeCustomNetworkDraft = (
   label: trimValue(draft.label),
   rpcUrl: trimValue(draft.rpcUrl),
   explorerUrl: trimValue(draft.explorerUrl),
-  contractPackageId: trimValue(draft.contractPackageId),
-  ammConfigId: trimValue(draft.ammConfigId ?? "") || undefined
+  contractPackageId: trimValue(draft.contractPackageId)
 })
 
 export const validateCustomNetworkDraft = ({
@@ -125,8 +123,7 @@ export const parseStoredCustomNetworks = (
         label: trimValue(String(entry.label ?? "")),
         rpcUrl: trimValue(String(entry.rpcUrl ?? "")),
         explorerUrl: trimValue(String(entry.explorerUrl ?? "")),
-        contractPackageId: trimValue(String(entry.contractPackageId ?? "")),
-        ammConfigId: trimValue(String(entry.ammConfigId ?? "")) || undefined
+        contractPackageId: trimValue(String(entry.contractPackageId ?? ""))
       }))
       .filter(
         (entry) =>

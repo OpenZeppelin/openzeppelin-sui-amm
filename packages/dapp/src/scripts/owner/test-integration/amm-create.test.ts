@@ -114,7 +114,9 @@ describe.skip("owner amm-create integration", () => {
       expect(output.digest).toBeTruthy()
       expect(output.transactionSummary?.label).toBe("create-amm")
       expect(output.ammConfig.baseSpreadBps).toBe(baseSpreadBps)
-      expect(output.ammConfig.volatilityMultiplierBps).toBe(volatilityMultiplierBps)
+      expect(output.ammConfig.volatilityMultiplierBps).toBe(
+        volatilityMultiplierBps
+      )
       expect(output.ammConfig.active).toBe(true)
       expect(normalizeHex(output.ammConfig.basePythPriceFeedIdHex)).toBe(
         normalizeHex(pythPriceFeedId)
@@ -134,9 +136,9 @@ describe.skip("owner amm-create integration", () => {
         objectArtifacts,
         output.ammConfig.configId
       )
-      expect(
-        createdArtifact?.objectType?.endsWith(EXECUTOR_TYPE_SUFFIX)
-      ).toBe(true)
+      expect(createdArtifact?.objectType?.endsWith(EXECUTOR_TYPE_SUFFIX)).toBe(
+        true
+      )
       expect(createdArtifact?.initialSharedVersion).toBe(
         output.initialSharedVersion
       )

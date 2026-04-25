@@ -4,6 +4,7 @@ use local_mock_pyth::i64;
 use local_mock_pyth::price;
 use local_mock_pyth::price_feed::{Self, PriceFeed};
 use local_mock_pyth::price_identifier::{Self, PriceIdentifier};
+use local_mock_pyth::state::{Self, State};
 use sui::clock::Clock;
 
 // === Structs ===
@@ -66,8 +67,11 @@ public(package) fun current_timestamp_seconds(clock: &Clock): u64 {
     clock.timestamp_ms() / 1000
 }
 
-/// Publish and share a new mock price feed on localnet.
+/// Publish and share a new mock price feed on localnet, and register it in
+/// the `State`'s feed table so `@pythnetwork/pyth-sui-js`'s
+/// `getPriceFeedObjectId(feedId)` can resolve it.
 public fun publish_price_feed(
+    state: &mut State,
     feed_id: vector<u8>,
     price_magnitude: u64,
     price_is_negative: bool,
@@ -92,6 +96,11 @@ public fun publish_price_feed(
         price_feed,
     );
     let price_info_object = new_price_info_object(price_info, ctx);
+
+    // Register the new PriceInfoObject in the State's feed table.
+    let table = state::price_info_table_mut(state);
+    table.add(price_identifier, price_info_object.id.to_inner());
+
     transfer::share_object(price_info_object);
 }
 

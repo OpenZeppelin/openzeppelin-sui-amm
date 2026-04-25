@@ -193,10 +193,7 @@ export const useUpdateAmmConfigModalState = ({
   )
 
   const shouldShowFieldError = useCallback(
-    <K extends AmmConfigFieldKey>(
-      key: K,
-      error?: string
-    ): error is string =>
+    <K extends AmmConfigFieldKey>(key: K, error?: string): error is string =>
       Boolean(error && shouldShowFieldFeedback(key, hasAttemptedSubmit)),
     [hasAttemptedSubmit, shouldShowFieldFeedback]
   )
@@ -320,7 +317,6 @@ export const useUpdateAmmConfigModalState = ({
       updateTransaction.setSender(walletAddress)
 
       let digest = ""
-      let transactionBlock: SuiTransactionBlockResponse
 
       failureStage = "execute"
       if (isLocalnet) {
@@ -338,7 +334,7 @@ export const useUpdateAmmConfigModalState = ({
 
       failureStage = "fetch"
       // Wait for indexing so the optimistic refresh below sees the new state.
-      transactionBlock = await waitForTransactionBlock(suiClient, digest)
+      const transactionBlock = await waitForTransactionBlock(suiClient, digest)
 
       const optimisticOverview = buildOptimisticOverview({
         currentConfig: ammConfig,

@@ -1,6 +1,6 @@
 /**
  * Localnet-only. Creates a DeepBook permissionless pool between SUI (base) and
- * LocalMockUsd (quote) — or caller-supplied coin types — and records the pool
+ * USDC mock (quote) — or caller-supplied coin types — and records the pool
  * ID in mock.localnet.json for reuse. Idempotent: re-runs reuse an existing
  * matching pool unless --force is passed.
  *
@@ -12,10 +12,6 @@
 import { normalizeStructTag, normalizeSuiObjectId } from "@mysten/sui/utils"
 import yargs from "yargs"
 
-import {
-  fetchCoinBalances,
-  selectRichestCoin
-} from "@sui-amm/tooling-core/coin"
 import { SUI_COIN_TYPE } from "@sui-amm/tooling-core/constants"
 import { assertLocalnetNetwork } from "@sui-amm/tooling-core/network"
 import { findCreatedByType } from "@sui-amm/tooling-core/transactions"
@@ -39,7 +35,6 @@ import {
 
 process.env.SUI_NETWORK = "localnet"
 
-const POOL_CREATION_FEE = 500_000_000n // 500 DEEP with 6 decimals
 const DEFAULT_TICK_SIZE = "1000"
 const DEFAULT_LOT_SIZE = "1000000"
 const DEFAULT_MIN_SIZE = "10000000"
@@ -70,13 +65,13 @@ const resolveQuoteCoinType = (
   coins: MockArtifact["coins"]
 ): string => {
   if (cliValue?.trim()) return normalizeStructTag(cliValue.trim())
-  const localMockUsd = coins?.find((coin) => coin.label === "LocalMockUsd")
-  if (!localMockUsd) {
+  const usdc = coins?.find((coin) => coin.label === "USDC")
+  if (!usdc) {
     throw new Error(
-      "Could not resolve default quote coin (LocalMockUsd) — pass --quote-coin-type to override."
+      "Could not resolve default quote coin (USDC) — pass --quote-coin-type to override."
     )
   }
-  return normalizeStructTag(localMockUsd.coinType)
+  return normalizeStructTag(usdc.coinType)
 }
 
 const findExistingPool = ({
@@ -108,8 +103,8 @@ runSuiScript(
     const deepbookRegistryId = normalizeSuiObjectId(
       requireField(mockArtifact.deepbookRegistryId, "deepbookRegistryId")
     )
-    const deepbookTokenPackageId = normalizeSuiObjectId(
-      requireField(mockArtifact.deepbookTokenPackageId, "deepbookTokenPackageId")
+    const deepbookAdminCapId = normalizeSuiObjectId(
+      requireField(mockArtifact.deepbookAdminCapId, "deepbookAdminCapId")
     )
 
     const baseCoinType = resolveBaseCoinType(cliArguments.baseCoinType)
@@ -140,40 +135,27 @@ runSuiScript(
       signer: tooling.loadedEd25519KeyPair
     })
 
-    const deepCoinType = `${deepbookTokenPackageId}::deep::DEEP`
-    const signerAddress = tooling.loadedEd25519KeyPair.toSuiAddress()
-    const deepCoins = await fetchCoinBalances(
-      { owner: signerAddress, coinType: deepCoinType },
-      { suiClient: tooling.suiClient }
-    )
-    const richestDeepCoin = selectRichestCoin(deepCoins)
-    if (!richestDeepCoin || richestDeepCoin.balance < POOL_CREATION_FEE) {
-      throw new Error(
-        `Signer ${signerAddress} has insufficient DEEP (${
-          richestDeepCoin?.balance ?? 0n
-        } / ${POOL_CREATION_FEE} required). DEEP is minted to the publisher when mock:setup runs; ensure the same keypair is used here.`
-      )
-    }
-
     const registryShared = await tooling.getMutableSharedObject({
       objectId: deepbookRegistryId
     })
 
+    // Use create_pool_admin with whitelisted_pool=true to get a zero-fee pool.
+    // Permissionless pools charge maker/taker fees out of the input asset,
+    // and our `executor::refresh_quotes_permissionless` allocates 100% of the BM balance to
+    // the four orders, so a non-zero fee makes the second lock in the PTB
+    // abort with EBalanceManagerBalanceTooLow.
     const transaction = newTransaction(DEFAULT_TX_GAS_BUDGET)
-    const [feeCoin] = transaction.splitCoins(
-      transaction.object(richestDeepCoin.coinObjectId),
-      [transaction.pure.u64(POOL_CREATION_FEE)]
-    )
-
     transaction.moveCall({
-      target: `${deepbookPackageId}::pool::create_permissionless_pool`,
+      target: `${deepbookPackageId}::pool::create_pool_admin`,
       typeArguments: [baseCoinType, quoteCoinType],
       arguments: [
         transaction.sharedObjectRef(registryShared.sharedRef),
         transaction.pure.u64(cliArguments.tickSize),
         transaction.pure.u64(cliArguments.lotSize),
         transaction.pure.u64(cliArguments.minSize),
-        feeCoin
+        transaction.pure.bool(true), // whitelisted_pool — zero fees
+        transaction.pure.bool(false), // stable_pool
+        transaction.object(deepbookAdminCapId)
       ]
     })
 
@@ -212,9 +194,7 @@ runSuiScript(
         `Overwrote existing pool ${existingPool.poolId} with new pool ${poolId}.`
       )
     }
-    logKeyValueGreen("Created pool")(
-      `${baseCoinType} / ${quoteCoinType}`
-    )
+    logKeyValueGreen("Created pool")(`${baseCoinType} / ${quoteCoinType}`)
     logKeyValueGreen("poolId")(poolId)
     logKeyValueGreen("tickSize")(cliArguments.tickSize)
     logKeyValueGreen("lotSize")(cliArguments.lotSize)
@@ -232,7 +212,7 @@ runSuiScript(
       alias: ["quote-coin-type", "quote"],
       type: "string",
       description:
-        "Quote asset type tag. Defaults to the LocalMockUsd coin recorded in mock.localnet.json."
+        "Quote asset type tag. Defaults to the USDC mock coin recorded in mock.localnet.json."
     })
     .option("tickSize", {
       alias: ["tick-size"],

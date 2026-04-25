@@ -9,20 +9,20 @@ import {
   useSuiClientContext
 } from "@mysten/dapp-kit"
 import type { IdentifierString } from "@mysten/wallet-standard"
+import { SuiPythClient } from "@pythnetwork/pyth-sui-js"
 import {
-  buildDepositTransaction,
-  buildWithdrawWithPauseTransaction
-} from "@sui-amm/domain-core/ptb/amm"
-import {
-  fetchCoinBalances,
-  selectRichestCoin
-} from "@sui-amm/tooling-core/coin"
-import { SUI_COIN_TYPE } from "@sui-amm/tooling-core/constants"
+  DEFAULT_MOCK_PRICE_FEED,
+  deriveMockPriceComponents,
+  findMockPriceFeedConfig
+} from "@sui-amm/domain-core/models/pyth"
+import { buildLocalnetRefreshQuotesTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
-import { parseCoinAmount } from "@sui-amm/tooling-core/utils/formatters"
 import { useCallback, useMemo, useState } from "react"
-import { resolveAmmAdminCapId } from "../helpers/ammAdminCap"
+import {
+  LOCALNET_PYTH_MOCK_PACKAGE_ID,
+  LOCALNET_PYTH_STATE_ID
+} from "../config/network"
 import {
   getLocalnetClient,
   makeLocalnetExecutor,
@@ -41,32 +41,13 @@ import { useTraderAccountContext } from "../providers/TraderAccountProvider"
 import useExplorerUrl from "./useExplorerUrl"
 import useResolvedPackageId from "./useResolvedPackageId"
 
-export type FundingMode = "deposit" | "withdraw"
-export type CoinSide = "base" | "quote"
-
-type FormState = {
-  coinSide: CoinSide
-  amount: string
-}
-
 type TransactionState =
   | { status: "idle" }
   | { status: "processing" }
   | { status: "success"; digest: string }
   | { status: "error"; error: string; details?: string }
 
-const initialFormState = (): FormState => ({
-  coinSide: "base",
-  amount: ""
-})
-
-const normalizeCoinType = (raw: string) => raw.trim().toLowerCase()
-
-const isSuiCoinType = (coinType: string) =>
-  normalizeCoinType(coinType) === normalizeCoinType(SUI_COIN_TYPE) ||
-  normalizeCoinType(coinType).endsWith("::sui::sui")
-
-export const useFundingState = (mode: FundingMode) => {
+export const useRefreshQuotesState = () => {
   const currentAccount = useCurrentAccount()
   const { currentWallet } = useCurrentWallet()
   const suiClient = useSuiClient()
@@ -88,7 +69,6 @@ export const useFundingState = (mode: FundingMode) => {
     [localnetClient, signTransaction.mutateAsync]
   )
 
-  const [formState, setFormState] = useState<FormState>(initialFormState)
   const [transactionState, setTransactionState] = useState<TransactionState>({
     status: "idle"
   })
@@ -98,54 +78,37 @@ export const useFundingState = (mode: FundingMode) => {
   const traderAccount =
     overview.status === "success" ? overview.traderAccount : undefined
 
-  const activeDecimals = useMemo(() => {
-    if (!traderAccount) return undefined
-    return formState.coinSide === "base"
-      ? traderAccount.baseDecimals
-      : traderAccount.quoteDecimals
-  }, [formState.coinSide, traderAccount])
-
-  const amountError = useMemo(() => {
-    const trimmed = formState.amount.trim()
-    if (!trimmed) return "Amount is required."
-    if (activeDecimals === undefined) return undefined
-    try {
-      const atoms = parseCoinAmount({
-        value: trimmed,
-        decimals: activeDecimals
-      })
-      if (atoms <= 0n) return "Amount must be greater than zero."
-      return undefined
-    } catch (error) {
-      return error instanceof Error
-        ? error.message
-        : "Amount must be a positive decimal number."
-    }
-  }, [activeDecimals, formState.amount])
-
+  const isProcessing = transactionState.status === "processing"
   const isSubmissionPending = isLocalnet
     ? signTransaction.isPending
     : signAndExecuteTransaction.isPending
 
+  const localnetArtifactsMissing =
+    isLocalnet && (!LOCALNET_PYTH_MOCK_PACKAGE_ID || !LOCALNET_PYTH_STATE_ID)
+
+  const supportsNetwork = isLocalnet
   const canSubmit =
+    supportsNetwork &&
+    !localnetArtifactsMissing &&
     Boolean(
       walletAddress && contractPackageId && executorId && traderAccount
     ) &&
-    !amountError &&
-    transactionState.status !== "processing" &&
+    traderAccount?.active === true &&
+    !isProcessing &&
     isSubmissionPending !== true
 
-  const resetForm = useCallback(() => {
-    setFormState(initialFormState())
-    setTransactionState({ status: "idle" })
-  }, [])
-
-  const handleInputChange = useCallback(
-    <K extends keyof FormState>(key: K, value: FormState[K]) => {
-      setFormState((previous) => ({ ...previous, [key]: value }))
-    },
-    []
-  )
+  const disabledReason = (() => {
+    if (!walletAddress) return "Connect a wallet."
+    if (!contractPackageId) return "Contract package ID missing."
+    if (!supportsNetwork)
+      return "Manual refresh is implemented for localnet only. Real Pyth updates require Hermes VAA integration."
+    if (localnetArtifactsMissing)
+      return "Mock Pyth package/price info IDs missing from .env.local."
+    if (!traderAccount) return "Market maker overview still loading."
+    if (traderAccount.active === false)
+      return "Executor is paused — unpause first."
+    return undefined
+  })()
 
   const handleSubmit = useCallback(async () => {
     if (!walletAddress) {
@@ -162,21 +125,29 @@ export const useFundingState = (mode: FundingMode) => {
       })
       return
     }
-    if (!executorId) {
+    if (!executorId || !traderAccount) {
       setTransactionState({
         status: "error",
         error: "Market maker executor is not resolved yet."
       })
       return
     }
-    if (!traderAccount) {
+    if (!isLocalnet) {
       setTransactionState({
         status: "error",
-        error: "Market maker overview is not loaded yet."
+        error:
+          "Manual refresh is only implemented on localnet. Mainnet/testnet would require fetching Pyth VAA updates via Hermes before calling refresh_quotes_permissionless."
       })
       return
     }
-    if (amountError) return
+    if (!LOCALNET_PYTH_MOCK_PACKAGE_ID || !LOCALNET_PYTH_STATE_ID) {
+      setTransactionState({
+        status: "error",
+        error:
+          "Mock Pyth artifacts are not configured. Check NEXT_PUBLIC_LOCALNET_PYTH_MOCK_PACKAGE_ID and NEXT_PUBLIC_LOCALNET_PYTH_STATE_ID in .env.local."
+      })
+      return
+    }
 
     const expectedChain = `sui:${network}` as IdentifierString
     const accountChains = currentAccount?.chains ?? []
@@ -184,8 +155,6 @@ export const useFundingState = (mode: FundingMode) => {
       currentWallet ?? currentAccount ?? undefined,
       expectedChain
     )
-    const chainMismatch =
-      accountChains.length > 0 && !accountChains.includes(expectedChain)
 
     const walletContext = {
       appNetwork: network,
@@ -194,20 +163,7 @@ export const useFundingState = (mode: FundingMode) => {
       walletVersion: currentWallet?.version,
       accountAddress: walletAddress,
       accountChains,
-      chainMismatch,
       localnetSupported
-    }
-
-    if (!isLocalnet && chainMismatch) {
-      setTransactionState({
-        status: "error",
-        error: `Wallet chain mismatch. Switch your wallet to ${network}.`,
-        details: safeJsonStringify(
-          { walletContext, reason: "chain_mismatch" },
-          2
-        )
-      })
-      return
     }
     if (!currentWallet) {
       setTransactionState({
@@ -226,100 +182,110 @@ export const useFundingState = (mode: FundingMode) => {
 
     let failureStage:
       | "prepare"
-      | "resolve-admin-cap"
       | "resolve-executor"
       | "resolve-pool"
-      | "resolve-source-coin"
+      | "resolve-price-info"
       | "execute"
       | "fetch" = "prepare"
 
     try {
-      const decimals =
-        formState.coinSide === "base"
-          ? traderAccount.baseDecimals
-          : traderAccount.quoteDecimals
-      const amount = parseCoinAmount({
-        value: formState.amount.trim(),
-        decimals
-      })
-      if (amount <= 0n) throw new Error("Amount must be greater than zero.")
-      const coinTypeTag =
-        formState.coinSide === "base"
-          ? traderAccount.baseCoinType
-          : traderAccount.quoteCoinType
-
-      failureStage = "resolve-admin-cap"
-      const adminCapId = await resolveAmmAdminCapId({
-        ownerAddress: walletAddress,
-        packageId: contractPackageId,
-        suiClient
-      })
-      if (!adminCapId) {
-        throw new Error("AdminCap not found for the connected wallet.")
-      }
-
       failureStage = "resolve-executor"
       const executorShared = await getSuiSharedObject(
         { objectId: executorId, mutable: true },
         { suiClient }
       )
 
-      let transaction
-      if (mode === "deposit") {
-        let sourceCoinId: string | undefined
-        if (!isSuiCoinType(coinTypeTag)) {
-          failureStage = "resolve-source-coin"
-          const coins = await fetchCoinBalances(
-            { owner: walletAddress, coinType: coinTypeTag },
-            { suiClient }
-          )
-          const richest = selectRichestCoin(coins)
-          if (!richest) {
-            throw new Error(
-              `Wallet holds no Coin<${coinTypeTag}>. Mint or transfer some before depositing.`
-            )
-          }
-          if (richest.balance < amount) {
-            throw new Error(
-              `Wallet holds only ${richest.balance} atoms of ${coinTypeTag}; need ${amount}.`
-            )
-          }
-          sourceCoinId = richest.coinObjectId
-        }
+      failureStage = "resolve-pool"
+      const poolShared = await getSuiSharedObject(
+        { objectId: traderAccount.poolId, mutable: true },
+        { suiClient }
+      )
 
-        transaction = buildDepositTransaction({
-          packageId: contractPackageId,
-          executor: executorShared,
-          adminCapId,
-          coinTypeTag,
-          amount,
-          sourceCoinId
-        })
-      } else {
-        failureStage = "resolve-pool"
-        const poolShared = await getSuiSharedObject(
-          { objectId: traderAccount.poolId, mutable: true },
-          { suiClient }
+      failureStage = "resolve-price-info"
+      // Resolve the on-chain PriceInfoObject IDs from the feed-id hex stored
+      // in `Market.{base,quote}.pyth_price_feed_id`. The mock Pyth `State`
+      // exposes the same `b"price_info"` dynamic-field registry as real Pyth,
+      // so the SDK call works identically on localnet and on real networks.
+      // Wormhole isn't used by `getPriceFeedObjectId`, so reusing the pyth
+      // state id as a stand-in is safe on localnet.
+      const pythClient = new SuiPythClient(
+        suiClient,
+        LOCALNET_PYTH_STATE_ID,
+        LOCALNET_PYTH_STATE_ID
+      )
+      const [basePriceInfoObjectId, quotePriceInfoObjectId] = await Promise.all(
+        [
+          pythClient.getPriceFeedObjectId(traderAccount.basePythPriceFeedIdHex),
+          pythClient.getPriceFeedObjectId(traderAccount.quotePythPriceFeedIdHex)
+        ]
+      )
+      if (!basePriceInfoObjectId || !quotePriceInfoObjectId) {
+        throw new Error(
+          `Pyth state ${LOCALNET_PYTH_STATE_ID} has no PriceInfoObject for feed(s) ${[
+            !basePriceInfoObjectId
+              ? `base ${traderAccount.basePythPriceFeedIdHex}`
+              : undefined,
+            !quotePriceInfoObjectId
+              ? `quote ${traderAccount.quotePythPriceFeedIdHex}`
+              : undefined
+          ]
+            .filter(Boolean)
+            .join(", ")}. Re-run mock:setup --re-publish to seed missing feeds.`
         )
-        transaction = buildWithdrawWithPauseTransaction({
-          packageId: contractPackageId,
-          executor: executorShared,
-          adminCapId,
-          coinTypeTag,
-          amount,
-          recipientAddress: walletAddress,
-          currentActive: traderAccount.active,
-          pool: poolShared,
-          baseAssetTypeTag: traderAccount.baseCoinType,
-          quoteAssetTypeTag: traderAccount.quoteCoinType
-        })
       }
+      const [basePriceInfo, quotePriceInfo] =
+        basePriceInfoObjectId === quotePriceInfoObjectId
+          ? await Promise.all([
+              getSuiSharedObject(
+                { objectId: basePriceInfoObjectId, mutable: true },
+                { suiClient }
+              )
+            ]).then(([shared]) => [shared, shared] as const)
+          : await Promise.all([
+              getSuiSharedObject(
+                { objectId: basePriceInfoObjectId, mutable: true },
+                { suiClient }
+              ),
+              getSuiSharedObject(
+                { objectId: quotePriceInfoObjectId, mutable: true },
+                { suiClient }
+              )
+            ])
+
+      const baseFeedConfig =
+        findMockPriceFeedConfig({
+          feedIdHex: traderAccount.basePythPriceFeedIdHex
+        }) ?? DEFAULT_MOCK_PRICE_FEED
+      const quoteFeedConfig =
+        findMockPriceFeedConfig({
+          feedIdHex: traderAccount.quotePythPriceFeedIdHex
+        }) ?? DEFAULT_MOCK_PRICE_FEED
+      const basePriceComponents = {
+        ...deriveMockPriceComponents(baseFeedConfig),
+        confidence: baseFeedConfig.confidence
+      }
+      const quotePriceComponents = {
+        ...deriveMockPriceComponents(quoteFeedConfig),
+        confidence: quoteFeedConfig.confidence
+      }
+
+      const transaction = buildLocalnetRefreshQuotesTransaction({
+        packageId: contractPackageId,
+        executor: executorShared,
+        pool: poolShared,
+        baseAssetTypeTag: traderAccount.baseCoinType,
+        quoteAssetTypeTag: traderAccount.quoteCoinType,
+        pythMockPackageId: LOCALNET_PYTH_MOCK_PACKAGE_ID,
+        basePriceInfoObject: basePriceInfo,
+        quotePriceInfoObject: quotePriceInfo,
+        basePriceComponents,
+        quotePriceComponents
+      })
 
       transaction.setSender(walletAddress)
 
       failureStage = "execute"
       let digest = ""
-
       if (isLocalnet) {
         const result = await localnetExecutor(transaction, {
           chain: expectedChain
@@ -334,16 +300,13 @@ export const useFundingState = (mode: FundingMode) => {
       }
 
       failureStage = "fetch"
-      // Wait for the read-side indexer to catch up before refreshing balances,
-      // otherwise the next getObject(executor) call returns the pre-tx Info
-      // struct and the dashboard appears not to update.
       await waitForTransactionBlock(suiClient, digest)
 
       setTransactionState({ status: "success", digest })
       if (explorerUrl) {
         notification.txSuccess(transactionUrl(explorerUrl, digest), toastId)
       } else {
-        notification.success(`Transaction submitted (${digest})`, toastId)
+        notification.success(`Quotes refreshed (${digest})`, toastId)
       }
       refreshTraderAccount()
     } catch (error) {
@@ -370,17 +333,13 @@ export const useFundingState = (mode: FundingMode) => {
       )
     }
   }, [
-    amountError,
     contractPackageId,
     currentAccount,
     currentWallet,
     executorId,
     explorerUrl,
-    formState.amount,
-    formState.coinSide,
     isLocalnet,
     localnetExecutor,
-    mode,
     network,
     refreshTraderAccount,
     signAndExecuteTransaction,
@@ -390,13 +349,11 @@ export const useFundingState = (mode: FundingMode) => {
   ])
 
   return {
-    formState,
-    amountError,
     transactionState,
     canSubmit,
-    handleInputChange,
-    handleSubmit,
-    resetForm,
-    traderAccount
+    disabledReason,
+    isProcessing,
+    supportsNetwork,
+    handleSubmit
   }
 }

@@ -11,11 +11,7 @@ const REDIRECT_STATUSES = new Set([
   "missing-config"
 ])
 
-export default function TerminalLayout({
-  children
-}: {
-  children: ReactNode
-}) {
+export default function TerminalLayout({ children }: { children: ReactNode }) {
   const router = useRouter()
   const { resolution } = useTraderAccountContext()
 

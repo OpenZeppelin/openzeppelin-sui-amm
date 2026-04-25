@@ -10,32 +10,32 @@ const MOCK_COIN_SUPPLY: u64 = 1_000_000_000_000_000_000;
 // === Structs ===
 
 /// Dev/local-only mock USD coin. Published for localnet convenience.
-public struct LocalMockUsd has key, store {
+public struct USDC has key, store {
     /// Unique ID for the coin object.
     id: UID,
 }
 
 // === Public Functions ===
 
-/// Initializes the local mock USD currency.
+/// Initializes the local mock USDC currency.
 ///
-/// This can only be called once per `(LocalMockUsd, CoinRegistry)` pair because
+/// This can only be called once per `(USDC, CoinRegistry)` pair because
 /// each currency is a unique object derived from the type and the registry.
 /// Any subsequent initialization attempt for the same pair will fail.
 ///
 /// The type itself participates in runtime address
 /// derivation even when no values of that type exist yet.
-entry fun init_local_mock_usd(
+entry fun init_usdc(
     registry: &mut coin_registry::CoinRegistry,
     recipient: address,
     ctx: &mut TxContext,
 ) {
-    let (init, mut treasury_cap) = coin_registry::new_currency<LocalMockUsd>(
+    let (init, mut treasury_cap) = coin_registry::new_currency<USDC>(
         registry,
         6,
-        b"USDc".to_string(),
-        b"Local Mock USD".to_string(),
-        b"Local mock asset for development only.".to_string(),
+        b"USDC".to_string(),
+        b"USD Coin (mock)".to_string(),
+        b"Local mock USDC for development only.".to_string(),
         b"".to_string(),
         ctx,
     );

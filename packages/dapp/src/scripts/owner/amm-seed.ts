@@ -366,7 +366,8 @@ const resolveExpectedExistingAmmConfigInputs = async ({
     basePythPriceFeedIdHex,
     quotePythPriceFeedIdHex: existingOverview.quotePythPriceFeedIdHex,
     volatilityMultiplierBps:
-      cliArguments.volatilityMultiplierBps ?? existingOverview.volatilityMultiplierBps,
+      cliArguments.volatilityMultiplierBps ??
+      existingOverview.volatilityMultiplierBps,
     baseSpreadBps: cliArguments.baseSpreadBps ?? existingOverview.baseSpreadBps
   })
 }
@@ -398,7 +399,9 @@ const collectAmmConfigInputMismatches = ({
     )
   }
 
-  if (existingOverview.volatilityMultiplierBps !== expectedVolatilityMultiplierBps) {
+  if (
+    existingOverview.volatilityMultiplierBps !== expectedVolatilityMultiplierBps
+  ) {
     mismatches.push(
       `volatilityMultiplierBps expected ${expectedVolatilityMultiplierBps} but got ${existingOverview.volatilityMultiplierBps}`
     )

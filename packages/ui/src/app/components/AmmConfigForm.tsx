@@ -42,7 +42,8 @@ const FIELD_SPECS: FieldSpec[] = [
   {
     key: "volatilityMultiplierBps",
     title: "Volatility multiplier (bps)",
-    description: "0+. Buffer on top of base spread, scales with Pyth confidence.",
+    description:
+      "0+. Buffer on top of base spread, scales with Pyth confidence.",
     placeholder: "10000"
   },
   {
@@ -66,7 +67,8 @@ const FIELD_SPECS: FieldSpec[] = [
   {
     key: "outerBalanceBps",
     title: "Outer balance (bps)",
-    description: "0–9999. Share of balance allocated to outer (volatility) order.",
+    description:
+      "0–9999. Share of balance allocated to outer (volatility) order.",
     placeholder: "5000"
   },
   {

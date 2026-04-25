@@ -80,7 +80,9 @@ export const useBotControlState = () => {
     : signAndExecuteTransaction.isPending
 
   const ready =
-    Boolean(walletAddress && contractPackageId && executorId && traderAccount) &&
+    Boolean(
+      walletAddress && contractPackageId && executorId && traderAccount
+    ) &&
     !isProcessing &&
     isSubmissionPending !== true
 

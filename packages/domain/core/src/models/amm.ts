@@ -107,8 +107,7 @@ const buildAmmConfigOverviewFromObject = ({
   const executorFields = unwrapMoveObjectFields<ExecutorFields>(object)
   const config =
     unwrapNestedFields<AmmConfigFields>(executorFields.config) ?? {}
-  const market =
-    unwrapNestedFields<MarketFields>(executorFields.market) ?? {}
+  const market = unwrapNestedFields<MarketFields>(executorFields.market) ?? {}
   const baseCurrency =
     unwrapNestedFields<MarketCurrencyFields>(market.base) ?? {}
   const quoteCurrency =
@@ -225,7 +224,9 @@ export const resolveAmmConfigInputs = ({
   inventorySkewBps: bigint
 } => ({
   baseSpreadBps: resolveBaseSpreadBps(baseSpreadBps),
-  volatilityMultiplierBps: resolveVolatilityMultiplierBps(volatilityMultiplierBps),
+  volatilityMultiplierBps: resolveVolatilityMultiplierBps(
+    volatilityMultiplierBps
+  ),
   basePythPriceFeedIdHex,
   basePythPriceFeedIdBytes: parsePythPriceFeedIdBytes(basePythPriceFeedIdHex),
   quotePythPriceFeedIdHex,

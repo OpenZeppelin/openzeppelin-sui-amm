@@ -194,6 +194,9 @@ importers:
       '@mysten/wallet-standard':
         specifier: ^0.19.9
         version: 0.19.9(typescript@5.9.3)
+      '@pythnetwork/pyth-sui-js':
+        specifier: ^2.4.0
+        version: 2.4.0(axios@1.15.1)(typescript@5.9.3)
       '@radix-ui/react-select':
         specifier: ^2.2.6
         version: 2.2.6(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)

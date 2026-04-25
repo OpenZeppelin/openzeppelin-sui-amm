@@ -68,8 +68,7 @@ public struct MarketCurrency has drop, store {
 /// generically typed; the returned struct carries only the derived `pool_id`, the cached
 /// decimals, and the Pyth feed identifiers, so downstream executor state stays non-generic.
 ///
-/// Pass the returned value into `executor::create` when creating a new market maker executor
-/// or into `executor::update_market` when replacing the configured market.
+/// Pass the returned value into `executor::create` when creating a new market maker executor.
 public fun new<BaseAsset, QuoteAsset>(
     pool: &Pool<BaseAsset, QuoteAsset>,
     base_currency: &Currency<BaseAsset>,
@@ -111,75 +110,72 @@ public fun new<BaseAsset, QuoteAsset>(
 // === View helpers ===
 
 /// Returns the associated pool's object ID.
-public fun pool_id(market: &Market): ID {
-    market.pool_id
+public fun pool_id(self: &Market): ID {
+    self.pool_id
 }
 
 /// Checks whether the given pool matches the configured pool ID.
 public fun has_valid_pool<BaseAsset, QuoteAsset>(
-    market: &Market,
+    self: &Market,
     pool: &Pool<BaseAsset, QuoteAsset>,
 ): bool {
-    market.pool_id == object::id(pool)
+    self.pool_id == object::id(pool)
 }
 
 /// Returns the base asset type.
-public fun base_type(market: &Market): TypeName {
-    market.base.coin_type
+public fun base_type(self: &Market): TypeName {
+    self.base.coin_type
 }
 
 /// Returns the quote asset type.
-public fun quote_type(market: &Market): TypeName {
-    market.quote.coin_type
+public fun quote_type(self: &Market): TypeName {
+    self.quote.coin_type
 }
 
 /// Returns the cached base asset decimals.
-public fun base_decimals(market: &Market): u8 {
-    market.base.decimals
+public fun base_decimals(self: &Market): u8 {
+    self.base.decimals
 }
 
 /// Returns the cached quote asset decimals.
-public fun quote_decimals(market: &Market): u8 {
-    market.quote.decimals
+public fun quote_decimals(self: &Market): u8 {
+    self.quote.decimals
 }
 
 /// Returns the Pyth base asset price feed ID bytes.
-public fun base_pyth_price_feed_id(market: &Market): vector<u8> {
-    market.base.pyth_price_feed_id
+public fun base_pyth_price_feed_id(self: &Market): vector<u8> {
+    self.base.pyth_price_feed_id
 }
 
 /// Returns the Pyth quote asset price feed ID bytes.
-public fun quote_pyth_price_feed_id(market: &Market): vector<u8> {
-    market.quote.pyth_price_feed_id
+public fun quote_pyth_price_feed_id(self: &Market): vector<u8> {
+    self.quote.pyth_price_feed_id
 }
 
 /// Checks whether the price info object contains a Pyth base asset price feed ID matching the
 /// configured market.
-public fun has_valid_base_pyth_feed_id(market: &Market, price_info_object: &PriceInfoObject): bool {
+public fun has_valid_base_pyth_feed_id(self: &Market, price_info_object: &PriceInfoObject): bool {
     let price_info = price_info_object.get_price_info_from_price_info_object();
     let actual_price_feed_id = price_info.get_price_identifier().get_bytes();
-    actual_price_feed_id == market.base.pyth_price_feed_id
+    actual_price_feed_id == self.base.pyth_price_feed_id
 }
 
 /// Checks whether the price info object contains a Pyth quote asset price feed ID matching the
 /// configured market.
-public fun has_valid_quote_pyth_feed_id(
-    market: &Market,
-    price_info_object: &PriceInfoObject,
-): bool {
+public fun has_valid_quote_pyth_feed_id(self: &Market, price_info_object: &PriceInfoObject): bool {
     let price_info = price_info_object.get_price_info_from_price_info_object();
     let actual_price_feed_id = price_info.get_price_identifier().get_bytes();
-    actual_price_feed_id == market.quote.pyth_price_feed_id
+    actual_price_feed_id == self.quote.pyth_price_feed_id
 }
 
 /// Returns the latest base price publish time in seconds, if any.
-public fun base_price_publish_time(market: &Market): Option<u64> {
-    market.base.price_publish_time
+public fun base_price_publish_time(self: &Market): Option<u64> {
+    self.base.price_publish_time
 }
 
 /// Returns the latest quote price publish time in seconds, if any.
-public fun quote_price_publish_time(market: &Market): Option<u64> {
-    market.quote.price_publish_time
+public fun quote_price_publish_time(self: &Market): Option<u64> {
+    self.quote.price_publish_time
 }
 
 /// Attempts to advance the cached base and quote publish times to the incoming price
@@ -188,28 +184,28 @@ public fun quote_price_publish_time(market: &Market): Option<u64> {
 /// Returns `false` when both feeds are stale (no cache mutation).
 /// The caller is expected to skip any downstream refresh work when this returns `false`.
 public(package) fun try_update_publish_time(
-    market: &mut Market,
+    self: &mut Market,
     base_price: Price,
     quote_price: Price,
 ): bool {
     let base_price_ts = base_price.get_timestamp();
-    let update_base_price_ts = market
+    let update_base_price_ts = self
         .base
         .price_publish_time
         .map!(|publish_time| publish_time < base_price_ts)
         .destroy_or!(true);
     if (update_base_price_ts) {
-        market.base.price_publish_time.swap_or_fill(base_price_ts);
+        self.base.price_publish_time.swap_or_fill(base_price_ts);
     };
 
     let quote_price_ts = quote_price.get_timestamp();
-    let update_quote_price_ts = market
+    let update_quote_price_ts = self
         .quote
         .price_publish_time
         .map!(|publish_time| publish_time < quote_price_ts)
         .destroy_or!(true);
     if (update_quote_price_ts) {
-        market.quote.price_publish_time.swap_or_fill(quote_price_ts);
+        self.quote.price_publish_time.swap_or_fill(quote_price_ts);
     };
 
     update_base_price_ts || update_quote_price_ts
@@ -228,26 +224,23 @@ public(package) fun max_decimal_power(): u8 {
 }
 
 /// Sets new base `publish_time` and returns the previous base price publish time, if any.
-public(package) fun set_base_price_publish_time(
-    market: &mut Market,
-    publish_time: u64,
-): Option<u64> {
-    market.base.price_publish_time.swap_or_fill(publish_time)
+public(package) fun set_base_price_publish_time(self: &mut Market, publish_time: u64): Option<u64> {
+    self.base.price_publish_time.swap_or_fill(publish_time)
 }
 
 /// Sets new quote `publish_time` and returns the previous quote price publish time, if any.
 public(package) fun set_quote_price_publish_time(
-    market: &mut Market,
+    self: &mut Market,
     publish_time: u64,
 ): Option<u64> {
-    market.quote.price_publish_time.swap_or_fill(publish_time)
+    self.quote.price_publish_time.swap_or_fill(publish_time)
 }
 
 /// Clears cached base and quote price publish timestamps so the next oracle read is not
 /// treated as stale/replayed.
-public(package) fun reset_price_publish_times(market: &mut Market) {
-    market.base.price_publish_time = option::none();
-    market.quote.price_publish_time = option::none();
+public(package) fun reset_price_publish_times(self: &mut Market) {
+    self.base.price_publish_time = option::none();
+    self.quote.price_publish_time = option::none();
 }
 
 /// Derive the DeepBook base/quote price and the combined confidence-to-price ratio (in basis
@@ -257,7 +250,7 @@ public(package) fun reset_price_publish_times(market: &mut Market) {
 /// `Base/Quote = (Base/USD) / (Quote/USD)` => `d(mid)/mid ≈ d_base/base + d_quote/quote`
 /// Each constituent conf_ratio is also individually bounded by `max_conf_ratio_bps`.
 public(package) fun deepbook_price(
-    market: &Market,
+    self: &Market,
     base_price: Price,
     quote_price: Price,
     max_conf_ratio_bps: u64,
@@ -277,8 +270,8 @@ public(package) fun deepbook_price(
     let price = base_mantissa * constants::float_scaling_u128() / quote_mantissa;
 
     // Include decimal adjustment for token precision mismatch.
-    let quote_total = quote_exponent + market.quote.decimals;
-    let base_total = base_exponent + market.base.decimals;
+    let quote_total = quote_exponent + self.quote.decimals;
+    let base_total = base_exponent + self.base.decimals;
     let price = if (quote_total >= base_total) {
         price.checked_mul(10_u128.pow(quote_total - base_total)).destroy_or!(abort EPriceOverflow)
     } else {

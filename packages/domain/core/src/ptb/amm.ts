@@ -171,167 +171,103 @@ export const buildUpdateConfigTransaction = ({
   return transaction
 }
 
-/**
- * Builds a transaction that replaces the market maker's `Market` (pool + Pyth feed ids + cached
- * decimals). The on-chain `executor::update_market` call requires the market maker to be paused,
- * so the caller is responsible for pausing before signing and unpausing afterwards.
- */
-export const buildUpdateMarketTransaction = ({
-  packageId,
-  executor,
-  adminCapId,
-  pool,
-  baseCurrency,
-  quoteCurrency,
-  baseAssetTypeTag,
-  quoteAssetTypeTag,
-  basePythPriceFeedIdBytes,
-  quotePythPriceFeedIdBytes
-}: {
-  packageId: string
-  executor: WrappedSuiSharedObject
-  adminCapId: string
-  pool: WrappedSuiSharedObject
-  baseCurrency: WrappedSuiSharedObject
-  quoteCurrency: WrappedSuiSharedObject
-  baseAssetTypeTag: string
-  quoteAssetTypeTag: string
-  basePythPriceFeedIdBytes: number[]
-  quotePythPriceFeedIdBytes: number[]
-}) => {
-  const validatedBasePythPriceFeedIdBytes = assertByteArrayLength(
-    basePythPriceFeedIdBytes,
-    PYTH_PRICE_FEED_ID_BYTES,
-    "basePythPriceFeedIdBytes"
-  )
-  const validatedQuotePythPriceFeedIdBytes = assertByteArrayLength(
-    quotePythPriceFeedIdBytes,
-    PYTH_PRICE_FEED_ID_BYTES,
-    "quotePythPriceFeedIdBytes"
-  )
-  const transaction = newTransaction()
+type MockPriceComponents = {
+  priceMagnitude: bigint | number
+  priceIsNegative: boolean
+  confidence: bigint | number
+  exponentMagnitude: bigint | number
+  exponentIsNegative: boolean
+}
 
-  const market = transaction.moveCall({
-    target: `${packageId}::market::new`,
-    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
-    arguments: [
-      transaction.sharedObjectRef(pool.sharedRef),
-      transaction.sharedObjectRef(baseCurrency.sharedRef),
-      transaction.sharedObjectRef(quoteCurrency.sharedRef),
-      transaction.pure.vector("u8", validatedBasePythPriceFeedIdBytes),
-      transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes)
-    ]
-  })
-
+const appendMockPriceFeedUpdate = (
+  transaction: ReturnType<typeof newTransaction>,
+  {
+    pythMockPackageId,
+    priceInfoObject,
+    components
+  }: {
+    pythMockPackageId: string
+    priceInfoObject: WrappedSuiSharedObject
+    components: MockPriceComponents
+  }
+) => {
   transaction.moveCall({
-    target: `${packageId}::executor::update_market`,
+    target: `${pythMockPackageId}::price_info::update_price_feed`,
     arguments: [
-      transaction.sharedObjectRef(executor.sharedRef),
-      transaction.object(adminCapId),
-      market
+      transaction.sharedObjectRef(priceInfoObject.sharedRef),
+      transaction.pure.u64(components.priceMagnitude),
+      transaction.pure.bool(components.priceIsNegative),
+      transaction.pure.u64(components.confidence),
+      transaction.pure.u64(components.exponentMagnitude),
+      transaction.pure.bool(components.exponentIsNegative),
+      transaction.object(SUI_CLOCK_ID)
     ]
   })
-
-  return transaction
 }
 
 /**
- * Builds an atomic transaction that replaces the market maker's `Market` and preserves its
- * active/paused state around the `executor::update_market` call (which itself requires the
- * market maker to be paused).
- *
- * If `currentActive` is true, the PTB emits:
- *   `executor::pause` (using `currentPool`) → `market::new` → `executor::update_market` →
- *   `executor::unpause`
- *
- * Otherwise (market maker already paused), the PTB only emits `market::new` +
- * `executor::update_market`, leaving the market maker paused.
- *
- * The new `Market` is built from `pool` + `baseCurrency` + `quoteCurrency`; the type tags
- * (used for the `pause` call's type arguments) must match `pool`'s parameterization.
+ * Builds a localnet-only refresh_quotes_permissionless transaction. First
+ * stamps both mock Pyth `PriceInfoObject`s with fresh timestamps so the
+ * `max_price_age_secs` check passes, then calls
+ * `executor::refresh_quotes_permissionless<Base, Quote>`. The executor must
+ * be active (unpaused) for the call to succeed.
  */
-export const buildUpdateMarketWithPauseTransaction = ({
+export const buildLocalnetRefreshQuotesTransaction = ({
   packageId,
   executor,
-  adminCapId,
-  currentActive,
-  currentPool,
   pool,
-  baseCurrency,
-  quoteCurrency,
   baseAssetTypeTag,
   quoteAssetTypeTag,
-  basePythPriceFeedIdBytes,
-  quotePythPriceFeedIdBytes
+  pythMockPackageId,
+  basePriceInfoObject,
+  quotePriceInfoObject,
+  basePriceComponents,
+  quotePriceComponents
 }: {
   packageId: string
   executor: WrappedSuiSharedObject
-  adminCapId: string
-  currentActive: boolean
-  currentPool: WrappedSuiSharedObject
   pool: WrappedSuiSharedObject
-  baseCurrency: WrappedSuiSharedObject
-  quoteCurrency: WrappedSuiSharedObject
   baseAssetTypeTag: string
   quoteAssetTypeTag: string
-  basePythPriceFeedIdBytes: number[]
-  quotePythPriceFeedIdBytes: number[]
+  pythMockPackageId: string
+  basePriceInfoObject: WrappedSuiSharedObject
+  quotePriceInfoObject: WrappedSuiSharedObject
+  basePriceComponents: MockPriceComponents
+  quotePriceComponents: MockPriceComponents
 }) => {
-  const validatedBasePythPriceFeedIdBytes = assertByteArrayLength(
-    basePythPriceFeedIdBytes,
-    PYTH_PRICE_FEED_ID_BYTES,
-    "basePythPriceFeedIdBytes"
-  )
-  const validatedQuotePythPriceFeedIdBytes = assertByteArrayLength(
-    quotePythPriceFeedIdBytes,
-    PYTH_PRICE_FEED_ID_BYTES,
-    "quotePythPriceFeedIdBytes"
-  )
   const transaction = newTransaction()
 
-  if (currentActive) {
-    transaction.moveCall({
-      target: `${packageId}::executor::pause`,
-      typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
-      arguments: [
-        transaction.sharedObjectRef(executor.sharedRef),
-        transaction.object(adminCapId),
-        transaction.sharedObjectRef(currentPool.sharedRef),
-        transaction.object(SUI_CLOCK_ID)
-      ]
+  appendMockPriceFeedUpdate(transaction, {
+    pythMockPackageId,
+    priceInfoObject: basePriceInfoObject,
+    components: basePriceComponents
+  })
+
+  // Only append the second update when the quote feed is a distinct object —
+  // double-updating the same shared object in one PTB violates Sui's
+  // single-mutation-per-object rule.
+  if (
+    basePriceInfoObject.sharedRef.objectId !==
+    quotePriceInfoObject.sharedRef.objectId
+  ) {
+    appendMockPriceFeedUpdate(transaction, {
+      pythMockPackageId,
+      priceInfoObject: quotePriceInfoObject,
+      components: quotePriceComponents
     })
   }
-
-  const market = transaction.moveCall({
-    target: `${packageId}::market::new`,
-    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
-    arguments: [
-      transaction.sharedObjectRef(pool.sharedRef),
-      transaction.sharedObjectRef(baseCurrency.sharedRef),
-      transaction.sharedObjectRef(quoteCurrency.sharedRef),
-      transaction.pure.vector("u8", validatedBasePythPriceFeedIdBytes),
-      transaction.pure.vector("u8", validatedQuotePythPriceFeedIdBytes)
-    ]
-  })
 
   transaction.moveCall({
-    target: `${packageId}::executor::update_market`,
+    target: `${packageId}::executor::refresh_quotes_permissionless`,
+    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
     arguments: [
       transaction.sharedObjectRef(executor.sharedRef),
-      transaction.object(adminCapId),
-      market
+      transaction.sharedObjectRef(pool.sharedRef),
+      transaction.sharedObjectRef(basePriceInfoObject.sharedRef),
+      transaction.sharedObjectRef(quotePriceInfoObject.sharedRef),
+      transaction.object(SUI_CLOCK_ID)
     ]
   })
-
-  if (currentActive) {
-    transaction.moveCall({
-      target: `${packageId}::executor::unpause`,
-      arguments: [
-        transaction.sharedObjectRef(executor.sharedRef),
-        transaction.object(adminCapId)
-      ]
-    })
-  }
 
   return transaction
 }
@@ -374,7 +310,7 @@ export const buildPauseTransaction = ({
 /**
  * Builds an unpause transaction for a market maker executor. Requires the
  * executor to be paused; flips `active` back to true so the next
- * `refresh_quotes` call is allowed.
+ * `refresh_quotes_permissionless` call is allowed.
  */
 export const buildUnpauseTransaction = ({
   packageId,

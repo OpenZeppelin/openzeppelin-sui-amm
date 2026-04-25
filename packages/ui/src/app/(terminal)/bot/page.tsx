@@ -3,6 +3,7 @@
 import { getStructLabel } from "@sui-amm/tooling-core/utils/formatters"
 import Button from "../../components/Button"
 import CopyableId from "../../components/CopyableId"
+import RefreshQuotesCard from "../../components/RefreshQuotesCard"
 import { useBotControlState } from "../../hooks/useBotControlState"
 
 const StatusBadge = ({ active }: { active: boolean }) => {
@@ -51,8 +52,11 @@ export default function BotPage() {
           Bot Status
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-200/70">
-          Pause cancels open orders and settles balances. Unpause re-enables
-          the next <code className="font-mono text-xs">refresh_quotes</code>{" "}
+          Pause cancels open orders and settles balances. Unpause re-enables the
+          next{" "}
+          <code className="font-mono text-xs">
+            refresh_quotes_permissionless
+          </code>{" "}
           call.
         </p>
       </header>
@@ -86,7 +90,9 @@ export default function BotPage() {
               disabled={!canPause}
               variant={active ? "primary" : "secondary"}
             >
-              {isProcessing && transactionState.status === "processing" && transactionState.action === "pause"
+              {isProcessing &&
+              transactionState.status === "processing" &&
+              transactionState.action === "pause"
                 ? "Pausing…"
                 : "Pause"}
             </Button>
@@ -95,7 +101,9 @@ export default function BotPage() {
               disabled={!canUnpause}
               variant={active === false ? "primary" : "secondary"}
             >
-              {isProcessing && transactionState.status === "processing" && transactionState.action === "unpause"
+              {isProcessing &&
+              transactionState.status === "processing" &&
+              transactionState.action === "unpause"
                 ? "Unpausing…"
                 : "Unpause"}
             </Button>
@@ -105,8 +113,7 @@ export default function BotPage() {
         {transactionState.status === "error" ? (
           <div className="mt-4 rounded-xl border border-rose-200/80 bg-rose-50/70 px-3 py-2 text-[0.7rem] text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
             <div className="font-semibold">
-              {transactionState.action === "pause" ? "Pause" : "Unpause"}{" "}
-              failed
+              {transactionState.action === "pause" ? "Pause" : "Unpause"} failed
             </div>
             <div className="mt-1">{transactionState.error}</div>
             {transactionState.details ? (
@@ -163,14 +170,7 @@ export default function BotPage() {
         </section>
       ) : undefined}
 
-      <div className="rounded-xl border border-slate-200/70 bg-white/60 px-4 py-3 text-[0.7rem] text-slate-600 dark:border-slate-50/15 dark:bg-slate-950/40 dark:text-slate-200/70">
-        <div className="font-semibold">Coming soon</div>
-        <div className="mt-1">
-          Live <code className="font-mono">refresh_quotes</code> diagnostics —
-          last quoted mid, conf ratio, and the four most recent order IDs (pulled
-          from the <code className="font-mono">QuoteUpdated</code> event feed).
-        </div>
-      </div>
+      <RefreshQuotesCard />
     </>
   )
 }

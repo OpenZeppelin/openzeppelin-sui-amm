@@ -33,7 +33,7 @@ const SideRadio = ({
   symbol?: string
   balanceDisplay?: string
 }) => (
-  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200/70 bg-white/70 p-3 transition hover:border-sds-blue/40 dark:border-slate-50/15 dark:bg-slate-950/40">
+  <label className="hover:border-sds-blue/40 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200/70 bg-white/70 p-3 transition dark:border-slate-50/15 dark:bg-slate-950/40">
     <input
       type="radio"
       checked={currentValue === value}
@@ -87,8 +87,7 @@ const FundingCard = ({
   const quoteSymbol = traderAccount
     ? getStructLabel(traderAccount.quoteCoinType)
     : undefined
-  const activeSymbol =
-    formState.coinSide === "base" ? baseSymbol : quoteSymbol
+  const activeSymbol = formState.coinSide === "base" ? baseSymbol : quoteSymbol
 
   const baseBalanceDisplay = traderAccount
     ? `${formatCoinBalance({ balance: traderAccount.baseBalance, decimals: traderAccount.baseDecimals })} ${baseSymbol ?? ""}`.trim()
@@ -110,7 +109,9 @@ const FundingCard = ({
 
       <div className="flex flex-col gap-4">
         <div>
-          <div className={`${modalFieldTitleClassName} text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60`}>
+          <div
+            className={`${modalFieldTitleClassName} text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200/60`}
+          >
             Coin side
           </div>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -138,12 +139,14 @@ const FundingCard = ({
             Amount{activeSymbol ? ` (${activeSymbol})` : ""}
           </span>
           <span className={modalFieldDescriptionClassName}>
-            Decimal value. Converted to u64 atoms using the cached decimals
-            from the executor&apos;s Market.
+            Decimal value. Converted to u64 atoms using the cached decimals from
+            the executor&apos;s Market.
           </span>
           <input
             value={formState.amount}
-            onChange={(event) => handleInputChange("amount", event.target.value)}
+            onChange={(event) =>
+              handleInputChange("amount", event.target.value)
+            }
             disabled={isProcessing}
             className={modalFieldInputClassName}
             placeholder="0.5"
@@ -156,9 +159,8 @@ const FundingCard = ({
 
         {mode === "withdraw" ? (
           <div className="rounded-xl border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-[0.7rem] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-            Withdraw requires the executor to be paused. This call wraps
-            pause → withdraw → unpause atomically when the executor is
-            currently active.
+            Withdraw requires the executor to be paused. This call wraps pause →
+            withdraw → unpause atomically when the executor is currently active.
           </div>
         ) : undefined}
 
@@ -182,7 +184,9 @@ const FundingCard = ({
         {transactionState.status === "success" ? (
           <div className="rounded-xl border border-emerald-300/70 bg-emerald-50/70 px-3 py-2 text-[0.7rem] text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
             <div className="font-semibold">Submitted</div>
-            <div className="mt-1 font-mono">digest: {transactionState.digest}</div>
+            <div className="mt-1 font-mono">
+              digest: {transactionState.digest}
+            </div>
           </div>
         ) : undefined}
 

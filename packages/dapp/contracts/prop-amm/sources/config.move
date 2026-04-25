@@ -109,24 +109,24 @@ public fun new(
 // === View helpers ===
 
 /// Returns the order expiration duration in milliseconds.
-public fun order_expiration_time_ms(config: &AMMConfig): u64 {
-    config.order_expiration_time_ms
+public fun order_expiration_time_ms(self: &AMMConfig): u64 {
+    self.order_expiration_time_ms
 }
 
 /// Returns the maximum acceptable Pyth price age in seconds.
-public fun max_price_age_secs(config: &AMMConfig): u64 {
-    config.max_price_age_secs
+public fun max_price_age_secs(self: &AMMConfig): u64 {
+    self.max_price_age_secs
 }
 
 /// Returns the base spread in basis points (0..10_000).
-public fun base_spread_bps(config: &AMMConfig): u64 {
-    config.base_spread_bps
+public fun base_spread_bps(self: &AMMConfig): u64 {
+    self.base_spread_bps
 }
 
 /// Maximum acceptable confidence-to-price ratio in basis points (0..10_000).
 /// E.g: 1000 = 10%.
-public fun max_conf_ratio_bps(config: &AMMConfig): u64 {
-    config.max_conf_ratio_bps
+public fun max_conf_ratio_bps(self: &AMMConfig): u64 {
+    self.max_conf_ratio_bps
 }
 
 /// Dynamic volatility buffer multiplier in basis points [0..), applied on top of the base
@@ -137,8 +137,8 @@ public fun max_conf_ratio_bps(config: &AMMConfig): u64 {
 ///     `0` disables the dynamic buffer (outer == inner).
 ///     `10_000` applies 100% the confidence ratio.
 ///     `20_000` applies 200%.
-public fun volatility_multiplier_bps(config: &AMMConfig): u64 {
-    config.volatility_multiplier_bps
+public fun volatility_multiplier_bps(self: &AMMConfig): u64 {
+    self.volatility_multiplier_bps
 }
 
 /// Share of the settleable balance in basis points [0..10_000) allocated to the outer (volatility)
@@ -148,8 +148,8 @@ public fun volatility_multiplier_bps(config: &AMMConfig): u64 {
 /// E.g:
 ///     `0` disables the outer order (inner receives the full balance).
 ///     `5_000` splits the balance 50/50; values >= `10_000` are rejected.
-public fun outer_balance_bps(config: &AMMConfig): u64 {
-    config.outer_balance_bps
+public fun outer_balance_bps(self: &AMMConfig): u64 {
+    self.outer_balance_bps
 }
 
 /// Inventory-driven mid-shift coefficient in basis points [0..10_000), expressed as a fraction of
@@ -160,31 +160,31 @@ public fun outer_balance_bps(config: &AMMConfig): u64 {
 /// E.g:
 ///     `0` disables skewing (reservation_mid == mid).
 ///     `5_000` shifts the mid by half the `base_spread` at fully one-sided inventory.
-public fun inventory_skew_bps(config: &AMMConfig): u64 {
-    config.inventory_skew_bps
+public fun inventory_skew_bps(self: &AMMConfig): u64 {
+    self.inventory_skew_bps
 }
 
 // === Package Functions ===
 
 /// Compute the base spread in price terms for a given mid price.
-public(package) fun base_spread(config: &AMMConfig, mid_price: u64): u64 {
-    ((mid_price as u128) * (config.base_spread_bps as u128) / HUNDRED_PERCENT_BPS_U128) as u64
+public(package) fun base_spread(self: &AMMConfig, mid_price: u64): u64 {
+    mid_price.mul_div(self.base_spread_bps, HUNDRED_PERCENT_BPS)
 }
 
 /// Compute the outer (volatility) spread in price terms for a given mid price and the
 /// combined Pyth confidence ratio (in basis points). Equivalent to:
 /// `mid * (base_spread_bps + volatility_multiplier_bps * conf_ratio_bps / 10_000) / 10_000`.
-public(package) fun outer_spread(config: &AMMConfig, mid_price: u64, conf_ratio_bps: u64): u64 {
-    let volatility_buffer_bps =
-        (config.volatility_multiplier_bps as u128) * (conf_ratio_bps as u128)
-            / HUNDRED_PERCENT_BPS_U128;
-    let outer_spread_bps = (config.base_spread_bps as u128) + volatility_buffer_bps;
-    ((mid_price as u128) * outer_spread_bps / HUNDRED_PERCENT_BPS_U128) as u64
+public(package) fun outer_spread(self: &AMMConfig, mid_price: u64, conf_ratio_bps: u64): u64 {
+    let conf_based_volatility_bps = self
+        .volatility_multiplier_bps
+        .mul_div(conf_ratio_bps, HUNDRED_PERCENT_BPS);
+    let outer_spread_bps = self.base_spread_bps + conf_based_volatility_bps;
+    mid_price.mul_div(outer_spread_bps, HUNDRED_PERCENT_BPS)
 }
 
 /// Compute the amount of `balance` that should be allocated to the outer (volatility) spread order.
-public(package) fun outer_balance(config: &AMMConfig, balance: u64): u64 {
-    ((balance as u128) * (config.outer_balance_bps as u128) / HUNDRED_PERCENT_BPS_U128) as u64
+public(package) fun outer_balance(self: &AMMConfig, balance: u64): u64 {
+    balance.mul_div(self.outer_balance_bps, HUNDRED_PERCENT_BPS)
 }
 
 /// Compute the reservation mid: the oracle `mid_price` shifted by up to `base_spread`
@@ -194,13 +194,13 @@ public(package) fun outer_balance(config: &AMMConfig, balance: u64): u64 {
 /// rebalancing side never lands beyond the oracle mid.
 /// Returns `mid_price` unchanged when `inventory_skew_bps == 0` or when total inventory is zero.
 public(package) fun reservation_mid(
-    config: &AMMConfig,
+    self: &AMMConfig,
     mid_price: u64,
     base_balance: u64,
     quote_balance: u64,
 ): u64 {
-    // If skew param is zero return return mid price unchanged.
-    if (config.inventory_skew_bps == 0) {
+    // If skew param is zero return mid price unchanged.
+    if (self.inventory_skew_bps == 0) {
         return mid_price
     };
 
@@ -214,8 +214,8 @@ public(package) fun reservation_mid(
     };
 
     // Calculate shift.
-    let base_spread = config.base_spread(mid_price) as u128;
-    let skew_bps = config.inventory_skew_bps as u128;
+    let base_spread = self.base_spread(mid_price) as u128;
+    let skew_bps = self.inventory_skew_bps as u128;
     let imbalance = base_balance_in_quote.diff(quote_balance);
     let shift =
         base_spread.checked_mul(imbalance).destroy_or!(abort EPriceOverflow) / total_balance;

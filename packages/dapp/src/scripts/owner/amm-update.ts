@@ -1,10 +1,9 @@
 /**
  * Updates the configuration of an existing shared AMM market maker for the target network.
  *
- * This script only updates `AMMConfig` (spreads, order expiration, oracle freshness and
- * confidence limits) via `executor::update_config`. Changing the pool or Pyth feeds now lives
- * under `executor::update_market`, which requires the market maker to be paused and is
- * therefore handled by a separate flow.
+ * This script updates `AMMConfig` (spreads, order expiration, oracle freshness and confidence
+ * limits) via `executor::update_config`. The bound pool and Pyth feeds are immutable once the
+ * executor is created — to change them, recreate the executor.
  */
 import yargs from "yargs"
 
@@ -100,7 +99,8 @@ const resolveAmmUpdateInputs = ({
   const inputs = resolveAmmConfigInputs({
     baseSpreadBps: cliArguments.baseSpreadBps ?? currentOverview.baseSpreadBps,
     volatilityMultiplierBps:
-      cliArguments.volatilityMultiplierBps ?? currentOverview.volatilityMultiplierBps,
+      cliArguments.volatilityMultiplierBps ??
+      currentOverview.volatilityMultiplierBps,
     basePythPriceFeedIdHex: currentOverview.basePythPriceFeedIdHex,
     quotePythPriceFeedIdHex: currentOverview.quotePythPriceFeedIdHex,
     orderExpirationTimeMs:

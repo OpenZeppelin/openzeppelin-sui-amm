@@ -90,8 +90,7 @@ runSuiScript(
 
     logKeyValueGreen("migrated")(SUI_COIN_TYPE)
     logKeyValueGreen("metadataId")(suiMetadataId)
-    if (migratedCurrencyId)
-      logKeyValueGreen("currencyId")(migratedCurrencyId)
+    if (migratedCurrencyId) logKeyValueGreen("currencyId")(migratedCurrencyId)
     if (transactionResult.digest)
       logKeyValueGreen("digest")(transactionResult.digest)
   },

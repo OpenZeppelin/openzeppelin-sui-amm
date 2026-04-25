@@ -39,11 +39,11 @@ const EInvalidQuantity: vector<u8> = "can't place order due to invalid quantity"
 #[error(code = 6)]
 const EConfigUnchanged: vector<u8> = "new config is identical to the current config";
 #[error(code = 7)]
-const EMarketUnchanged: vector<u8> = "new market is identical to the current market";
-#[error(code = 8)]
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
-#[error(code = 9)]
+#[error(code = 8)]
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
+#[error(code = 9)]
+const EUnsupportedAsset: vector<u8> = "coin type does not match the configured base or quote asset";
 
 // === Structs ===
 
@@ -51,7 +51,7 @@ const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
 public struct AdminCap has key, store {
     /// Unique ID for the market maker executor capability object.
     id: UID,
-    /// ID of the associated market maker executor.
+    /// ID of the associated market maker self.
     executor_id: ID,
 }
 
@@ -83,6 +83,16 @@ public struct Caps has store {
     withdraw_cap: WithdrawCap,
 }
 
+/// Input for a single limit order.
+public struct LimitOrderParams has copy, drop {
+    /// Price in DeepBook fixed-point format.
+    price: u64,
+    /// Quantity in base asset terms (lot-size aligned).
+    quantity: u64,
+    /// `true` for bids, `false` for asks.
+    is_bid: bool,
+}
+
 /// One-time publisher witness created at publish time.
 public struct EXECUTOR has drop {}
 
@@ -96,19 +106,22 @@ fun init(publisher_witness: EXECUTOR, ctx: &mut TxContext) {
 // === Public Functions ===
 
 /// Creates a market maker executor for sender.
+/// Call `deposit` to deposit Base/Quote into executor.
+/// The executor is paused on creation. Call `unpause` to enable trading.
 public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Executor, AdminCap) {
     let mut balance_manager = balance_manager::new(ctx);
     let deposit_cap = balance_manager.mint_deposit_cap(ctx);
     let withdraw_cap = balance_manager.mint_withdraw_cap(ctx);
     let trade_cap = balance_manager.mint_trade_cap(ctx);
     let id = object::new(ctx);
+    let cap_id = object::new(ctx);
 
-    events::emit_executor_created(id.to_inner());
+    events::emit_executor_created(id.to_inner(), cap_id.to_inner());
 
-    let executor_cap = AdminCap { id: object::new(ctx), executor_id: id.to_inner() };
+    let executor_cap = AdminCap { id: cap_id, executor_id: id.to_inner() };
     let executor = Executor {
         id,
-        active: true,
+        active: false,
         caps: Caps {
             trade_cap,
             deposit_cap,
@@ -123,167 +136,172 @@ public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Exec
     (executor, executor_cap)
 }
 
-/// Replaces AMM configuration. Resets the cached Pyth publish timestamps so the
-/// next `refresh_quotes` call re-prices even when the oracle timestamp has not advanced.
-/// Requires the matching market maker executor capability.
-/// To reflect trading configuration immediately `refresh_quotes` should be called within a single PTB.
-public fun update_config(executor: &mut Executor, cap: &AdminCap, config: AMMConfig) {
-    assert!(executor.id() == cap.executor_id, EInvalidCap);
-    assert!(&executor.config != &config, EConfigUnchanged);
+/// Replaces AMM configuration. Resets the cached Pyth publish timestamps so the next
+/// `refresh_quotes_permissionless` call re-prices even when the oracle timestamp has not
+/// advanced. Requires the matching market maker executor capability.
+/// To reflect trading configuration immediately, `refresh_quotes_permissionless` (or the
+/// admin `refresh_quotes`) should be called within a single PTB.
+public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig) {
+    assert!(self.id() == cap.executor_id, EInvalidCap);
+    assert!(&self.config != &config, EConfigUnchanged);
 
-    events::emit_executor_config_updated(executor.id());
+    events::emit_executor_config_updated(self.id());
 
-    executor.market.reset_price_publish_times();
-    executor.config = config;
-}
-
-/// Replaces market metadata (pool, feed IDs, and cached publish timestamps).
-/// Requires the market maker executor to be paused so balances are settled before the pool or feeds
-/// change.
-/// Requires the matching market maker capability.
-/// Market update triggers reset of all the trading information (cumulative volume, deposits, withdrawals and last recorded balances)
-public fun update_market(executor: &mut Executor, cap: &AdminCap, market: Market) {
-    assert!(executor.id() == cap.executor_id, EInvalidCap);
-    assert!(!executor.active, ENotPaused);
-    assert!(&executor.market != &market, EMarketUnchanged);
-
-    events::emit_market_updated(executor.id());
-
-    executor.info = info::empty();
-    executor.market = market;
+    self.market.reset_price_publish_times();
+    self.config = config;
 }
 
 /// Pauses trading by cancelling all existing orders and preventing new orders until next activation.
 public fun pause<BaseAsset, QuoteAsset>(
-    executor: &mut Executor,
+    self: &mut Executor,
     cap: &AdminCap,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    assert!(executor.id() == cap.executor_id, EInvalidCap);
-    assert!(executor.active, EPaused);
-    assert!(executor.market.has_valid_pool(pool), EInvalidPool);
+    assert!(self.id() == cap.executor_id, EInvalidCap);
+    assert!(self.active, EPaused);
+    assert!(self.market.has_valid_pool(pool), EInvalidPool);
 
     // Generate trade proof.
-    let trade_proof = executor
-        .balance_manager
-        .generate_proof_as_trader(&executor.caps.trade_cap, ctx);
+    let trade_proof = self.balance_manager.generate_proof_as_trader(&self.caps.trade_cap, ctx);
 
     // Cancel all previous active orders.
     pool.cancel_all_orders(
-        &mut executor.balance_manager,
+        &mut self.balance_manager,
         &trade_proof,
         clock,
         ctx,
     );
 
     // Update balance manager, to reflect previous settled limit orders in balance.
-    pool.withdraw_settled_amounts(&mut executor.balance_manager, &trade_proof);
+    pool.withdraw_settled_amounts(&mut self.balance_manager, &trade_proof);
 
     // Update trading information.
-    let volume_base = executor.volume_base(pool);
-    executor.info.set_volume_base(volume_base);
-    executor.info.set_quote_balance(executor.balance_manager.balance<QuoteAsset>());
-    executor.info.set_base_balance(executor.balance_manager.balance<BaseAsset>());
+    let volume_base = self.volume_base(pool);
+    self
+        .info
+        .update(
+            volume_base,
+            self.balance_manager.balance<QuoteAsset>(),
+            self.balance_manager.balance<BaseAsset>(),
+        );
 
     // Emit paused event.
-    events::emit_executor_paused(executor.id());
+    events::emit_executor_paused(self.id());
 
-    executor.active = false;
+    self.active = false;
 }
 
 /// Unpauses trading, allowing new orders to be placed.
-public fun unpause(executor: &mut Executor, cap: &AdminCap) {
-    assert!(executor.id() == cap.executor_id, EInvalidCap);
-    assert!(!executor.active, ENotPaused);
+public fun unpause(self: &mut Executor, cap: &AdminCap) {
+    assert!(self.id() == cap.executor_id, EInvalidCap);
+    assert!(!self.active, ENotPaused);
 
     // Emit unpaused event.
-    events::emit_executor_unpaused(executor.id());
+    events::emit_executor_unpaused(self.id());
 
-    executor.active = true;
+    self.active = true;
 }
 
 /// Deposit funds into a balance manager.
-/// Tracks cumulative deposits against the configured base or quote asset; deposits of any
-/// other coin type (e.g., DEEP used for fees) flow through without accounting updates.
+/// Aborts unless `T` matches the configured base or quote asset.
 /// Emits `DepositRecorded` in addition to Deepbook's `BalanceEvent`.
-public fun deposit<T>(executor: &mut Executor, cap: &AdminCap, coin: Coin<T>, ctx: &mut TxContext) {
-    assert!(executor.id() == cap.executor_id, EInvalidCap);
+public fun deposit<T>(self: &mut Executor, cap: &AdminCap, coin: Coin<T>, ctx: &mut TxContext) {
+    assert!(self.id() == cap.executor_id, EInvalidCap);
 
     let coin_type = type_name::with_defining_ids<T>();
     let amount = coin.value();
-    if (coin_type == executor.market.base_type()) {
-        executor.info.record_base_deposit(amount);
-    } else if (coin_type == executor.market.quote_type()) {
-        executor.info.record_quote_deposit(amount);
+    if (coin_type == self.market.base_type()) {
+        self.info.record_base_deposit(amount);
+    } else if (coin_type == self.market.quote_type()) {
+        self.info.record_quote_deposit(amount);
+    } else {
+        abort EUnsupportedAsset
     };
 
-    events::emit_deposited(executor.id(), coin_type, amount);
+    events::emit_deposited(self.id(), coin_type, amount);
 
-    executor.balance_manager.deposit_with_cap(&executor.caps.deposit_cap, coin, ctx);
+    self.balance_manager.deposit_with_cap(&self.caps.deposit_cap, coin, ctx);
 }
 
 /// Withdraw funds from a balance manager.
-/// Tracks cumulative withdrawals against the configured base or quote asset; withdrawals of
-/// any other coin type flow through without accounting updates.
+/// Aborts unless `T` matches the configured base or quote asset.
 /// Fails if the market maker executor is not paused.
 /// Emits `WithdrawRecorded` in addition to Deepbook's `BalanceEvent`.
 ///
 /// NOTE: Pause step let us settle all the balances before making withdrawal.
 /// Otherwise there is a high chance there is nothing to withdraw.
 public fun withdraw<T>(
-    executor: &mut Executor,
+    self: &mut Executor,
     cap: &AdminCap,
     amount: u64,
     ctx: &mut TxContext,
 ): Coin<T> {
-    assert!(executor.id() == cap.executor_id, EInvalidCap);
-    assert!(!executor.active, ENotPaused);
+    assert!(self.id() == cap.executor_id, EInvalidCap);
+    assert!(!self.active, ENotPaused);
 
     let coin_type = type_name::with_defining_ids<T>();
-    if (coin_type == executor.market.base_type()) {
-        executor.info.record_base_withdraw(amount);
-    } else if (coin_type == executor.market.quote_type()) {
-        executor.info.record_quote_withdraw(amount);
+    if (coin_type == self.market.base_type()) {
+        self.info.record_base_withdraw(amount);
+    } else if (coin_type == self.market.quote_type()) {
+        self.info.record_quote_withdraw(amount);
+    } else {
+        abort EUnsupportedAsset
     };
 
-    events::emit_withdrawn(executor.id(), coin_type, amount);
+    events::emit_withdrawn(self.id(), coin_type, amount);
 
-    executor.balance_manager.withdraw_with_cap(&executor.caps.withdraw_cap, amount, ctx)
+    self.balance_manager.withdraw_with_cap(&self.caps.withdraw_cap, amount, ctx)
 }
 
-/// Public quote refresh entrypoint for bot-driven PTBs.
+/// Withdraw all funds from a balance manager.
+/// Aborts unless `T` matches the configured base or quote asset.
+/// Fails if the market maker executor is not paused.
+/// Emits `WithdrawRecorded` in addition to Deepbook's `BalanceEvent`.
+///
+/// NOTE: Pause step let us settle all the balances before making withdrawal.
+/// Otherwise there is a high chance there is nothing to withdraw.
+public fun withdraw_all<T>(
+    self: &mut Executor,
+    cap: &AdminCap,
+    ctx: &mut TxContext,
+): Coin<T> {
+    let amount = self.balance_manager.balance<T>();
+    self.withdraw(cap, amount, ctx)
+}
+
+/// Public permissionless quote refresh entrypoint for bot-driven PTBs.
 ///
 /// Flow:
 /// 1) Read latest cached oracle prices from base and quote `PriceInfoObject`s.
 /// 2) Cancel all stale orders for this account in the pool.
 /// 3) Update balance based on all previously matched orders.
 /// 4) Re-place four fresh orders (2 bids, 2 asks) around the oracle mid.
-public fun refresh_quotes<BaseAsset, QuoteAsset>(
-    executor: &mut Executor,
+public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
+    self: &mut Executor,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     base_price_info_object: &PriceInfoObject,
     quote_price_info_object: &PriceInfoObject,
     clock: &Clock,
-    ctx: &mut TxContext,
+    ctx: &TxContext,
 ) {
     // Assert an input pool is valid.
-    assert!(executor.market.has_valid_pool(pool), EInvalidPool);
+    assert!(self.market.has_valid_pool(pool), EInvalidPool);
     // Assert trading is active.
-    assert!(executor.active, EPaused);
+    assert!(self.active, EPaused);
     // Assert Pyth price info objects have valid configured feed ids.
     assert!(
-        executor.market.has_valid_base_pyth_feed_id(base_price_info_object),
+        self.market.has_valid_base_pyth_feed_id(base_price_info_object),
         EPythFeedIdentifierMismatch,
     );
     assert!(
-        executor.market.has_valid_quote_pyth_feed_id(quote_price_info_object),
+        self.market.has_valid_quote_pyth_feed_id(quote_price_info_object),
         EPythFeedIdentifierMismatch,
     );
 
     // Get base and quote pyth prices not older than `max_price_age_secs`.
-    let max_price_age_secs = executor.config.max_price_age_secs();
+    let max_price_age_secs = self.config.max_price_age_secs();
     let base_pyth_price = pyth::get_price_no_older_than(
         base_price_info_object,
         clock,
@@ -299,22 +317,77 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // and there are open orders.
     // Protects from calling permissionless quote refresh with old pricing,
     // that will force market maker resubmit orders and loose priority.
-    let has_open_orders = executor.has_open_orders(pool);
-    let is_price_updated = executor
-        .market
-        .try_update_publish_time(base_pyth_price, quote_pyth_price);
+    let has_open_orders = self.has_open_orders(pool);
+    let is_price_updated = self.market.try_update_publish_time(base_pyth_price, quote_pyth_price);
     if (has_open_orders && !is_price_updated) {
         return
     };
 
+    // Derive the DeepBook mid price and the combined confidence ratio (first-order linearized
+    // uncertainty of Base/Quote = (Base/USD) / (Quote/USD)). The confidence ratio drives the
+    // dynamic volatility buffer added on top of the base spread for the outer order.
+    let (oracle_mid_price, conf_ratio_bps) = self
+        .market
+        .deepbook_price(
+            base_pyth_price,
+            quote_pyth_price,
+            self.config.max_conf_ratio_bps(),
+        );
+
+    self.refresh_quotes_inner(pool, oracle_mid_price, conf_ratio_bps, clock, ctx);
+}
+
+/// Admin-gated quote refresh entrypoint that accepts a caller-supplied `mid_price` and
+/// combined confidence ratio (`conf_ratio_bps`, in basis points) instead of reading the
+/// Pyth oracle. Useful when quoting off off-chain market data (e.g. a CEX feed) is
+/// preferable to the on-chain oracle. Requires the matching `AdminCap`.
+///
+/// Flow:
+/// 1) Take caller-supplied `mid_price` and `conf_ratio_bps`.
+/// 2) Cancel all stale orders for this account in the pool.
+/// 3) Update balance based on all previously matched orders.
+/// 4) Re-place four fresh orders (2 bids, 2 asks) around the supplied mid.
+public fun refresh_quotes<BaseAsset, QuoteAsset>(
+    self: &mut Executor,
+    cap: &AdminCap,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    mid_price: u64,
+    conf_ratio_bps: u64,
+    clock: &Clock,
+    ctx: &TxContext,
+) {
+    assert!(self.id() == cap.executor_id, EInvalidCap);
+    // Assert an input pool is valid.
+    assert!(self.market.has_valid_pool(pool), EInvalidPool);
+    // Assert trading is active.
+    assert!(self.active, EPaused);
+
+    self.refresh_quotes_inner(pool, mid_price, conf_ratio_bps, clock, ctx);
+}
+
+/// Cancels stale orders, settles balances, derives the reservation mid and base/volatility
+/// spreads from the supplied `oracle_mid_price` and combined `conf_ratio_bps`, then re-places
+/// the four-order ladder around the reservation mid.
+///
+/// Flow:
+/// 1) Cancel all stale orders for this account in the pool.
+/// 2) Update balance based on all previously matched orders.
+/// 3) Compute the reservation mid plus base/volatility spreads.
+/// 4) Re-place four fresh orders (2 bids, 2 asks) around the reservation mid.
+fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
+    self: &mut Executor,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    oracle_mid_price: u64,
+    conf_ratio_bps: u64,
+    clock: &Clock,
+    ctx: &TxContext,
+) {
     // Generate trade proof.
-    let trade_proof = executor
-        .balance_manager
-        .generate_proof_as_trader(&executor.caps.trade_cap, ctx);
+    let trade_proof = self.balance_manager.generate_proof_as_trader(&self.caps.trade_cap, ctx);
 
     // Cancel all previous active orders.
     pool.cancel_all_orders(
-        &mut executor.balance_manager,
+        &mut self.balance_manager,
         &trade_proof,
         clock,
         ctx,
@@ -322,26 +395,17 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
     // Update balance manager to reflect previous settled limit orders in balance,
     // before using balance in quantity computation for the next orders.
-    pool.withdraw_settled_amounts(&mut executor.balance_manager, &trade_proof);
+    pool.withdraw_settled_amounts(&mut self.balance_manager, &trade_proof);
 
-    // Derive the DeepBook mid price and the combined confidence ratio (first-order linearized
-    // uncertainty of Base/Quote = (Base/USD) / (Quote/USD)). The confidence ratio drives the
-    // dynamic volatility buffer added on top of the base spread for the outer order.
-    let (oracle_mid_price, conf_ratio_bps) = executor
-        .market
-        .deepbook_price(
-            base_pyth_price,
-            quote_pyth_price,
-            executor.config.max_conf_ratio_bps(),
-        );
-    let base_spread = executor.config.base_spread(oracle_mid_price);
-    let volatility_spread = executor.config.outer_spread(oracle_mid_price, conf_ratio_bps);
+    // Calculate spreads for the following limit orders.
+    let base_spread = self.config.base_spread(oracle_mid_price);
+    let volatility_spread = self.config.outer_spread(oracle_mid_price, conf_ratio_bps);
 
     // Read current balances (post-settlement) and derive the reservation mid: the oracle mid
     // shifted toward the side that rebalances the book (bounded by base_spread).
-    let base_balance = executor.balance_manager.balance<BaseAsset>();
-    let quote_balance = executor.balance_manager.balance<QuoteAsset>();
-    let reservation_mid = executor
+    let base_balance = self.balance_manager.balance<BaseAsset>();
+    let quote_balance = self.balance_manager.balance<QuoteAsset>();
+    let reservation_mid = self
         .config
         .reservation_mid(oracle_mid_price, base_balance, quote_balance);
 
@@ -362,7 +426,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Split bid order balance between inner and outer spread per the configured
     // `outer_balance_bps`, and compute quantity in base asset (for deepbook limit order).
     let bid_outer_quantity_quote = if (cancel_outer_bid) { 0 } else {
-        executor.config.outer_balance(quote_balance)
+        self.config.outer_balance(quote_balance)
     };
     let bid_inner_quantity_quote = quote_balance - bid_outer_quantity_quote;
     let bid_outer_quantity = round_down_quantity(
@@ -377,126 +441,85 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     // Split ask order balance between inner and outer spread per the configured
     // `outer_balance_bps`.
     let ask_outer_quantity = if (cancel_outer_ask) { 0 } else {
-        executor.config.outer_balance(base_balance)
+        self.config.outer_balance(base_balance)
     };
     let ask_inner_quantity = base_balance - ask_outer_quantity;
     let ask_outer_quantity = round_down_quantity(ask_outer_quantity, lot_size);
     let ask_inner_quantity = round_down_quantity(ask_inner_quantity, lot_size);
 
     // Update trading information.
-    let volume_base = executor.volume_base(pool);
-    executor.info.set_volume_base(volume_base);
-    executor.info.set_quote_balance(quote_balance);
-    executor.info.set_base_balance(base_balance);
+    let volume_base = self.volume_base(pool);
+    self
+        .info
+        .update(
+            volume_base,
+            quote_balance,
+            base_balance,
+        );
 
-    // Place 4 limit orders (2 bids and 2 ask) based on current price and volatility parameters.
-    let bid_outer_order_id = executor.try_place_limit_order(
-        pool,
-        &trade_proof,
-        1,
-        bid_outer,
-        bid_outer_quantity,
-        true,
-        clock,
-        ctx,
-    );
-    let bid_inner_order_id = executor.try_place_limit_order(
-        pool,
-        &trade_proof,
-        2,
-        bid_inner,
-        bid_inner_quantity,
-        true,
-        clock,
-        ctx,
-    );
-    let ask_inner_order_id = executor.try_place_limit_order(
-        pool,
-        &trade_proof,
-        3,
-        ask_inner,
-        ask_inner_quantity,
-        false,
-        clock,
-        ctx,
-    );
-    let ask_outer_order_id = executor.try_place_limit_order(
-        pool,
-        &trade_proof,
-        4,
-        ask_outer,
-        ask_outer_quantity,
-        false,
-        clock,
-        ctx,
-    );
+    // Try place lace 4 limit orders (2 bids + 2 asks) around the reservation mid.
+    // Skipped if quantity is below the limit.
+    let order_params = vector[
+        LimitOrderParams { price: bid_outer, quantity: bid_outer_quantity, is_bid: true },
+        LimitOrderParams { price: bid_inner, quantity: bid_inner_quantity, is_bid: true },
+        LimitOrderParams { price: ask_inner, quantity: ask_inner_quantity, is_bid: false },
+        LimitOrderParams { price: ask_outer, quantity: ask_outer_quantity, is_bid: false },
+    ];
+    let orders = self.try_place_limit_orders(pool, &trade_proof, order_params, clock, ctx);
 
-    events::emit_quote_updated(
-        executor.id(),
-        oracle_mid_price,
-        executor.config.base_spread_bps(),
-        executor.config.volatility_multiplier_bps(),
-        conf_ratio_bps,
-        volume_base,
-        quote_balance,
-        base_balance,
-        bid_outer_order_id,
-        bid_inner_order_id,
-        ask_inner_order_id,
-        ask_outer_order_id,
-    );
+    events::emit_quote_updated(self.id(), oracle_mid_price, orders);
 }
 
 // === View helpers ===
 
 /// Returns the market maker executor ID.
-public fun id(executor: &Executor): ID {
-    executor.id.to_inner()
+public fun id(self: &Executor): ID {
+    self.id.to_inner()
 }
 
 /// Returns the market maker executor owner.
-public fun owner(executor: &Executor): address {
-    executor.balance_manager.owner()
+public fun owner(self: &Executor): address {
+    self.balance_manager.owner()
 }
 
 /// Returns the balance manager.
-public fun balance_manager(executor: &Executor): &BalanceManager {
-    &executor.balance_manager
+public fun balance_manager(self: &Executor): &BalanceManager {
+    &self.balance_manager
 }
 
 /// Returns a deepbook's trade cap ID.
-public fun trade_cap_id(executor: &Executor): ID {
-    object::id(&executor.caps.trade_cap)
+public fun trade_cap_id(self: &Executor): ID {
+    object::id(&self.caps.trade_cap)
 }
 
 /// Returns a deepbook's deposit cap ID.
-public fun deposit_cap_id(executor: &Executor): ID {
-    object::id(&executor.caps.deposit_cap)
+public fun deposit_cap_id(self: &Executor): ID {
+    object::id(&self.caps.deposit_cap)
 }
 
 /// Returns a deepbook's withdraw cap ID.
-public fun withdraw_cap_id(executor: &Executor): ID {
-    object::id(&executor.caps.withdraw_cap)
+public fun withdraw_cap_id(self: &Executor): ID {
+    object::id(&self.caps.withdraw_cap)
 }
 
 /// Returns the configured market metadata.
-public fun market(executor: &Executor): &Market {
-    &executor.market
+public fun market(self: &Executor): &Market {
+    &self.market
 }
 
 /// Returns the current market maker configuration.
-public fun config(executor: &Executor): &AMMConfig {
-    &executor.config
+public fun config(self: &Executor): &AMMConfig {
+    &self.config
 }
 
 /// Returns whether trading is active.
-public fun active(executor: &Executor): bool {
-    executor.active
+public fun active(self: &Executor): bool {
+    self.active
 }
 
 /// Returns the market maker executor accounting info.
-public fun info(executor: &Executor): &Info {
-    &executor.info
+public fun info(self: &Executor): &Info {
+    &self.info
 }
 
 /// Returns the market maker executor capability object ID.
@@ -508,20 +531,17 @@ public fun cap_id(amm_cap: &AdminCap): ID {
 
 /// Returns whether there are open orders for the executor in the pool.
 fun has_open_orders<BaseAsset, QuoteAsset>(
-    executor: &Executor,
+    self: &Executor,
     pool: &Pool<BaseAsset, QuoteAsset>,
 ): bool {
-    pool.account_exists(&executor.balance_manager) && !pool.account(&executor.balance_manager).open_orders().is_empty()
+    pool.account_exists(&self.balance_manager) && !pool.account(&self.balance_manager).open_orders().is_empty()
 }
 
 /// Returns the current epoch's base-asset volume from DeepBook,
 /// or `0` if the account has not been created yet in the pool's state.
-fun volume_base<BaseAsset, QuoteAsset>(
-    executor: &Executor,
-    pool: &Pool<BaseAsset, QuoteAsset>,
-): u128 {
-    if (pool.account_exists(&executor.balance_manager)) {
-        pool.account(&executor.balance_manager).total_volume()
+fun volume_base<BaseAsset, QuoteAsset>(self: &Executor, pool: &Pool<BaseAsset, QuoteAsset>): u128 {
+    if (pool.account_exists(&self.balance_manager)) {
+        pool.account(&self.balance_manager).total_volume()
     } else {
         0
     }
@@ -567,48 +587,56 @@ fun round_down_quantity(quantity: u64, lot_size: u64): u64 {
     quantity - quantity % lot_size
 }
 
-/// Helper function to place a limit order if quantity meets the pool's minimum order size.
-/// Returns `Some(order_id)` when an order was submitted, or `None` when skipped because
-/// `quantity < min_size`.
-fun try_place_limit_order<BaseAsset, QuoteAsset>(
-    executor: &mut Executor,
+/// Place a batch of limit orders. Each candidate whose quantity is below the pool's `min_size`
+/// is skipped silently. Returns the snapshots of successfully-placed orders in the same
+/// relative order as their candidates; the `client_order_id` of each is the candidate's 1-based
+/// index, preserved across skips so the i-th slot still maps to the i-th candidate.
+fun try_place_limit_orders<BaseAsset, QuoteAsset>(
+    self: &mut Executor,
     pool: &mut Pool<BaseAsset, QuoteAsset>,
     trade_proof: &TradeProof,
-    client_order_id: u64,
-    price: u64,
-    quantity: u64,
-    is_bid: bool,
+    candidates: vector<LimitOrderParams>,
     clock: &Clock,
     ctx: &TxContext,
-): Option<u128> {
-    // Don't place an order if quantity is less than a minimum.
+): vector<events::LimitOrder> {
     let (_, _, min_size) = pool.pool_book_params();
-    if (quantity < min_size) {
-        return option::none()
-    };
 
-    // Self matching should not happen (if happens due to logic error abort taker order).
+    // Self-matching should not happen (if it does due to a logic error, abort the taker order).
     let self_matching_option = constants::cancel_taker();
-    let expire_timestamp = clock.timestamp_ms() + executor.config.order_expiration_time_ms();
+    let expire_timestamp = clock.timestamp_ms() + self.config.order_expiration_time_ms();
     let pay_with_deep = false;
     let order_type = constants::no_restriction();
 
-    // Place a limit order.
-    let order_info = pool.place_limit_order(
-        &mut executor.balance_manager,
-        trade_proof,
-        client_order_id,
-        order_type,
-        self_matching_option,
-        price,
-        quantity,
-        is_bid,
-        pay_with_deep,
-        expire_timestamp,
-        clock,
-        ctx,
-    );
-    option::some(order_info.order_id())
+    let mut placed = vector[];
+    let mut index = 0;
+    while (index < candidates.length()) {
+        let LimitOrderParams { price, quantity, is_bid } = candidates[index];
+        index = index + 1;
+
+        // Don't place if quantity is low.
+        if (quantity < min_size) continue;
+
+        let order_info = pool.place_limit_order(
+            &mut self.balance_manager,
+            trade_proof,
+            // 1-based client_order_id
+            index,
+            order_type,
+            self_matching_option,
+            price,
+            quantity,
+            is_bid,
+            pay_with_deep,
+            expire_timestamp,
+            clock,
+            ctx,
+        );
+
+        // Add order info to placed output.
+        placed.push_back(events::order(order_info.order_id(), price, quantity, is_bid));
+    };
+
+    placed
 }
 
 /// Converts a quote asset quantity to a base asset quantity using the given deepbook's price.

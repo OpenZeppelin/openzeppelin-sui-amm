@@ -10,8 +10,8 @@ import path from "node:path"
 import yargs from "yargs"
 
 import {
+  ALL_MOCK_PRICE_FEEDS,
   deriveMockPriceComponents,
-  findMockPriceFeedConfig,
   getPythPriceInfoType,
   isMatchingMockPriceFeedConfig,
   publishMockPriceFeed,
@@ -54,10 +54,7 @@ import {
   findCreatedObjectIds,
   newTransaction
 } from "@sui-amm/tooling-node/transactions"
-import {
-  DEFAULT_PYTH_PRICE_FEED_LABEL,
-  syncAmmDeepbookDependencyLocalReplacement
-} from "../../utils/amm.ts"
+import { syncAmmDeepbookDependencyLocalReplacement } from "../../utils/amm.ts"
 import type {
   CoinArtifact,
   MockArtifact,
@@ -93,6 +90,7 @@ type ExistingMockState = Pick<
   | "coinPackageId"
   | "coins"
   | "pythPackageId"
+  | "pythStateId"
   | "priceFeeds"
   | "deepbookPackageId"
   | "deepbookRegistryId"
@@ -109,19 +107,11 @@ type CoinSeed = Pick<CoinArtifact, "label" | "coinType"> & {
   initTarget: string
 }
 
-const resolveDefaultFeedConfigs = (
-  label: string
-): LabeledMockPriceFeedConfig[] => {
-  const feedConfig = findMockPriceFeedConfig({ label })
-  if (!feedConfig)
-    throw new Error(`Missing mock price feed config for ${label}.`)
-  return [feedConfig]
-}
-
-// Single feed to seed the SUI/USD price object with.
-const DEFAULT_FEEDS: LabeledMockPriceFeedConfig[] = resolveDefaultFeedConfigs(
-  DEFAULT_PYTH_PRICE_FEED_LABEL
-)
+// Localnet seeds: one PriceInfoObject per real Pyth feed identifier so the
+// `@pythnetwork/pyth-sui-js` SDK's `getPriceFeedObjectId(feedId)` resolves
+// `SUI/USD` and `USDC/USD` against our mock State exactly as it does on
+// mainnet/testnet against the real Pyth State.
+const DEFAULT_FEEDS: LabeledMockPriceFeedConfig[] = ALL_MOCK_PRICE_FEEDS
 const PACKAGE_AVAILABILITY_TIMEOUT_MS = 20_000
 const PACKAGE_AVAILABILITY_INTERVAL_MS = 250
 const LOCALNET_MOVE_ENVIRONMENT_NAME =
@@ -146,6 +136,9 @@ const extendCliArguments = async (
     pythPackageId: baseScriptArguments.rePublish
       ? undefined
       : baseScriptArguments.pythPackageId || mockArtifact.pythPackageId,
+    pythStateId: baseScriptArguments.rePublish
+      ? undefined
+      : mockArtifact.pythStateId,
     coinPackageId: baseScriptArguments.rePublish
       ? undefined
       : baseScriptArguments.coinPackageId || mockArtifact.coinPackageId,
@@ -192,6 +185,7 @@ runSuiScript(
     const {
       coinPackageId,
       pythPackageId,
+      pythStateId,
       deepbookPackageId,
       deepbookRegistryId,
       deepbookAdminCapId,
@@ -249,6 +243,7 @@ runSuiScript(
     const priceFeeds = await ensurePriceFeeds(
       {
         pythPackageId,
+        pythStateId,
         signer: tooling.loadedEd25519KeyPair,
         clockObject,
         existingPriceFeeds: desiredExistingPriceFeeds
@@ -389,28 +384,36 @@ const publishLocalnetPackages = async (
   tooling: Tooling
 ) => {
   // Publish or reuse the local Pyth stub. We allow unpublished deps here because this is localnet-only.
-  const pythPackageId =
-    existingState.pythPackageId ||
-    (
-      await tooling.publishMovePackageWithFunding({
-        packagePath: cliArguments.pythContractPath,
-        withUnpublishedDependencies: true,
-        clearPublishedEntry: true,
-        useCliPublish: cliArguments.useCliPublish
-      })
-    ).packageId
-
-  if (pythPackageId !== existingState.pythPackageId)
+  let pythPackageId = existingState.pythPackageId
+  let pythStateId = existingState.pythStateId
+  if (!pythPackageId) {
+    const pythPublish = await tooling.publishMovePackageWithFunding({
+      packagePath: cliArguments.pythContractPath,
+      withUnpublishedDependencies: true,
+      clearPublishedEntry: true,
+      useCliPublish: cliArguments.useCliPublish
+    })
+    pythPackageId = pythPublish.packageId
     await waitForPackageAvailability(
       pythPackageId,
       tooling.suiClient,
       "pyth-mock"
     )
-
-  if (pythPackageId !== existingState.pythPackageId)
+    // The mock pyth's `state::init` shares a single `State` object — find it in
+    // the publish tx's object changes.
+    pythStateId = await resolvePythStateFromPublish(
+      pythPublish.digest,
+      tooling.suiClient
+    )
     await writeMockArtifact(mockArtifactPath, {
-      pythPackageId
+      pythPackageId,
+      pythStateId
     })
+  } else if (!pythStateId) {
+    throw new Error(
+      "pythPackageId present in mock.localnet.json but pythStateId is missing. Re-run with --re-publish to regenerate."
+    )
+  }
 
   // Publish or reuse the local mock coin package.
   const coinPackageId =
@@ -497,6 +500,7 @@ const publishLocalnetPackages = async (
 
   return {
     pythPackageId,
+    pythStateId,
     coinPackageId,
     deepbookPackageId,
     deepbookRegistryId,
@@ -519,6 +523,18 @@ const waitForPackageAvailability = async (
     objectOptions: { showType: true, showContent: true },
     predicate: (response) => response.data?.content?.dataType === "package"
   })
+}
+
+const resolvePythStateFromPublish = async (
+  publishDigest: string,
+  suiClient: SuiClient
+): Promise<string> => {
+  const publishTransaction = await suiClient.getTransactionBlock({
+    digest: publishDigest,
+    options: { showObjectChanges: true }
+  })
+
+  return ensureCreatedObject("::state::State", publishTransaction).objectId
 }
 
 const resolveDeepbookObjectsFromPublish = async (
@@ -1006,11 +1022,13 @@ const coinArtifactsFromResult = ({
 const ensurePriceFeeds = async (
   {
     pythPackageId,
+    pythStateId,
     signer,
     existingPriceFeeds,
     clockObject
   }: {
     pythPackageId: string
+    pythStateId: string
     signer: Ed25519Keypair
     existingPriceFeeds: PriceFeedArtifact[]
     clockObject: WrappedSuiSharedObject
@@ -1018,6 +1036,11 @@ const ensurePriceFeeds = async (
   tooling: Tooling
 ): Promise<PriceFeedArtifact[]> => {
   const priceInfoType = getPythPriceInfoType(pythPackageId)
+  // Pyth State holds the `Table<PriceIdentifier, ID>` registry; publishing a
+  // feed mutates it, so we need a mutable shared ref.
+  const pythStateObject = await tooling.getMutableSharedObject({
+    objectId: pythStateId
+  })
   const feeds: PriceFeedArtifact[] = []
 
   for (const feedConfig of DEFAULT_FEEDS) {
@@ -1045,6 +1068,7 @@ const ensurePriceFeeds = async (
       {
         feedConfig,
         pythPackageId,
+        pythStateObject,
         signer,
         clockObject
       },
@@ -1149,11 +1173,13 @@ const publishPriceFeed = async (
   {
     feedConfig,
     pythPackageId,
+    pythStateObject,
     signer,
     clockObject
   }: {
     feedConfig: LabeledMockPriceFeedConfig
     pythPackageId: string
+    pythStateObject: WrappedSuiSharedObject
     signer: Ed25519Keypair
     clockObject: WrappedSuiSharedObject
   },
@@ -1163,6 +1189,7 @@ const publishPriceFeed = async (
   publishMockPriceFeed(
     publishPriceFeedTransaction,
     pythPackageId,
+    publishPriceFeedTransaction.sharedObjectRef(pythStateObject.sharedRef),
     feedConfig,
     publishPriceFeedTransaction.sharedObjectRef(clockObject.sharedRef)
   )
@@ -1200,9 +1227,9 @@ const buildCoinSeeds = (coinPackageId: string): CoinSeed[] => {
   const normalizedPackageId = normalizeSuiObjectId(coinPackageId)
   return [
     {
-      label: "LocalMockUsd",
-      coinType: `${normalizedPackageId}::mock_coin::LocalMockUsd`,
-      initTarget: `${normalizedPackageId}::mock_coin::init_local_mock_usd`
+      label: "USDC",
+      coinType: `${normalizedPackageId}::mock_coin::USDC`,
+      initTarget: `${normalizedPackageId}::mock_coin::init_usdc`
     }
   ]
 }

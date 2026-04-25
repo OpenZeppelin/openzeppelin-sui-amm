@@ -231,19 +231,13 @@ export const useCreateExecutorState = () => {
   )
 
   const ammShouldShowFieldError = useCallback(
-    <K extends AmmConfigFieldKey>(
-      key: K,
-      error?: string
-    ): error is string =>
+    <K extends AmmConfigFieldKey>(key: K, error?: string): error is string =>
       Boolean(error && shouldShowFieldFeedback(key, hasAttemptedSubmit)),
     [hasAttemptedSubmit, shouldShowFieldFeedback]
   )
 
   const marketShouldShowFieldError = useCallback(
-    <K extends MarketConfigFieldKey>(
-      key: K,
-      error?: string
-    ): error is string =>
+    <K extends MarketConfigFieldKey>(key: K, error?: string): error is string =>
       Boolean(error && shouldShowFieldFeedback(key, hasAttemptedSubmit)),
     [hasAttemptedSubmit, shouldShowFieldFeedback]
   )
@@ -411,7 +405,6 @@ export const useCreateExecutorState = () => {
 
       failureStage = "execute"
       let digest = ""
-      let transactionBlock: SuiTransactionBlockResponse
 
       if (isLocalnet) {
         const result = await localnetExecutor(createTransaction, {
@@ -429,7 +422,7 @@ export const useCreateExecutorState = () => {
       failureStage = "fetch"
       // Wait for indexing to settle so the next AdminCap lookup actually finds
       // the new cap and resolution can flip to "ready".
-      transactionBlock = await waitForTransactionBlock(suiClient, digest)
+      const transactionBlock = await waitForTransactionBlock(suiClient, digest)
 
       setTransactionState({
         status: "success",
