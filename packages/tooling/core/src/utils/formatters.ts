@@ -237,8 +237,18 @@ export const parseCoinAmount = ({
   if (!/^\d+(\.\d+)?$/.test(trimmed)) {
     throw new Error("Amount must be a non-negative decimal number.")
   }
-  if (decimals < 0) {
-    throw new Error("Decimals must be non-negative.")
+  // Validate as a finite integer in [0, 255] before letting it reach
+  // `padEnd`, which silently truncates fractional values, no-ops on `NaN`,
+  // and tries to allocate a 2^53-1-char string on `Infinity`. Sui coin
+  // metadata caps decimals at 255 (u8), so anything outside that range is
+  // already an invalid input regardless of caller intent.
+  if (
+    !Number.isInteger(decimals) ||
+    !Number.isFinite(decimals) ||
+    decimals < 0 ||
+    decimals > 255
+  ) {
+    throw new Error("Decimals must be a non-negative integer in [0, 255].")
   }
 
   const [wholePart, fractionPart = ""] = trimmed.split(".")
