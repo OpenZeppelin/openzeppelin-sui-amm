@@ -80,6 +80,7 @@ type SetupLocalCliArgs = {
   deepbookTokenPackageId?: string
   deepbookTokenContractPath: string
   pythPackageId?: string
+  pythStateId?: string
   pythContractPath: string
   rePublish?: boolean
   useCliPublish?: boolean
@@ -138,7 +139,7 @@ const extendCliArguments = async (
       : baseScriptArguments.pythPackageId || mockArtifact.pythPackageId,
     pythStateId: baseScriptArguments.rePublish
       ? undefined
-      : mockArtifact.pythStateId,
+      : baseScriptArguments.pythStateId || mockArtifact.pythStateId,
     coinPackageId: baseScriptArguments.rePublish
       ? undefined
       : baseScriptArguments.coinPackageId || mockArtifact.coinPackageId,
@@ -326,6 +327,12 @@ runSuiScript(
       type: "string",
       description:
         "Package ID of the Pyth Move package on the local localNetwork"
+    })
+    .option("pythStateId", {
+      alias: "pyth-state-id",
+      type: "string",
+      description:
+        "Shared object ID of the mock Pyth `pyth_state::State` registry. Required when reusing a `--pyth-package-id` from a context where mock.localnet.json doesn't already record the matching state id."
     })
     .option("pythContractPath", {
       alias: "pyth-contract-path",
