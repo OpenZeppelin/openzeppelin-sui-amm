@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  SUI_CLI_VERSION: "1.68.1"
+  SUI_CLI_VERSION: "1.70.2"
 
 jobs:
   setup:
@@ -63,6 +63,8 @@ jobs:
         package: ${{ fromJson(needs.setup.outputs.packages) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: ./.github/actions/setup-sui
       - name: Lint ${{ matrix.package }}
         run: sui move build --lint
@@ -84,6 +86,8 @@ jobs:
         package: ${{ fromJson(needs.setup.outputs.packages) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: ./.github/actions/setup-sui
       - name: Run Move tests for ${{ matrix.package }}
         run: sui move test --coverage --build-env test-publish

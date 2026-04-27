@@ -221,6 +221,49 @@ export const formatCoinBalance = ({
 }
 
 /**
+ * Parses a human-readable decimal amount (e.g. "1.5") into its on-chain atom
+ * count (e.g. 1_500_000_000n for `decimals = 9`). Throws on non-numeric or
+ * over-precise input.
+ */
+export const parseCoinAmount = ({
+  value,
+  decimals
+}: {
+  value: string
+  decimals: number
+}): bigint => {
+  const trimmed = value.trim()
+  if (!trimmed) throw new Error("Amount is required.")
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) {
+    throw new Error("Amount must be a non-negative decimal number.")
+  }
+  // Validate as a finite integer in [0, 255] before letting it reach
+  // `padEnd`, which silently truncates fractional values, no-ops on `NaN`,
+  // and tries to allocate a 2^53-1-char string on `Infinity`. Sui coin
+  // metadata caps decimals at 255 (u8), so anything outside that range is
+  // already an invalid input regardless of caller intent.
+  if (
+    !Number.isInteger(decimals) ||
+    !Number.isFinite(decimals) ||
+    decimals < 0 ||
+    decimals > 255
+  ) {
+    throw new Error("Decimals must be a non-negative integer in [0, 255].")
+  }
+
+  const [wholePart, fractionPart = ""] = trimmed.split(".")
+  if (fractionPart.length > decimals) {
+    throw new Error(
+      `Amount has ${fractionPart.length} decimal places but ${decimals} are allowed.`
+    )
+  }
+
+  const padded = fractionPart.padEnd(decimals, "0")
+  const combined = `${wholePart}${padded}`.replace(/^0+/, "") || "0"
+  return BigInt(combined)
+}
+
+/**
  * Formats a Move struct type into its terminal label.
  */
 export const getStructLabel = (typeName?: string) => {

@@ -12,30 +12,30 @@ import type { SuiTransactionBlockResponse } from "@mysten/sui/client"
 import type { IdentifierString } from "@mysten/wallet-standard"
 import type { AmmConfigOverview } from "@sui-amm/domain-core/models/amm"
 import {
-  DEFAULT_BASE_SPREAD_BPS,
-  DEFAULT_VOLATILITY_SPREAD_BPS,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { buildUpdateMarketMakerTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { buildUpdateConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { deriveRelevantPackageId } from "@sui-amm/tooling-core/object"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
-import {
-  parseNonNegativeU64,
-  parsePositiveU64
-} from "@sui-amm/tooling-core/utils/utility"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import type {
+  AmmConfigFieldKey,
+  AmmConfigFormState
+} from "../components/AmmConfigForm"
 import { resolveAmmAdminCapId } from "../helpers/ammAdminCap"
 import {
-  resolveValidationMessage,
-  validateRequiredHexBytes
-} from "../helpers/inputValidation"
+  buildAmmConfigFieldErrors,
+  buildAmmConfigFormState
+} from "../helpers/ammConfigValidation"
 import {
   getLocalnetClient,
   makeLocalnetExecutor,
   walletSupportsChain
 } from "../helpers/localnet"
+import { transactionUrl } from "../helpers/network"
+import { notification } from "../helpers/notification"
 import {
   extractErrorDetails,
   formatErrorMessage,
@@ -43,18 +43,8 @@ import {
   serializeForJson
 } from "../helpers/transactionErrors"
 import { waitForTransactionBlock } from "../helpers/transactionWait"
+import useExplorerUrl from "./useExplorerUrl"
 import { useIdleFieldValidation } from "./useIdleFieldValidation"
-
-const PYTH_PRICE_FEED_ID_BYTES = 32
-
-type AmmUpdateFormState = {
-  baseSpreadBps: string
-  volatilitySpreadBps: string
-  basePythPriceFeedIdHex: string
-  quotePythPriceFeedIdHex: string
-}
-
-type AmmUpdateFieldErrors = Partial<Record<keyof AmmUpdateFormState, string>>
 
 export type AmmConfigUpdateSummary = {
   digest: string
@@ -70,89 +60,27 @@ type TransactionState =
   | { status: "success"; summary: AmmConfigUpdateSummary }
   | { status: "error"; error: string; details?: string }
 
-const buildFormState = (ammConfig?: AmmConfigOverview): AmmUpdateFormState => ({
-  baseSpreadBps: ammConfig?.baseSpreadBps ?? DEFAULT_BASE_SPREAD_BPS,
-  volatilitySpreadBps:
-    ammConfig?.volatilitySpreadBps ?? DEFAULT_VOLATILITY_SPREAD_BPS,
-  basePythPriceFeedIdHex: ammConfig?.basePythPriceFeedIdHex ?? "",
-  quotePythPriceFeedIdHex: ammConfig?.quotePythPriceFeedIdHex ?? ""
-})
-
-const buildFieldErrors = (
-  formState: AmmUpdateFormState
-): AmmUpdateFieldErrors => {
-  const errors: AmmUpdateFieldErrors = {}
-  const baseSpreadBps = formState.baseSpreadBps.trim()
-  const volatilitySpreadBps = formState.volatilitySpreadBps.trim()
-
-  if (!baseSpreadBps) {
-    errors.baseSpreadBps = "Base spread is required."
-  } else {
-    try {
-      parsePositiveU64(baseSpreadBps, "Base spread bps")
-    } catch (error) {
-      errors.baseSpreadBps = resolveValidationMessage(
-        error,
-        "Base spread must be a valid u64."
-      )
-    }
-  }
-
-  if (!volatilitySpreadBps) {
-    errors.volatilitySpreadBps = "Volatility spread is required."
-  } else {
-    try {
-      parseNonNegativeU64(volatilitySpreadBps, "Volatility spread bps")
-    } catch (error) {
-      errors.volatilitySpreadBps = resolveValidationMessage(
-        error,
-        "Volatility spread must be a valid u64."
-      )
-    }
-  }
-
-  const baseFeedError = validateRequiredHexBytes({
-    value: formState.basePythPriceFeedIdHex,
-    expectedBytes: PYTH_PRICE_FEED_ID_BYTES,
-    label: "Base Pyth price feed id"
-  })
-  if (baseFeedError) errors.basePythPriceFeedIdHex = baseFeedError
-
-  const quoteFeedError = validateRequiredHexBytes({
-    value: formState.quotePythPriceFeedIdHex,
-    expectedBytes: PYTH_PRICE_FEED_ID_BYTES,
-    label: "Quote Pyth price feed id"
-  })
-  if (quoteFeedError) errors.quotePythPriceFeedIdHex = quoteFeedError
-
-  return errors
-}
-
-const buildFallbackOverview = ({
+const buildOptimisticOverview = ({
   currentConfig,
   configId,
-  baseSpreadBps,
-  volatilitySpreadBps,
-  basePythPriceFeedIdHex,
-  quotePythPriceFeedIdHex
+  formState
 }: {
   currentConfig?: AmmConfigOverview
   configId: string
-  baseSpreadBps: bigint
-  volatilitySpreadBps: bigint
-  basePythPriceFeedIdHex: string
-  quotePythPriceFeedIdHex: string
+  formState: AmmConfigFormState
 }): AmmConfigOverview => ({
   configId,
-  baseSpreadBps: baseSpreadBps.toString(),
-  volatilitySpreadBps: volatilitySpreadBps.toString(),
-  active: true,
-  basePythPriceFeedIdHex,
-  quotePythPriceFeedIdHex,
+  baseSpreadBps: formState.baseSpreadBps.trim(),
+  volatilityMultiplierBps: formState.volatilityMultiplierBps.trim(),
+  active: currentConfig?.active ?? true,
+  basePythPriceFeedIdHex: currentConfig?.basePythPriceFeedIdHex ?? "",
+  quotePythPriceFeedIdHex: currentConfig?.quotePythPriceFeedIdHex ?? "",
   poolId: currentConfig?.poolId ?? "0x0",
-  orderExpirationTimeMs: currentConfig?.orderExpirationTimeMs ?? "86400000",
-  maxPriceAgeSecs: currentConfig?.maxPriceAgeSecs ?? "60",
-  maxConfRatioBps: currentConfig?.maxConfRatioBps ?? "1000"
+  orderExpirationTimeMs: formState.orderExpirationTimeMs.trim(),
+  maxPriceAgeSecs: formState.maxPriceAgeSecs.trim(),
+  maxConfRatioBps: formState.maxConfRatioBps.trim(),
+  outerBalanceBps: formState.outerBalanceBps.trim(),
+  inventorySkewBps: formState.inventorySkewBps.trim()
 })
 
 const ammConfigMatches = (
@@ -160,10 +88,13 @@ const ammConfigMatches = (
   second: AmmConfigOverview
 ) =>
   first.baseSpreadBps === second.baseSpreadBps &&
-  first.volatilitySpreadBps === second.volatilitySpreadBps &&
-  first.active === second.active &&
-  first.basePythPriceFeedIdHex === second.basePythPriceFeedIdHex &&
-  first.quotePythPriceFeedIdHex === second.quotePythPriceFeedIdHex
+  first.volatilityMultiplierBps === second.volatilityMultiplierBps &&
+  first.orderExpirationTimeMs === second.orderExpirationTimeMs &&
+  first.maxPriceAgeSecs === second.maxPriceAgeSecs &&
+  first.maxConfRatioBps === second.maxConfRatioBps &&
+  first.outerBalanceBps === second.outerBalanceBps &&
+  first.inventorySkewBps === second.inventorySkewBps &&
+  first.active === second.active
 
 export const useUpdateAmmConfigModalState = ({
   open,
@@ -182,6 +113,7 @@ export const useUpdateAmmConfigModalState = ({
   const { network } = useSuiClientContext()
   const signAndExecuteTransaction = useSignAndExecuteTransaction()
   const signTransaction = useSignTransaction()
+  const explorerUrl = useExplorerUrl()
   const localnetClient = useMemo(() => getLocalnetClient(), [])
   const isLocalnet = network === ENetwork.LOCALNET
   const localnetExecutor = useMemo(
@@ -193,8 +125,8 @@ export const useUpdateAmmConfigModalState = ({
     [localnetClient, signTransaction.mutateAsync]
   )
 
-  const [formState, setFormState] = useState<AmmUpdateFormState>(() =>
-    buildFormState(ammConfig)
+  const [formState, setFormState] = useState<AmmConfigFormState>(() =>
+    buildAmmConfigFormState(ammConfig)
   )
   const [transactionState, setTransactionState] = useState<TransactionState>({
     status: "idle"
@@ -206,11 +138,14 @@ export const useUpdateAmmConfigModalState = ({
     markFieldBlur,
     resetFieldState,
     shouldShowFieldFeedback
-  } = useIdleFieldValidation<keyof AmmUpdateFormState>({ idleDelayMs: 600 })
+  } = useIdleFieldValidation<AmmConfigFieldKey>({ idleDelayMs: 600 })
 
   const walletAddress = currentAccount?.address
 
-  const fieldErrors = useMemo(() => buildFieldErrors(formState), [formState])
+  const fieldErrors = useMemo(
+    () => buildAmmConfigFieldErrors(formState),
+    [formState]
+  )
   const hasFieldErrors = Object.values(fieldErrors).some(Boolean)
   const hasDirtyFields = useMemo(
     () => Object.values(fieldDirty).some(Boolean),
@@ -227,7 +162,7 @@ export const useUpdateAmmConfigModalState = ({
     isSubmissionPending !== true
 
   const resetForm = useCallback(() => {
-    setFormState(buildFormState(ammConfig))
+    setFormState(buildAmmConfigFormState(ammConfig))
     setTransactionState({ status: "idle" })
     setHasAttemptedSubmit(false)
     resetFieldState()
@@ -243,14 +178,11 @@ export const useUpdateAmmConfigModalState = ({
   useEffect(() => {
     if (!open) return
     if (hasDirtyFields || hasAttemptedSubmit) return
-    setFormState(buildFormState(ammConfig))
+    setFormState(buildAmmConfigFormState(ammConfig))
   }, [ammConfig, hasAttemptedSubmit, hasDirtyFields, open])
 
   const handleInputChange = useCallback(
-    <K extends keyof AmmUpdateFormState>(
-      key: K,
-      value: AmmUpdateFormState[K]
-    ) => {
+    <K extends AmmConfigFieldKey>(key: K, value: AmmConfigFormState[K]) => {
       markFieldChange(key)
       setFormState((previous) => ({
         ...previous,
@@ -261,10 +193,7 @@ export const useUpdateAmmConfigModalState = ({
   )
 
   const shouldShowFieldError = useCallback(
-    <K extends keyof AmmUpdateFormState>(
-      key: K,
-      error?: string
-    ): error is string =>
+    <K extends AmmConfigFieldKey>(key: K, error?: string): error is string =>
       Boolean(error && shouldShowFieldFeedback(key, hasAttemptedSubmit)),
     [hasAttemptedSubmit, shouldShowFieldFeedback]
   )
@@ -339,18 +268,21 @@ export const useUpdateAmmConfigModalState = ({
     }
 
     setTransactionState({ status: "processing" })
+    const toastId = notification.txLoading()
 
     let failureStage: "prepare" | "execute" | "fetch" | "refresh" = "prepare"
 
     try {
       const updateInputs = resolveAmmConfigInputs({
         baseSpreadBps: formState.baseSpreadBps.trim(),
-        volatilitySpreadBps: formState.volatilitySpreadBps.trim(),
-        basePythPriceFeedIdHex: formState.basePythPriceFeedIdHex.trim(),
-        quotePythPriceFeedIdHex: formState.quotePythPriceFeedIdHex.trim(),
-        orderExpirationTimeMs: ammConfig?.orderExpirationTimeMs,
-        maxPriceAgeSecs: ammConfig?.maxPriceAgeSecs,
-        maxConfRatioBps: ammConfig?.maxConfRatioBps
+        volatilityMultiplierBps: formState.volatilityMultiplierBps.trim(),
+        basePythPriceFeedIdHex: ammConfig?.basePythPriceFeedIdHex ?? "",
+        quotePythPriceFeedIdHex: ammConfig?.quotePythPriceFeedIdHex ?? "",
+        orderExpirationTimeMs: formState.orderExpirationTimeMs.trim(),
+        maxPriceAgeSecs: formState.maxPriceAgeSecs.trim(),
+        maxConfRatioBps: formState.maxConfRatioBps.trim(),
+        outerBalanceBps: formState.outerBalanceBps.trim(),
+        inventorySkewBps: formState.inventorySkewBps.trim()
       })
 
       const configShared = await getSuiSharedObject(
@@ -370,54 +302,44 @@ export const useUpdateAmmConfigModalState = ({
           "No AMM admin capability found for the connected wallet."
         )
 
-      const poolId =
-        ammConfig?.poolId ??
-        "0x0000000000000000000000000000000000000000000000000000000000000000"
-
-      const updateTransaction = buildUpdateMarketMakerTransaction({
+      const updateTransaction = buildUpdateConfigTransaction({
         packageId,
-        marketMaker: configShared,
+        executor: configShared,
         adminCapId,
-        poolId,
         baseSpreadBps: updateInputs.baseSpreadBps,
-        volatilitySpreadBps: updateInputs.volatilitySpreadBps,
-        basePythPriceFeedIdBytes: updateInputs.basePythPriceFeedIdBytes,
-        quotePythPriceFeedIdBytes: updateInputs.quotePythPriceFeedIdBytes,
+        volatilityMultiplierBps: updateInputs.volatilityMultiplierBps,
         orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
         maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
-        maxConfRatioBps: updateInputs.maxConfRatioBps
+        maxConfRatioBps: updateInputs.maxConfRatioBps,
+        outerBalanceBps: updateInputs.outerBalanceBps,
+        inventorySkewBps: updateInputs.inventorySkewBps
       })
       updateTransaction.setSender(walletAddress)
 
       let digest = ""
-      let transactionBlock: SuiTransactionBlockResponse
 
+      failureStage = "execute"
       if (isLocalnet) {
-        failureStage = "execute"
         const result = await localnetExecutor(updateTransaction, {
           chain: expectedChain
         })
         digest = result.digest
-        transactionBlock = result
       } else {
-        failureStage = "execute"
         const result = await signAndExecuteTransaction.mutateAsync({
           transaction: updateTransaction,
           chain: expectedChain
         })
-
-        failureStage = "fetch"
         digest = result.digest
-        transactionBlock = await waitForTransactionBlock(suiClient, digest)
       }
 
-      const optimisticOverview = buildFallbackOverview({
+      failureStage = "fetch"
+      // Wait for indexing so the optimistic refresh below sees the new state.
+      const transactionBlock = await waitForTransactionBlock(suiClient, digest)
+
+      const optimisticOverview = buildOptimisticOverview({
         currentConfig: ammConfig,
         configId,
-        baseSpreadBps: updateInputs.baseSpreadBps,
-        volatilitySpreadBps: updateInputs.volatilitySpreadBps,
-        basePythPriceFeedIdHex: updateInputs.basePythPriceFeedIdHex,
-        quotePythPriceFeedIdHex: updateInputs.quotePythPriceFeedIdHex
+        formState
       })
 
       setTransactionState({
@@ -430,6 +352,11 @@ export const useUpdateAmmConfigModalState = ({
           ammConfig: optimisticOverview
         }
       })
+      if (explorerUrl) {
+        notification.txSuccess(transactionUrl(explorerUrl, digest), toastId)
+      } else {
+        notification.success(`AMM config updated (${digest})`, toastId)
+      }
 
       onConfigUpdated?.(optimisticOverview)
 
@@ -480,12 +407,18 @@ export const useUpdateAmmConfigModalState = ({
         error: errorMessage,
         details: errorDetailsRaw
       })
+      notification.txError(
+        error instanceof Error ? error : undefined,
+        errorMessage,
+        toastId
+      )
     }
   }, [
     ammConfig,
     ammConfigId,
     currentAccount,
     currentWallet,
+    explorerUrl,
     formState,
     hasFieldErrors,
     isLocalnet,

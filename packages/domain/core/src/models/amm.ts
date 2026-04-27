@@ -22,11 +22,13 @@ export const MAX_BASE_SPREAD_BPS = "10000"
 export const DEFAULT_ORDER_EXPIRATION_TIME_MS = "86400000"
 export const DEFAULT_MAX_PRICE_AGE_SECS = "60"
 export const DEFAULT_MAX_CONF_RATIO_BPS = "1000"
+export const DEFAULT_OUTER_BALANCE_BPS = "5000"
+export const DEFAULT_INVENTORY_SKEW_BPS = "0"
 
 export type AmmConfigOverview = {
   configId: string
   baseSpreadBps: string
-  volatilitySpreadBps: string
+  volatilityMultiplierBps: string
   active: boolean
   basePythPriceFeedIdHex: string
   quotePythPriceFeedIdHex: string
@@ -34,22 +36,35 @@ export type AmmConfigOverview = {
   orderExpirationTimeMs: string
   maxPriceAgeSecs: string
   maxConfRatioBps: string
+  outerBalanceBps: string
+  inventorySkewBps: string
 }
 
 type AmmConfigFields = {
-  active?: unknown
   base_spread_bps?: unknown
-  volatility_spread_bps?: unknown
-  base_pyth_price_feed_id?: unknown
-  quote_pyth_price_feed_id?: unknown
-  pool_id?: unknown
+  volatility_multiplier_bps?: unknown
   order_expiration_time_ms?: unknown
   max_price_age_secs?: unknown
   max_conf_ratio_bps?: unknown
+  outer_balance_bps?: unknown
+  inventory_skew_bps?: unknown
 }
 
-type MarketMakerFields = {
+type MarketFields = {
+  pool_id?: unknown
+  base?: unknown
+  quote?: unknown
+}
+
+type MarketCurrencyFields = {
+  pyth_price_feed_id?: unknown
+  price_publish_time?: unknown
+}
+
+type ExecutorFields = {
+  active?: unknown
   config?: { fields?: AmmConfigFields } | AmmConfigFields
+  market?: { fields?: MarketFields } | MarketFields
 }
 
 const unwrapNestedFields = <T>(value: unknown): T | undefined => {
@@ -89,9 +104,14 @@ const buildAmmConfigOverviewFromObject = ({
   configId: string
   object: SuiObjectData
 }): AmmConfigOverview => {
-  const marketMakerFields = unwrapMoveObjectFields<MarketMakerFields>(object)
+  const executorFields = unwrapMoveObjectFields<ExecutorFields>(object)
   const config =
-    unwrapNestedFields<AmmConfigFields>(marketMakerFields.config) ?? {}
+    unwrapNestedFields<AmmConfigFields>(executorFields.config) ?? {}
+  const market = unwrapNestedFields<MarketFields>(executorFields.market) ?? {}
+  const baseCurrency =
+    unwrapNestedFields<MarketCurrencyFields>(market.base) ?? {}
+  const quoteCurrency =
+    unwrapNestedFields<MarketCurrencyFields>(market.quote) ?? {}
 
   return {
     configId,
@@ -99,20 +119,20 @@ const buildAmmConfigOverviewFromObject = ({
       config.base_spread_bps,
       "Base spread bps"
     ),
-    volatilitySpreadBps: requireNumericField(
-      config.volatility_spread_bps,
-      "Volatility spread bps"
+    volatilityMultiplierBps: requireNumericField(
+      config.volatility_multiplier_bps,
+      "Volatility multiplier bps"
     ),
-    active: requireBooleanField(config.active, "Active"),
+    active: requireBooleanField(executorFields.active, "Active"),
     basePythPriceFeedIdHex: requireFeedIdHex(
-      config.base_pyth_price_feed_id,
+      baseCurrency.pyth_price_feed_id,
       "Base Pyth price feed id"
     ),
     quotePythPriceFeedIdHex: requireFeedIdHex(
-      config.quote_pyth_price_feed_id,
+      quoteCurrency.pyth_price_feed_id,
       "Quote Pyth price feed id"
     ),
-    poolId: requireStringField(config.pool_id, "Pool id"),
+    poolId: requireStringField(market.pool_id, "Pool id"),
     orderExpirationTimeMs: requireNumericField(
       config.order_expiration_time_ms,
       "Order expiration time ms"
@@ -124,6 +144,14 @@ const buildAmmConfigOverviewFromObject = ({
     maxConfRatioBps: requireNumericField(
       config.max_conf_ratio_bps,
       "Max conf ratio bps"
+    ),
+    outerBalanceBps: requireNumericField(
+      config.outer_balance_bps,
+      "Outer balance bps"
+    ),
+    inventorySkewBps: requireNumericField(
+      config.inventory_skew_bps,
+      "Inventory skew bps"
     )
   }
 }
@@ -141,7 +169,7 @@ export const getAmmConfigOverview = async (
 }
 
 export const DEFAULT_BASE_SPREAD_BPS = "25"
-export const DEFAULT_VOLATILITY_SPREAD_BPS = "200"
+export const DEFAULT_VOLATILITY_MULTIPLIER_BPS = "10000"
 
 const resolveBaseSpreadBps = (rawValue?: string): bigint => {
   const baseSpreadBps = parsePositiveU64(
@@ -156,31 +184,35 @@ const resolveBaseSpreadBps = (rawValue?: string): bigint => {
   return baseSpreadBps
 }
 
-const resolveVolatilitySpreadBps = (rawValue?: string): bigint =>
+const resolveVolatilityMultiplierBps = (rawValue?: string): bigint =>
   parseNonNegativeU64(
-    rawValue ?? DEFAULT_VOLATILITY_SPREAD_BPS,
-    "Volatility spread bps"
+    rawValue ?? DEFAULT_VOLATILITY_MULTIPLIER_BPS,
+    "Volatility multiplier bps"
   )
 
 export const resolveAmmConfigInputs = ({
-  volatilitySpreadBps,
+  volatilityMultiplierBps,
   baseSpreadBps,
   basePythPriceFeedIdHex,
   quotePythPriceFeedIdHex,
   orderExpirationTimeMs,
   maxPriceAgeSecs,
-  maxConfRatioBps
+  maxConfRatioBps,
+  outerBalanceBps,
+  inventorySkewBps
 }: {
-  volatilitySpreadBps?: string
+  volatilityMultiplierBps?: string
   baseSpreadBps?: string
   basePythPriceFeedIdHex: string
   quotePythPriceFeedIdHex: string
   orderExpirationTimeMs?: string
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
+  outerBalanceBps?: string
+  inventorySkewBps?: string
 }): {
   baseSpreadBps: bigint
-  volatilitySpreadBps: bigint
+  volatilityMultiplierBps: bigint
   basePythPriceFeedIdHex: string
   basePythPriceFeedIdBytes: number[]
   quotePythPriceFeedIdHex: string
@@ -188,9 +220,13 @@ export const resolveAmmConfigInputs = ({
   orderExpirationTimeMs: bigint
   maxPriceAgeSecs: bigint
   maxConfRatioBps: bigint
+  outerBalanceBps: bigint
+  inventorySkewBps: bigint
 } => ({
   baseSpreadBps: resolveBaseSpreadBps(baseSpreadBps),
-  volatilitySpreadBps: resolveVolatilitySpreadBps(volatilitySpreadBps),
+  volatilityMultiplierBps: resolveVolatilityMultiplierBps(
+    volatilityMultiplierBps
+  ),
   basePythPriceFeedIdHex,
   basePythPriceFeedIdBytes: parsePythPriceFeedIdBytes(basePythPriceFeedIdHex),
   quotePythPriceFeedIdHex,
@@ -206,5 +242,13 @@ export const resolveAmmConfigInputs = ({
   maxConfRatioBps: parsePositiveU64(
     maxConfRatioBps ?? DEFAULT_MAX_CONF_RATIO_BPS,
     "Max conf ratio bps"
+  ),
+  outerBalanceBps: parseNonNegativeU64(
+    outerBalanceBps ?? DEFAULT_OUTER_BALANCE_BPS,
+    "Outer balance bps"
+  ),
+  inventorySkewBps: parseNonNegativeU64(
+    inventorySkewBps ?? DEFAULT_INVENTORY_SKEW_BPS,
+    "Inventory skew bps"
   )
 })

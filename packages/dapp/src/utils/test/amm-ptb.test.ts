@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  buildCreateMarketMakerTransaction,
-  buildUpdateMarketMakerTransaction
+  buildCreateExecutorTransaction,
+  buildUpdateConfigTransaction
 } from "@sui-amm/domain-core/ptb/amm"
 import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 
 const expectMoveCall = (
   command: ReturnType<
-    ReturnType<typeof buildCreateMarketMakerTransaction>["getData"]
+    ReturnType<typeof buildCreateExecutorTransaction>["getData"]
   >["commands"][number]
 ) => {
   expect(command.$kind).toBe("MoveCall")
@@ -21,25 +21,100 @@ const expectMoveCall = (
 
 const FEED_BYTES = Array.from({ length: 32 }, (_, index) => index)
 
+const BASE_ASSET_TYPE_TAG =
+  "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI"
+const QUOTE_ASSET_TYPE_TAG =
+  "0x0000000000000000000000000000000000000000000000000000000000000abc::usdc::USDC"
+
+const EXECUTOR: WrappedSuiSharedObject = {
+  object: {
+    objectId: "0x789",
+    version: "7",
+    digest: "digest"
+  },
+  sharedRef: {
+    objectId: "0x789",
+    initialSharedVersion: "5",
+    mutable: true
+  }
+} as WrappedSuiSharedObject
+
+const POOL: WrappedSuiSharedObject = {
+  object: {
+    objectId: "0x456",
+    version: "3",
+    digest: "digest"
+  },
+  sharedRef: {
+    objectId: "0x456",
+    initialSharedVersion: "2",
+    mutable: false
+  }
+} as WrappedSuiSharedObject
+
+const BASE_CURRENCY: WrappedSuiSharedObject = {
+  object: {
+    objectId: "0xb00",
+    version: "1",
+    digest: "digest"
+  },
+  sharedRef: {
+    objectId: "0xb00",
+    initialSharedVersion: "1",
+    mutable: false
+  }
+} as WrappedSuiSharedObject
+
+const QUOTE_CURRENCY: WrappedSuiSharedObject = {
+  object: {
+    objectId: "0xc00",
+    version: "1",
+    digest: "digest"
+  },
+  sharedRef: {
+    objectId: "0xc00",
+    initialSharedVersion: "1",
+    mutable: false
+  }
+} as WrappedSuiSharedObject
+
 describe("amm PTB builders", () => {
-  it("builds create with config::new + executor::create + share + transfer", () => {
-    const transaction = buildCreateMarketMakerTransaction({
+  it("builds create with market::new + config::new + executor::create + share + transfer", () => {
+    const transaction = buildCreateExecutorTransaction({
       packageId: "0x123",
-      poolId: "0x456",
+      pool: POOL,
+      baseCurrency: BASE_CURRENCY,
+      quoteCurrency: QUOTE_CURRENCY,
+      baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+      quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
       senderAddress: "0x789",
       baseSpreadBps: 25n,
-      volatilitySpreadBps: 200n,
+      volatilityMultiplierBps: 10000n,
       basePythPriceFeedIdBytes: FEED_BYTES,
       quotePythPriceFeedIdBytes: FEED_BYTES,
       orderExpirationTimeMs: 86400000n,
       maxPriceAgeSecs: 60n,
-      maxConfRatioBps: 1000n
+      maxConfRatioBps: 1000n,
+      outerBalanceBps: 5000n,
+      inventorySkewBps: 0n
     })
 
     const transactionData = transaction.getData()
-    expect(transactionData.commands).toHaveLength(4)
+    expect(transactionData.commands).toHaveLength(5)
 
-    const configCall = expectMoveCall(transactionData.commands[0])
+    const marketCall = expectMoveCall(transactionData.commands[0])
+    expect(marketCall).toMatchObject({
+      package:
+        "0x0000000000000000000000000000000000000000000000000000000000000123",
+      module: "market",
+      function: "new"
+    })
+    expect(marketCall.typeArguments).toEqual([
+      BASE_ASSET_TYPE_TAG,
+      QUOTE_ASSET_TYPE_TAG
+    ])
+
+    const configCall = expectMoveCall(transactionData.commands[1])
     expect(configCall).toMatchObject({
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
@@ -47,7 +122,7 @@ describe("amm PTB builders", () => {
       function: "new"
     })
 
-    const createCall = expectMoveCall(transactionData.commands[1])
+    const createCall = expectMoveCall(transactionData.commands[2])
     expect(createCall).toMatchObject({
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
@@ -55,7 +130,7 @@ describe("amm PTB builders", () => {
       function: "create"
     })
 
-    const shareCall = expectMoveCall(transactionData.commands[2])
+    const shareCall = expectMoveCall(transactionData.commands[3])
     expect(shareCall).toMatchObject({
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000002",
@@ -63,54 +138,46 @@ describe("amm PTB builders", () => {
       function: "public_share_object"
     })
 
-    expect(transactionData.commands[3].$kind).toBe("TransferObjects")
+    expect(transactionData.commands[4].$kind).toBe("TransferObjects")
   })
 
   it("rejects create when a feed id bytes array is not 32 bytes", () => {
     expect(() =>
-      buildCreateMarketMakerTransaction({
+      buildCreateExecutorTransaction({
         packageId: "0x123",
-        poolId: "0x456",
+        pool: POOL,
+        baseCurrency: BASE_CURRENCY,
+        quoteCurrency: QUOTE_CURRENCY,
+        baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+        quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
         senderAddress: "0x789",
         baseSpreadBps: 25n,
-        volatilitySpreadBps: 200n,
+        volatilityMultiplierBps: 10000n,
         basePythPriceFeedIdBytes: "0xfeed" as unknown as number[],
         quotePythPriceFeedIdBytes: FEED_BYTES,
         orderExpirationTimeMs: 86400000n,
         maxPriceAgeSecs: 60n,
-        maxConfRatioBps: 1000n
+        maxConfRatioBps: 1000n,
+        outerBalanceBps: 5000n,
+        inventorySkewBps: 0n
       })
     ).toThrowError(
       new TypeError("basePythPriceFeedIdBytes must be a 32-byte array.")
     )
   })
 
-  it("builds update with config::new + executor::update_market_maker", () => {
-    const marketMaker = {
-      object: {
-        objectId: "0x789",
-        version: "7",
-        digest: "digest"
-      },
-      sharedRef: {
-        objectId: "0x789",
-        initialSharedVersion: "5",
-        mutable: true
-      }
-    } as WrappedSuiSharedObject
-
-    const transaction = buildUpdateMarketMakerTransaction({
+  it("builds update config with config::new + executor::update_config", () => {
+    const transaction = buildUpdateConfigTransaction({
       packageId: "0x123",
-      marketMaker,
+      executor: EXECUTOR,
       adminCapId: "0x456",
-      poolId: "0xabc",
       baseSpreadBps: 25n,
-      volatilitySpreadBps: 200n,
-      basePythPriceFeedIdBytes: FEED_BYTES,
-      quotePythPriceFeedIdBytes: FEED_BYTES,
+      volatilityMultiplierBps: 10000n,
       orderExpirationTimeMs: 86400000n,
       maxPriceAgeSecs: 60n,
-      maxConfRatioBps: 1000n
+      maxConfRatioBps: 1000n,
+      outerBalanceBps: 5000n,
+      inventorySkewBps: 0n
     })
 
     const transactionData = transaction.getData()
@@ -129,7 +196,7 @@ describe("amm PTB builders", () => {
       package:
         "0x0000000000000000000000000000000000000000000000000000000000000123",
       module: "executor",
-      function: "update_market_maker"
+      function: "update_config"
     })
     expect(updateCall.arguments[0]).toMatchObject({
       $kind: "Input",
@@ -139,38 +206,5 @@ describe("amm PTB builders", () => {
       $kind: "Input",
       type: "object"
     })
-  })
-
-  it("rejects update when a feed id bytes array is not 32 bytes long", () => {
-    const marketMaker = {
-      object: {
-        objectId: "0x789",
-        version: "7",
-        digest: "digest"
-      },
-      sharedRef: {
-        objectId: "0x789",
-        initialSharedVersion: "5",
-        mutable: true
-      }
-    } as WrappedSuiSharedObject
-
-    expect(() =>
-      buildUpdateMarketMakerTransaction({
-        packageId: "0x123",
-        marketMaker,
-        adminCapId: "0x456",
-        poolId: "0xabc",
-        baseSpreadBps: 25n,
-        volatilitySpreadBps: 200n,
-        basePythPriceFeedIdBytes: FEED_BYTES,
-        quotePythPriceFeedIdBytes: Array.from({ length: 31 }, (_, i) => i),
-        orderExpirationTimeMs: 86400000n,
-        maxPriceAgeSecs: 60n,
-        maxConfRatioBps: 1000n
-      })
-    ).toThrowError(
-      new TypeError("quotePythPriceFeedIdBytes must be a 32-byte array.")
-    )
   })
 })

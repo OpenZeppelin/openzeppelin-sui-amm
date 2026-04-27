@@ -1,9 +1,30 @@
 "use client"
 
 import { useCurrentAccount, useSuiClient } from "@mysten/dapp-kit"
-import { findOwnedTraderAccountIds } from "@sui-amm/domain-core/models/traderAccount"
+import type { SuiClient } from "@mysten/sui/client"
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import { useEffect, useState } from "react"
+import { resolveAmmAdminCapId } from "../helpers/ammAdminCap"
 import useResolvedPackageId from "./useResolvedPackageId"
+
+const readExecutorIdFromAdminCap = async ({
+  adminCapId,
+  suiClient
+}: {
+  adminCapId: string
+  suiClient: SuiClient
+}): Promise<string | undefined> => {
+  const response = await suiClient.getObject({
+    id: adminCapId,
+    options: { showContent: true }
+  })
+  const content = response.data?.content
+  if (!content || content.dataType !== "moveObject") return undefined
+  const fields = (content as { fields?: { executor_id?: unknown } }).fields
+  const raw = fields?.executor_id
+  if (typeof raw === "string") return normalizeSuiObjectId(raw)
+  return undefined
+}
 
 export type TraderAccountIdResolutionStatus =
   | "idle"
@@ -23,8 +44,6 @@ type TraderAccountIdResolutionState = {
 const emptyResolutionState = (): TraderAccountIdResolutionState => ({
   status: "idle"
 })
-
-const pickTraderAccountId = (traderAccountIds: string[]) => traderAccountIds[0]
 
 const resolveUnexpectedErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Unable to resolve market maker."
@@ -60,16 +79,28 @@ const useResolvedTraderAccountId = (
 
     const load = async () => {
       try {
-        const traderAccountIds = await findOwnedTraderAccountIds({
+        const adminCapId = await resolveAmmAdminCapId({
           ownerAddress: currentAccount.address,
           packageId: contractPackageId,
           suiClient
         })
         if (!active) return
-
-        const traderAccountId = pickTraderAccountId(traderAccountIds)
-        if (!traderAccountId) {
+        if (!adminCapId) {
           setState({ status: "not-found" })
+          return
+        }
+
+        const traderAccountId = await readExecutorIdFromAdminCap({
+          adminCapId,
+          suiClient
+        })
+        if (!active) return
+        if (!traderAccountId) {
+          setState({
+            status: "error",
+            error:
+              "Found an AdminCap but could not read its executor_id. Try refreshing."
+          })
           return
         }
 

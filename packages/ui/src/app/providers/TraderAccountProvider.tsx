@@ -8,6 +8,8 @@ import {
   useState,
   type ReactNode
 } from "react"
+import useExecutorEventSubscription from "../hooks/useExecutorEventSubscription"
+import useResolvedPackageId from "../hooks/useResolvedPackageId"
 import useResolvedTraderAccountId from "../hooks/useResolvedTraderAccountId"
 import useTraderAccountOverview from "../hooks/useTraderAccountOverview"
 
@@ -36,6 +38,16 @@ export const TraderAccountProvider = ({
     resolution.traderAccountId,
     refreshToken
   )
+  const packageId = useResolvedPackageId()
+
+  // Re-fetch the executor whenever it emits an event (deposit/withdraw/
+  // refresh_quotes_permissionless/etc.). Falls back silently when the RPC doesn't support
+  // WebSocket subscriptions.
+  useExecutorEventSubscription({
+    packageId,
+    executorId: resolution.traderAccountId,
+    onEvent: refreshTraderAccount
+  })
 
   const value = useMemo(
     () => ({

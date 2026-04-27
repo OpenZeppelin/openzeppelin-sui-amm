@@ -449,7 +449,7 @@ describe("publishPackageWithLog", () => {
             "--with-unpublished-dependencies",
             "--skip-dependency-verification"
           ]),
-          { env: undefined }
+          { env: undefined, cwd: packagePath }
         )
         expect(logMocks.logWarning).toHaveBeenCalledWith(
           expect.stringContaining("Enabling --with-unpublished-dependencies")

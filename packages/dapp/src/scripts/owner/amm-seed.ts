@@ -44,7 +44,7 @@ type AmmSeedArguments = {
   adminCapId?: string
   ammPackageId?: string
   baseSpreadBps?: string
-  volatilitySpreadBps?: string
+  volatilityMultiplierBps?: string
   pythPriceFeedId?: string
   pythPriceFeedLabel?: string
   allowConfigMismatch?: boolean
@@ -365,8 +365,9 @@ const resolveExpectedExistingAmmConfigInputs = async ({
   return resolveAmmConfigInputs({
     basePythPriceFeedIdHex,
     quotePythPriceFeedIdHex: existingOverview.quotePythPriceFeedIdHex,
-    volatilitySpreadBps:
-      cliArguments.volatilitySpreadBps ?? existingOverview.volatilitySpreadBps,
+    volatilityMultiplierBps:
+      cliArguments.volatilityMultiplierBps ??
+      existingOverview.volatilityMultiplierBps,
     baseSpreadBps: cliArguments.baseSpreadBps ?? existingOverview.baseSpreadBps
   })
 }
@@ -380,8 +381,8 @@ const collectAmmConfigInputMismatches = ({
 }) => {
   const mismatches: string[] = []
   const expectedBaseSpreadBps = expectedInputs.baseSpreadBps.toString()
-  const expectedVolatilitySpreadBps =
-    expectedInputs.volatilitySpreadBps.toString()
+  const expectedVolatilityMultiplierBps =
+    expectedInputs.volatilityMultiplierBps.toString()
 
   if (
     normalizeHex(existingOverview.basePythPriceFeedIdHex) !==
@@ -398,9 +399,11 @@ const collectAmmConfigInputMismatches = ({
     )
   }
 
-  if (existingOverview.volatilitySpreadBps !== expectedVolatilitySpreadBps) {
+  if (
+    existingOverview.volatilityMultiplierBps !== expectedVolatilityMultiplierBps
+  ) {
     mismatches.push(
-      `volatilitySpreadBps expected ${expectedVolatilitySpreadBps} but got ${existingOverview.volatilitySpreadBps}`
+      `volatilityMultiplierBps expected ${expectedVolatilityMultiplierBps} but got ${existingOverview.volatilityMultiplierBps}`
     )
   }
 
@@ -522,7 +525,7 @@ const resolveOrCreateAmmConfig = async ({
         "0x0000000000000000000000000000000000000000000000000000000000000000",
       basePythPriceFeedIdHex,
       quotePythPriceFeedIdHex: basePythPriceFeedIdHex,
-      volatilitySpreadBps: cliArguments.volatilitySpreadBps,
+      volatilityMultiplierBps: cliArguments.volatilityMultiplierBps,
       baseSpreadBps: cliArguments.baseSpreadBps
     })
 
@@ -630,11 +633,11 @@ runSuiScript(
         "Base spread in basis points (u64); defaults to the current config value when reusing, otherwise the AMM default.",
       demandOption: false
     })
-    .option("volatilitySpreadBps", {
-      alias: ["volatility-spread-bps"],
+    .option("volatilityMultiplierBps", {
+      alias: ["volatility-multiplier-bps"],
       type: "string",
       description:
-        "Volatility spread in basis points (u64); defaults to the current config value when reusing, otherwise the AMM default.",
+        "Volatility multiplier in basis points applied to the combined Pyth confidence ratio (u64); defaults to the current config value when reusing, otherwise the AMM default.",
       demandOption: false
     })
     .option("pythPriceFeedId", {

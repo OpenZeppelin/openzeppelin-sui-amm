@@ -25,11 +25,8 @@ const defaultLoadErrorMessage = "Unable to load market maker."
 const buildTraderAccountDetails = (
   traderAccount: TraderAccountOverview
 ): TTraderAccountDetails => ({
-  ownerAddress: traderAccount.ownerAddress,
   balanceManagerId: traderAccount.balanceManagerId,
-  tradeCapId: traderAccount.tradeCapId,
-  depositCapId: traderAccount.depositCapId,
-  withdrawCapId: traderAccount.withdrawCapId
+  poolId: traderAccount.poolId
 })
 
 const resolveTraderAccountContent = ({

@@ -1,17 +1,23 @@
 /**
- * Updates an existing shared AMM market maker for the target network.
+ * Updates the configuration of an existing shared AMM market maker for the target network.
+ *
+ * This script updates `AMMConfig` (spreads, order expiration, oracle freshness and confidence
+ * limits) via `executor::update_config`. The bound pool and Pyth feeds are immutable once the
+ * executor is created — to change them, recreate the executor.
  */
 import yargs from "yargs"
 
 import {
+  DEFAULT_INVENTORY_SKEW_BPS,
   DEFAULT_MAX_CONF_RATIO_BPS,
   DEFAULT_MAX_PRICE_AGE_SECS,
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
+  DEFAULT_OUTER_BALANCE_BPS,
   type AmmConfigOverview,
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { buildUpdateMarketMakerTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { buildUpdateConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
 import {
   resolveAmmConfigId,
   resolveAmmPackageId
@@ -22,8 +28,7 @@ import { emitJsonOutput } from "@sui-amm/tooling-node/json"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
 import {
   logAmmConfigOverview,
-  resolveAmmAdminCapIdFromArtifacts,
-  resolvePythPriceFeedIdHex
+  resolveAmmAdminCapIdFromArtifacts
 } from "../../utils/amm.ts"
 
 type UpdateAmmArguments = {
@@ -31,13 +36,12 @@ type UpdateAmmArguments = {
   adminCapId?: string
   ammPackageId?: string
   baseSpreadBps?: string
-  volatilitySpreadBps?: string
-  basePythPriceFeedId?: string
-  quotePythPriceFeedId?: string
-  pythPriceFeedLabel?: string
+  volatilityMultiplierBps?: string
   orderExpirationTimeMs?: string
   maxPriceAgeSecs?: string
   maxConfRatioBps?: string
+  outerBalanceBps?: string
+  inventorySkewBps?: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
@@ -45,14 +49,12 @@ type UpdateAmmArguments = {
 
 type ResolvedAmmUpdateInputs = {
   baseSpreadBps: bigint
-  volatilitySpreadBps: bigint
-  basePythPriceFeedIdHex: string
-  basePythPriceFeedIdBytes: number[]
-  quotePythPriceFeedIdHex: string
-  quotePythPriceFeedIdBytes: number[]
+  volatilityMultiplierBps: bigint
   orderExpirationTimeMs: bigint
   maxPriceAgeSecs: bigint
   maxConfRatioBps: bigint
+  outerBalanceBps: bigint
+  inventorySkewBps: bigint
 }
 
 const resolveExplicitAdminCapId = (adminCapId?: string): string | undefined => {
@@ -87,65 +89,42 @@ const resolveAdminCapId = async ({
   })
 }
 
-const shouldResolveNewBasePythPriceFeedId = (
-  cliArguments: UpdateAmmArguments
-) =>
-  Boolean(cliArguments.basePythPriceFeedId?.trim()) ||
-  Boolean(cliArguments.pythPriceFeedLabel?.trim())
-
-const resolveBasePythPriceFeedIdHexForUpdate = async ({
-  networkName,
+const resolveAmmUpdateInputs = ({
   cliArguments,
   currentOverview
 }: {
-  networkName: string
   cliArguments: UpdateAmmArguments
   currentOverview: AmmConfigOverview
-}) => {
-  if (!shouldResolveNewBasePythPriceFeedId(cliArguments)) {
-    return currentOverview.basePythPriceFeedIdHex
-  }
-
-  return resolvePythPriceFeedIdHex({
-    networkName,
-    pythPriceFeedId: cliArguments.basePythPriceFeedId,
-    pythPriceFeedLabel: cliArguments.pythPriceFeedLabel
-  })
-}
-
-const resolveAmmUpdateInputs = async ({
-  networkName,
-  cliArguments,
-  currentOverview
-}: {
-  networkName: string
-  cliArguments: UpdateAmmArguments
-  currentOverview: AmmConfigOverview
-}): Promise<ResolvedAmmUpdateInputs> => {
-  const basePythPriceFeedIdHex = await resolveBasePythPriceFeedIdHexForUpdate({
-    networkName,
-    cliArguments,
-    currentOverview
-  })
-
-  const quotePythPriceFeedIdHex =
-    cliArguments.quotePythPriceFeedId?.trim() ||
-    currentOverview.quotePythPriceFeedIdHex
-
-  return resolveAmmConfigInputs({
+}): ResolvedAmmUpdateInputs => {
+  const inputs = resolveAmmConfigInputs({
     baseSpreadBps: cliArguments.baseSpreadBps ?? currentOverview.baseSpreadBps,
-    volatilitySpreadBps:
-      cliArguments.volatilitySpreadBps ?? currentOverview.volatilitySpreadBps,
-    basePythPriceFeedIdHex,
-    quotePythPriceFeedIdHex,
+    volatilityMultiplierBps:
+      cliArguments.volatilityMultiplierBps ??
+      currentOverview.volatilityMultiplierBps,
+    basePythPriceFeedIdHex: currentOverview.basePythPriceFeedIdHex,
+    quotePythPriceFeedIdHex: currentOverview.quotePythPriceFeedIdHex,
     orderExpirationTimeMs:
       cliArguments.orderExpirationTimeMs ??
       currentOverview.orderExpirationTimeMs,
     maxPriceAgeSecs:
       cliArguments.maxPriceAgeSecs ?? currentOverview.maxPriceAgeSecs,
     maxConfRatioBps:
-      cliArguments.maxConfRatioBps ?? currentOverview.maxConfRatioBps
+      cliArguments.maxConfRatioBps ?? currentOverview.maxConfRatioBps,
+    outerBalanceBps:
+      cliArguments.outerBalanceBps ?? currentOverview.outerBalanceBps,
+    inventorySkewBps:
+      cliArguments.inventorySkewBps ?? currentOverview.inventorySkewBps
   })
+
+  return {
+    baseSpreadBps: inputs.baseSpreadBps,
+    volatilityMultiplierBps: inputs.volatilityMultiplierBps,
+    orderExpirationTimeMs: inputs.orderExpirationTimeMs,
+    maxPriceAgeSecs: inputs.maxPriceAgeSecs,
+    maxConfRatioBps: inputs.maxConfRatioBps,
+    outerBalanceBps: inputs.outerBalanceBps,
+    inventorySkewBps: inputs.inventorySkewBps
+  }
 }
 
 runSuiScript(
@@ -169,28 +148,26 @@ runSuiScript(
       tooling.getMutableSharedObject({ objectId: ammConfigId })
     ])
 
-    const updateInputs = await resolveAmmUpdateInputs({
-      networkName: tooling.network.networkName,
+    const updateInputs = resolveAmmUpdateInputs({
       cliArguments,
       currentOverview
     })
 
-    const updateMarketMakerTransaction = buildUpdateMarketMakerTransaction({
+    const updateConfigTransaction = buildUpdateConfigTransaction({
       packageId: ammPackageId,
-      marketMaker: ammConfigSharedObject,
+      executor: ammConfigSharedObject,
       adminCapId,
-      poolId: currentOverview.poolId,
       baseSpreadBps: updateInputs.baseSpreadBps,
-      volatilitySpreadBps: updateInputs.volatilitySpreadBps,
-      basePythPriceFeedIdBytes: updateInputs.basePythPriceFeedIdBytes,
-      quotePythPriceFeedIdBytes: updateInputs.quotePythPriceFeedIdBytes,
+      volatilityMultiplierBps: updateInputs.volatilityMultiplierBps,
       orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
       maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
-      maxConfRatioBps: updateInputs.maxConfRatioBps
+      maxConfRatioBps: updateInputs.maxConfRatioBps,
+      outerBalanceBps: updateInputs.outerBalanceBps,
+      inventorySkewBps: updateInputs.inventorySkewBps
     })
 
     const { execution, summary } = await tooling.executeTransactionWithSummary({
-      transaction: updateMarketMakerTransaction,
+      transaction: updateConfigTransaction,
       signer: tooling.loadedEd25519KeyPair,
       summaryLabel: "update-amm",
       devInspect: cliArguments.devInspect,
@@ -212,8 +189,6 @@ runSuiScript(
           ammConfig: updatedOverview,
           ammConfigId,
           adminCapId,
-          basePythPriceFeedIdHex: updateInputs.basePythPriceFeedIdHex,
-          quotePythPriceFeedIdHex: updateInputs.quotePythPriceFeedIdHex,
           transactionSummary: summary
         },
         cliArguments.json
@@ -255,32 +230,11 @@ runSuiScript(
         "Base spread in basis points (u64); defaults to the current config value.",
       demandOption: false
     })
-    .option("volatilitySpreadBps", {
-      alias: ["volatility-spread-bps"],
+    .option("volatilityMultiplierBps", {
+      alias: ["volatility-multiplier-bps"],
       type: "string",
       description:
-        "Volatility spread in basis points (u64); defaults to the current config value.",
-      demandOption: false
-    })
-    .option("basePythPriceFeedId", {
-      alias: ["base-pyth-price-feed-id", "pyth-price-feed-id", "pyth-feed-id"],
-      type: "string",
-      description:
-        "Base asset Pyth price feed id (32 bytes hex); defaults to the current config value.",
-      demandOption: false
-    })
-    .option("quotePythPriceFeedId", {
-      alias: ["quote-pyth-price-feed-id"],
-      type: "string",
-      description:
-        "Quote asset Pyth price feed id (32 bytes hex); defaults to the current config value.",
-      demandOption: false
-    })
-    .option("pythPriceFeedLabel", {
-      alias: ["pyth-price-feed-label", "pyth-feed-label"],
-      type: "string",
-      description:
-        "Localnet artifact feed label to resolve the base feed id when --base-pyth-price-feed-id is omitted.",
+        "Volatility multiplier in basis points applied to the combined Pyth confidence ratio (u64); defaults to the current config value.",
       demandOption: false
     })
     .option("orderExpirationTimeMs", {
@@ -305,6 +259,22 @@ runSuiScript(
       description:
         "Maximum acceptable confidence-to-price ratio in basis points (u64); defaults to the current config value.",
       default: DEFAULT_MAX_CONF_RATIO_BPS,
+      demandOption: false
+    })
+    .option("outerBalanceBps", {
+      alias: ["outer-balance-bps"],
+      type: "string",
+      description:
+        "Share of the settleable balance allocated to the outer (volatility) spread order in basis points (u64); defaults to the current config value.",
+      default: DEFAULT_OUTER_BALANCE_BPS,
+      demandOption: false
+    })
+    .option("inventorySkewBps", {
+      alias: ["inventory-skew-bps"],
+      type: "string",
+      description:
+        "Inventory-driven mid-shift coefficient in basis points (u64); defaults to the current config value.",
+      default: DEFAULT_INVENTORY_SKEW_BPS,
       demandOption: false
     })
     .option("devInspect", {

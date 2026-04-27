@@ -1,9 +1,6 @@
 export type TTraderAccountDetails = {
-  ownerAddress: string
   balanceManagerId: string
-  tradeCapId?: string
-  depositCapId?: string
-  withdrawCapId?: string
+  poolId: string
 }
 
 export type TTraderAccountCardContent =

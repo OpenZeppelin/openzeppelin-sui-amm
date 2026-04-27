@@ -580,13 +580,21 @@ const shouldRetryViaTestPublish = ({
   stdout?: string | Buffer
   stderr?: string | Buffer
 }) => {
-  if (!plan.shouldUseUnpublishedDependencies) return false
-
   const combined = `${stdout ?? ""}\n${stderr ?? ""}`
-  return (
+  // Sui CLI ≤ 1.69: `sui client publish` failed because an unpublished
+  // dependency's Move.toml had no entry for the build env we passed.
+  if (
+    plan.shouldUseUnpublishedDependencies &&
     combined.includes("Environment `") &&
     combined.includes("is not present in Move.toml")
   )
+    return true
+  // Sui CLI ≥ 1.70: persistent `sui client publish` rejects ephemeral build
+  // envs. The `[environments] test-publish = "..."` entry we use on localnet
+  // is meant to flow through `sui client test-publish`, so retry there.
+  if (combined.includes("does not define an")) return true
+  if (combined.includes("--build-env` argument is not allowed")) return true
+  return false
 }
 
 /**
@@ -602,19 +610,51 @@ const publishViaCli = async (plan: PublishPlan): Promise<PublishResult> => {
       ? { ...process.env, SUI_KEYSTORE_PATH: plan.keystorePath }
       : undefined
 
+  // Run with cwd = package path so the CLI's ephemeral `Pub.<env>.toml` lands
+  // alongside the package (Sui CLI ≥ 1.70 writes it relative to the caller's
+  // cwd, even when an absolute package path is passed).
+  const cliCwd = plan.packagePath
+
   const { stdout, stderr, exitCode } = await runClientPublish(args, {
-    env: cliEnv
+    env: cliEnv,
+    cwd: cliCwd
   })
   if (stderr?.toString().trim()) logWarning(stderr.toString().trim())
 
   if (exitCode && exitCode !== 0) {
     if (shouldRetryViaTestPublish({ plan, stdout, stderr })) {
       logWarning(
-        "`sui client publish` failed with Move.toml environment lookup; retrying with `sui client test-publish` for local unpublished dependencies."
+        "`sui client publish` failed; retrying with `sui client test-publish` (ephemeral) for local/unpublished dependencies."
       )
 
-      const retry = await runClientTestPublish(args, {
-        env: cliEnv
+      // The failed `sui client publish` may have left an ephemeral
+      // `Pub.<env>.toml` behind that would make `test-publish` abort with
+      // "already published". Wipe it before retrying.
+      await clearPublishedEntryForNetwork({
+        packagePath: plan.packagePath,
+        networkName: plan.network.networkName
+      })
+
+      // `sui client test-publish` (Sui CLI ≥ 1.70) rejects
+      // `--skip-dependency-verification` (it always builds from source).
+      const TEST_PUBLISH_INCOMPATIBLE_FLAGS = new Set([
+        "--skip-dependency-verification"
+      ])
+      const filteredArgs = args.filter(
+        (arg) => !TEST_PUBLISH_INCOMPATIBLE_FLAGS.has(arg)
+      )
+      // Ephemeral publishes naturally chain through other unpublished local
+      // deps (e.g., deepbook → token), so always opt in. The CLI is fine
+      // with this flag appearing twice if the original args already had it.
+      const testPublishArgs = filteredArgs.includes(
+        "--with-unpublished-dependencies"
+      )
+        ? filteredArgs
+        : [...filteredArgs, "--with-unpublished-dependencies"]
+
+      const retry = await runClientTestPublish(testPublishArgs, {
+        env: cliEnv,
+        cwd: cliCwd
       })
       if (retry.stderr?.toString().trim())
         logWarning(retry.stderr.toString().trim())

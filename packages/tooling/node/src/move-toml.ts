@@ -763,12 +763,24 @@ export const clearPublishedEntryForNetwork = async ({
   const publishedTomlPath = path.join(packagePath, "Published.toml")
   if (!networkName) return { publishedTomlPath, didUpdate: false }
 
+  // Sui CLI ≥ 1.70 writes ephemeral publish state to `Pub.<networkName>.toml`
+  // alongside `Published.toml`. Both must be cleared so a re-publish doesn't
+  // hit "Your package is already published".
+  const ephemeralPubPath = path.join(packagePath, `Pub.${networkName}.toml`)
+  let didUpdate = false
+  try {
+    await fs.unlink(ephemeralPubPath)
+    didUpdate = true
+  } catch (error) {
+    if (!isErrnoWithCode(error, "ENOENT")) throw error
+  }
+
   let contents: string
   try {
     contents = await fs.readFile(publishedTomlPath, "utf8")
   } catch (error) {
     if (isErrnoWithCode(error, "ENOENT"))
-      return { publishedTomlPath, didUpdate: false }
+      return { publishedTomlPath, didUpdate }
     throw error
   }
 
@@ -777,7 +789,6 @@ export const clearPublishedEntryForNetwork = async ({
   if (resolvedEnvironmentName) targetNetworks.add(resolvedEnvironmentName)
 
   let updatedContents = contents
-  let didUpdate = false
 
   for (const targetNetwork of targetNetworks) {
     const result = removePublishedSectionForNetwork(
@@ -788,8 +799,8 @@ export const clearPublishedEntryForNetwork = async ({
     didUpdate = didUpdate || result.didUpdate
   }
 
-  if (!didUpdate) return { publishedTomlPath, didUpdate: false }
-
-  await fs.writeFile(publishedTomlPath, updatedContents)
-  return { publishedTomlPath, didUpdate: true }
+  if (updatedContents !== contents) {
+    await fs.writeFile(publishedTomlPath, updatedContents)
+  }
+  return { publishedTomlPath, didUpdate }
 }
