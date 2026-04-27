@@ -37,6 +37,18 @@ const formatRawPrice = ({
   })
 }
 
+// Convert a DeepBook fixed-point raw price into a plain JS number for plotting.
+// `adjustedDecimals` shifts the decimal point: divide when positive, multiply
+// when negative. Lossy for extreme magnitudes but the chart axis only cares
+// about the scaled value, not full bigint precision.
+const rawPriceToNumber = (
+  rawPrice: bigint,
+  adjustedDecimals: number
+): number =>
+  adjustedDecimals < 0
+    ? Number(rawPrice) * 10 ** -adjustedDecimals
+    : Number(rawPrice) / 10 ** adjustedDecimals
+
 const parseRawPriceField = (value: unknown): bigint | undefined => {
   if (typeof value !== "string" && typeof value !== "number") return undefined
   try {
@@ -71,9 +83,7 @@ const buildSeries = ({
       rawPrice: oracleRaw,
       adjustedDecimals
     })
-    const oracleValueParsed = Number.parseFloat(
-      oracleDisplay.replace(/[^0-9.+-eE]/g, "")
-    )
+    const oracleValueRaw = rawPriceToNumber(oracleRaw, adjustedDecimals)
 
     const deepbookEntry = deepbookByEventId.get(event.id)
     const deepbookRaw =
@@ -82,22 +92,21 @@ const buildSeries = ({
       deepbookRaw !== undefined
         ? formatRawPrice({ rawPrice: deepbookRaw, adjustedDecimals })
         : undefined
-    const deepbookValueParsed =
-      deepbookDisplay !== undefined
-        ? Number.parseFloat(deepbookDisplay.replace(/[^0-9.+-eE]/g, ""))
+    const deepbookValueRaw =
+      deepbookRaw !== undefined
+        ? rawPriceToNumber(deepbookRaw, adjustedDecimals)
         : undefined
 
     points.push({
       timestampMs: event.timestampMs ?? 0,
       oracleRaw,
       oracleDisplay,
-      oracleValue: Number.isFinite(oracleValueParsed) ? oracleValueParsed : 0,
+      oracleValue: Number.isFinite(oracleValueRaw) ? oracleValueRaw : 0,
       deepbookRaw,
       deepbookDisplay,
       deepbookValue:
-        deepbookValueParsed !== undefined &&
-        Number.isFinite(deepbookValueParsed)
-          ? deepbookValueParsed
+        deepbookValueRaw !== undefined && Number.isFinite(deepbookValueRaw)
+          ? deepbookValueRaw
           : undefined
     })
   }
