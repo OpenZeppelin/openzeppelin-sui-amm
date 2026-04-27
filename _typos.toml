@@ -1,0 +1,9 @@
+[default.extend-identifiers]
+# "PnL" (profit-and-loss) is a finance acronym; typos otherwise splits it into
+# "Pn" + "L" and flags "Pn" as a misspelling of "On".
+PnL = "PnL"
+
+[files]
+# Vendored DeepBook is a submodule and not part of this repo's source — CI
+# doesn't checkout submodules, so skip it locally too for parity.
+extend-exclude = ["vendor/"]

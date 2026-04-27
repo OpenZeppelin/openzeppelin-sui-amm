@@ -497,7 +497,7 @@ fun deposit_aborts_when_coin_type_is_not_base_or_quote() {
     // USDT is neither the configured base (SUI) nor the configured quote (USDC) — should abort.
     executor_object.deposit(
         &executor_cap,
-        mint_for_testing<USDT>(1 * constants::float_scaling(), scenario.ctx()),
+        mint_for_testing<USDT>(constants::float_scaling(), scenario.ctx()),
         scenario.ctx(),
     );
 
@@ -538,7 +538,7 @@ fun withdraw_aborts_when_coin_type_is_not_base_or_quote() {
     // USDT is neither base nor quote — should abort with EUnsupportedAsset.
     let withdrawn_coin = executor_object.withdraw<USDT>(
         &executor_cap,
-        1 * constants::float_scaling(),
+        constants::float_scaling(),
         scenario.ctx(),
     );
     coin::burn_for_testing(withdrawn_coin);

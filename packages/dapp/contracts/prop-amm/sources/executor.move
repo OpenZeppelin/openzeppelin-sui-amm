@@ -262,11 +262,7 @@ public fun withdraw<T>(
 ///
 /// NOTE: Pause step let us settle all the balances before making withdrawal.
 /// Otherwise there is a high chance there is nothing to withdraw.
-public fun withdraw_all<T>(
-    self: &mut Executor,
-    cap: &AdminCap,
-    ctx: &mut TxContext,
-): Coin<T> {
+public fun withdraw_all<T>(self: &mut Executor, cap: &AdminCap, ctx: &mut TxContext): Coin<T> {
     let amount = self.balance_manager.balance<T>();
     self.withdraw(cap, amount, ctx)
 }
@@ -284,7 +280,7 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
     base_price_info_object: &PriceInfoObject,
     quote_price_info_object: &PriceInfoObject,
     clock: &Clock,
-    ctx: &TxContext,
+    ctx: &mut TxContext,
 ) {
     // Assert an input pool is valid.
     assert!(self.market.has_valid_pool(pool), EInvalidPool);
@@ -354,7 +350,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     mid_price: u64,
     conf_ratio_bps: u64,
     clock: &Clock,
-    ctx: &TxContext,
+    ctx: &mut TxContext,
 ) {
     assert!(self.id() == cap.executor_id, EInvalidCap);
     // Assert an input pool is valid.

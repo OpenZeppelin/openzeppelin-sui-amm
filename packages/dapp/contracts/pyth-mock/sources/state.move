@@ -41,9 +41,7 @@ fun init(_witness: STATE, ctx: &mut TxContext) {
 
 /// Borrow the `Table<PriceIdentifier, ID>` for mutation. Used by
 /// `price_info::publish_price_feed` to register newly-published feeds.
-public(package) fun price_info_table_mut(
-    state: &mut State,
-): &mut Table<PriceIdentifier, ID> {
+public(package) fun price_info_table_mut(state: &mut State): &mut Table<PriceIdentifier, ID> {
     dof::borrow_mut(&mut state.id, PRICE_INFO_KEY)
 }
 
