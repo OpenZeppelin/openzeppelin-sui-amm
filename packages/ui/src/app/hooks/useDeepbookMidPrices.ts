@@ -114,17 +114,21 @@ export const useDeepbookMidPrices = ({
           return [event.id, "error"] as const
         }
       })
-    ).then((entries) => {
-      // Always release the in-flight slots — even on cancellation, those requests are
-      // no longer pending, and leaving the ids in the set would skip them forever.
-      pending.forEach((event) => inFlightRef.current.delete(event.id))
-      if (cancelled) return
-      setByEventId((current) => {
-        const next = new Map(current)
-        for (const [id, value] of entries) next.set(id, value)
-        return next
+    )
+      .then((entries) => {
+        if (cancelled) return
+        setByEventId((current) => {
+          const next = new Map(current)
+          for (const [id, value] of entries) next.set(id, value)
+          return next
+        })
       })
-    })
+      .finally(() => {
+        // Always release the in-flight slots — on success, on cancellation,
+        // and on rejection — otherwise those event ids would be filtered out
+        // by the dedupe guard forever.
+        pending.forEach((event) => inFlightRef.current.delete(event.id))
+      })
 
     return () => {
       cancelled = true
