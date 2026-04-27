@@ -175,10 +175,15 @@ public(package) fun base_spread(self: &AMMConfig, mid_price: u64): u64 {
 /// combined Pyth confidence ratio (in basis points). Equivalent to:
 /// `mid * (base_spread_bps + volatility_multiplier_bps * conf_ratio_bps / 10_000) / 10_000`.
 public(package) fun outer_spread(self: &AMMConfig, mid_price: u64, conf_ratio_bps: u64): u64 {
+    // Compute volatility bps.
     let conf_based_volatility_bps = self
         .volatility_multiplier_bps
         .mul_div(conf_ratio_bps, HUNDRED_PERCENT_BPS);
+
+    // Compute total volatility(outer) spread bps.
     let outer_spread_bps = self.base_spread_bps + conf_based_volatility_bps;
+
+    // Calculate total volatility spread.
     mid_price.mul_div(outer_spread_bps, HUNDRED_PERCENT_BPS)
 }
 
