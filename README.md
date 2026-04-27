@@ -34,51 +34,143 @@ git add vendor/deepbookv3 .gitmodules
 git commit -m "chore: update deepbook submodule"
 ```
 
+## Prerequisites
+
+- **Sui CLI ≥ 1.70** (1.70.2 verified). Older CLIs use a different `sui client publish` flag set and won't work with this repo.
+- `pnpm` (the repo is a workspace).
+- Node 20+.
+
 ## Quickstart (localnet)
 
 ```bash
-# Clone and install
+# 1. Clone and install
 git clone git@github.com:OpenZeppelin/openzeppelin-sui-amm.git && cd openzeppelin-sui-amm
-# (pnpm workspace install from the repo root)
 pnpm install
-
-# Initialize submodules (DeepBook)
 git submodule update --init --recursive
 
-# Create or reuse an address (this will be your publisher address) (note the recovery phrase to import it later in your browser wallet)
-sui client new-address ed25519
+# 2. Create or reuse a publisher address. Save the recovery phrase so you can
+#    import the same address in your browser wallet later.
+sui client new-address ed25519 publisher
 
-# Configure this address in Sui config file or export
+# 3. Point the scripts at this address. Either set the active client env to
+#    `localnet` (`sui client switch --env localnet`) or export the trio below.
 export SUI_ACCOUNT_ADDRESS=<0x...>
 export SUI_ACCOUNT_PRIVATE_KEY=<base64 or hex>
 export SUI_NETWORK=localnet
 
-# Start localnet (new terminal) (--with-faucet is recommended as some script auto fund address if fund is missing)
-pnpm script chain:localnet:start --with-faucet
+# 4. Start localnet in a separate terminal. `--force-regenesis` wipes any
+#    previous chain state. Keep this process running.
+pnpm --filter dapp chain:localnet:start --force-regenesis --with-faucet
 
-# Publish mocks and contracts
-pnpm dapp mock:setup 
-pnpm dapp move:publish --packagePath contracts/prop-amm/
+# 5. Publish mock dependencies (pyth-mock, coin-mock, deepbook, deepbook
+#    token) and seed the SUI/USD + USDC/USD price feeds. Re-runs are
+#    idempotent unless `--re-publish` is passed.
+pnpm --filter dapp mock:setup
 
-# Register mocks
-pnpm dapp mock:register
+# 6. Register `0x2::sui::SUI` in the coin registry (one-time per chain;
+#    SUI predates the registry so it has to be migrated explicitly).
+pnpm --filter dapp mock:sui:migrate
 
-# Create and register the AMM
-# Note: --deepbook-package-id and --deepbook-registry-id can be found in the output of the previous command.
+# 7. Create the whitelisted DeepBook SUI/USDC pool (zero fees, zero DEEP
+#    cost). The script reads the coin types from `mock.localnet.json`.
+pnpm --filter dapp mock:pool:create
 
-# Create an amm config
-pnpm dapp owner:amm:create
+# 8. Publish the AMM contract.
+#    NOTE: Sui CLI ≥ 1.70 ignores `published-at` directives in
+#    dep-replacements during `sui client test-publish`. Until the tooling
+#    auto-writes a chained pubfile, you must hand-craft
+#    `packages/dapp/contracts/prop-amm/Pub.localnet.toml` with `[[published]]`
+#    entries for `deepbook`, `token`, and `pyth-mock` pointing to the actual
+#    on-chain ids from `packages/dapp/deployments/mock.localnet.json`. See
+#    "Pub.localnet.toml workaround" below.
+pnpm --filter dapp move:publish --package-path prop-amm --re-publish --use-cli-publish
 
-# Create the packages/ui/.env.local file
-## Copy the sample .env file
+# 9. Wire ids into the UI env. Copy from `mock.localnet.json` and from
+#    the AMM publish output above.
 cp packages/ui/.env.example packages/ui/.env.local
+# Then edit packages/ui/.env.local and set:
+#   NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<AMM packageId from step 8>
+#   NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID=<deepbookRegistryId>
+#   NEXT_PUBLIC_LOCALNET_DEEPBOOK_PACKAGE_ID=<deepbookPackageId>
+#   NEXT_PUBLIC_LOCALNET_PYTH_MOCK_PACKAGE_ID=<pythPackageId>
+#   NEXT_PUBLIC_LOCALNET_PYTH_STATE_ID=<pythStateId>
 
-## Add required field details - you will find these details in the output of the two last pnpm commands. 
-NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<0x...>
-NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=<0x..>
-NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID=<0x..>
-
-# Run the UI
-pnpm ui dev
-
+# 10. Run the UI and open http://localhost:3000
+pnpm --filter ui dev
 ```
+
+In the dApp:
+
+- `/setup` → create the executor against the SUI/USDC pool id from step 7, using the real Pyth feed-id hexes (`0x50c67b3f…ea266` for SUI/USD, `0x41f36259…e722` for USDC/USD).
+- `/funding` → deposit base + quote into the BalanceManager.
+- `/bot` → trigger Refresh quotes.
+
+## Pub.localnet.toml workaround
+
+`sui client test-publish` (Sui ≥ 1.70) inlines local-replaced deps and binds them
+to ephemeral addresses unless the deps already appear in the package's
+`Pub.<env>.toml`. To make AMM's bytecode reference the *actual* on-chain
+DeepBook / pyth-mock / token packages, write a file like this **before** step 8:
+
+```toml
+# packages/dapp/contracts/prop-amm/Pub.localnet.toml
+build-env = "test-publish"
+chain-id = "<localnet chain id, e.g. 305e72d1>"
+
+[[published]]
+source = { local = "<absolute path>/vendor/deepbookv3/packages/deepbook" }
+published-at = "<deepbookPackageId>"
+original-id = "<deepbookPackageId>"
+version = 1
+toolchain-version = "1.70.2"
+build-config = { flavor = "sui", edition = "2024.beta" }
+upgrade-capability = "<deepbook upgradeCap from deployment.localnet.json>"
+
+[[published]]
+source = { local = "<absolute path>/vendor/deepbookv3/packages/token" }
+published-at = "<deepbookTokenPackageId>"
+original-id = "<deepbookTokenPackageId>"
+version = 1
+toolchain-version = "1.70.2"
+build-config = { flavor = "sui", edition = "2024.beta" }
+upgrade-capability = "<token upgradeCap>"
+
+[[published]]
+source = { local = "<absolute path>/packages/dapp/contracts/pyth-mock" }
+published-at = "<pythPackageId>"
+original-id = "<pythPackageId>"
+version = 1
+toolchain-version = "1.70.2"
+build-config = { flavor = "sui", edition = "2024" }
+upgrade-capability = "<pyth-mock upgradeCap>"
+```
+
+`packageId`s come from `packages/dapp/deployments/mock.localnet.json`;
+matching `upgradeCap`s come from `packages/dapp/deployments/deployment.localnet.json`.
+After step 8 succeeds, verify with:
+
+```bash
+curl -sX POST -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"sui_getNormalizedMoveFunction","params":["<AMM packageId>","market","new"]}' \
+  http://127.0.0.1:9000 | jq '.result.parameters[0]'
+```
+
+— the `Pool` reference's `address` should equal the deepbook packageId, **not**
+the AMM packageId.
+
+## Troubleshooting
+
+- **`sui --version` hangs**: stale `sui-test-validator` / `sui` processes
+  holding a lock. `pgrep -af sui` and kill them, then retry.
+- **`Dry run failed: TypeMismatch in command 0`** when creating an executor:
+  the AMM was published without the Pub.localnet.toml workaround, so its
+  bytecode references the wrong DeepBook address. Redo step 8 with the
+  workaround in place.
+- **`Your package is already published`** during `mock:setup`: an ephemeral
+  `Pub.<env>.toml` is left over. Delete it (the tooling does this for the
+  packages it manages, but stragglers happen):
+  `find packages/dapp/contracts vendor/deepbookv3 -name "Pub.*.toml" -delete`.
+- **`The package does not define an localnet environment`**: the active
+  `sui client` env name (`localnet`) doesn't match any `[environments]` key
+  in the package's `Move.toml`. The mock packages declare `test-publish`,
+  so the tooling falls back to `sui client test-publish` automatically.
