@@ -1,4 +1,6 @@
-import { SUI_CLOCK_ID } from "@sui-amm/tooling-core/constants"
+import { normalizeStructTag } from "@mysten/sui/utils"
+
+import { SUI_CLOCK_ID, SUI_COIN_TYPE } from "@sui-amm/tooling-core/constants"
 import {
   assertByteArrayLength,
   assertBytesLength,
@@ -7,6 +9,8 @@ import {
 import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { newTransaction } from "@sui-amm/tooling-core/transactions"
 import { validateRequiredHexBytes } from "@sui-amm/tooling-core/utils/validation"
+
+const NORMALIZED_SUI_COIN_TYPE = normalizeStructTag(SUI_COIN_TYPE)
 
 const PYTH_PRICE_FEED_ID_BYTES = 32
 
@@ -359,6 +363,15 @@ export const buildDepositTransaction = ({
    */
   sourceCoinId?: string
 }) => {
+  if (
+    !sourceCoinId &&
+    normalizeStructTag(coinTypeTag) !== NORMALIZED_SUI_COIN_TYPE
+  ) {
+    throw new Error(
+      `buildDepositTransaction: sourceCoinId is required for non-SUI deposits (got coinTypeTag=${coinTypeTag}). The gas-coin fallback only applies to ${SUI_COIN_TYPE}.`
+    )
+  }
+
   const transaction = newTransaction()
 
   const source = sourceCoinId
