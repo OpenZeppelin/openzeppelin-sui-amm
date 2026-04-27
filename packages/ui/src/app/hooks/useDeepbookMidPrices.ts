@@ -115,13 +115,15 @@ export const useDeepbookMidPrices = ({
         }
       })
     ).then((entries) => {
+      // Always release the in-flight slots — even on cancellation, those requests are
+      // no longer pending, and leaving the ids in the set would skip them forever.
+      pending.forEach((event) => inFlightRef.current.delete(event.id))
       if (cancelled) return
       setByEventId((current) => {
         const next = new Map(current)
         for (const [id, value] of entries) next.set(id, value)
         return next
       })
-      pending.forEach((event) => inFlightRef.current.delete(event.id))
     })
 
     return () => {
