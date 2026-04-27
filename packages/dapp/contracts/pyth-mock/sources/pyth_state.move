@@ -3,7 +3,7 @@
 /// works on localnet without changes. Real Pyth maintains a state object whose
 /// `b"price_info"` dynamic-object-field is a `Table<PriceIdentifier, ID>` from
 /// feed identifier bytes to the corresponding `PriceInfoObject` id.
-module local_mock_pyth::state;
+module local_mock_pyth::pyth_state;
 
 use local_mock_pyth::price_identifier::PriceIdentifier;
 use sui::dynamic_object_field as dof;
@@ -24,13 +24,13 @@ public struct State has key {
 }
 
 /// One-time witness for the module. Only consumed in `init`.
-public struct STATE has drop {}
+public struct PYTH_STATE has drop {}
 
 // === Init ===
 
 /// Creates and shares the mock `State` and seeds it with an empty
 /// `Table<PriceIdentifier, ID>` under `b"price_info"`.
-fun init(_witness: STATE, ctx: &mut TxContext) {
+fun init(_witness: PYTH_STATE, ctx: &mut TxContext) {
     let mut state = State { id: object::new(ctx) };
     let table: Table<PriceIdentifier, ID> = table::new(ctx);
     dof::add(&mut state.id, PRICE_INFO_KEY, table);

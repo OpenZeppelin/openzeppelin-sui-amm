@@ -4,7 +4,7 @@ use local_mock_pyth::i64;
 use local_mock_pyth::price;
 use local_mock_pyth::price_feed::{Self, PriceFeed};
 use local_mock_pyth::price_identifier::{Self, PriceIdentifier};
-use local_mock_pyth::state::{Self, State};
+use local_mock_pyth::pyth_state::{Self, State};
 use sui::clock::Clock;
 
 // === Structs ===
@@ -98,7 +98,7 @@ public fun publish_price_feed(
     let price_info_object = new_price_info_object(price_info, ctx);
 
     // Register the new PriceInfoObject in the State's feed table.
-    let table = state::price_info_table_mut(state);
+    let table = pyth_state::price_info_table_mut(state);
     table.add(price_identifier, price_info_object.id.to_inner());
 
     transfer::share_object(price_info_object);

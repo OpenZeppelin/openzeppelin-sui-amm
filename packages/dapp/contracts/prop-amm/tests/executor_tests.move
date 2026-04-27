@@ -55,12 +55,12 @@ fun create_registry(scenario: &mut test_scenario::Scenario, sender: address) {
 
 fun publish_price_feed(scenario: &mut test_scenario::Scenario, sender: address, feed_id_byte: u8) {
     scenario.next_tx(sender);
-    pyth::state::init_for_testing(scenario.ctx());
+    pyth::pyth_state::init_for_testing(scenario.ctx());
     clock::create_for_testing(scenario.ctx()).share_for_testing();
 
     scenario.next_tx(sender);
 
-    let mut pyth_state: pyth::state::State = scenario.take_shared();
+    let mut pyth_state: pyth::pyth_state::State = scenario.take_shared();
     let clock_for_price_feed: Clock = scenario.take_shared();
     // confidence = 250 → conf_ratio_bps = 250 per feed, 500 combined; keeps outer order
     // strictly outside the inner order after tick rounding (see tests below).

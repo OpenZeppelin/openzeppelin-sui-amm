@@ -534,7 +534,7 @@ const resolvePythStateFromPublish = async (
     options: { showObjectChanges: true }
   })
 
-  return ensureCreatedObject("::state::State", publishTransaction).objectId
+  return ensureCreatedObject("::pyth_state::State", publishTransaction).objectId
 }
 
 const resolveDeepbookObjectsFromPublish = async (
