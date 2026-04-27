@@ -19,25 +19,31 @@ import {
 } from "../../hooks/useFundingState"
 
 const SideRadio = ({
+  name,
   value,
   currentValue,
   onChange,
   label,
   symbol,
-  balanceDisplay
+  balanceDisplay,
+  disabled
 }: {
+  name: string
   value: CoinSide
   currentValue: CoinSide
   onChange: (next: CoinSide) => void
   label: string
   symbol?: string
   balanceDisplay?: string
+  disabled?: boolean
 }) => (
   <label className="hover:border-sds-blue/40 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200/70 bg-white/70 p-3 transition dark:border-slate-50/15 dark:bg-slate-950/40">
     <input
       type="radio"
+      name={name}
       checked={currentValue === value}
       onChange={() => onChange(value)}
+      disabled={disabled}
       className="mt-1 accent-sds-blue"
     />
     <div className="flex flex-col gap-0.5">
@@ -116,20 +122,24 @@ const FundingCard = ({
           </div>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <SideRadio
+              name={`${mode}-coin-side`}
               value="base"
               currentValue={formState.coinSide}
               onChange={(next) => handleInputChange("coinSide", next)}
               label="Base"
               symbol={baseSymbol}
               balanceDisplay={baseBalanceDisplay}
+              disabled={isProcessing}
             />
             <SideRadio
+              name={`${mode}-coin-side`}
               value="quote"
               currentValue={formState.coinSide}
               onChange={(next) => handleInputChange("coinSide", next)}
               label="Quote"
               symbol={quoteSymbol}
               balanceDisplay={quoteBalanceDisplay}
+              disabled={isProcessing}
             />
           </div>
         </div>
