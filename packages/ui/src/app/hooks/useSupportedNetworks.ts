@@ -4,13 +4,19 @@ import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useMemo } from "react"
 import { supportedNetworks } from "../helpers/network"
 import useCustomNetworks from "./useCustomNetworks"
+import useDeploymentArtifacts from "./useDeploymentArtifacts"
 import useHostNetworkPolicy from "./useHostNetworkPolicy"
 
 const baseNetworks: ENetwork[] = [ENetwork.LOCALNET, ENetwork.TESTNET]
 
 const useSupportedNetworks = () => {
   const { allowNetworkSwitching } = useHostNetworkPolicy()
-  const configuredNetworks = useMemo(() => supportedNetworks(), [])
+  const { contractPackageId: localnetContractPackageId } =
+    useDeploymentArtifacts()
+  const configuredNetworks = useMemo(
+    () => supportedNetworks(localnetContractPackageId),
+    [localnetContractPackageId]
+  )
   const { networks: customNetworks } = useCustomNetworks()
 
   return useMemo(() => {

@@ -20,10 +20,6 @@ import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useCallback, useMemo, useState } from "react"
 import {
-  LOCALNET_PYTH_MOCK_PACKAGE_ID,
-  LOCALNET_PYTH_STATE_ID
-} from "../config/network"
-import {
   getLocalnetClient,
   makeLocalnetExecutor,
   walletSupportsChain
@@ -38,6 +34,7 @@ import {
 } from "../helpers/transactionErrors"
 import { waitForTransactionBlock } from "../helpers/transactionWait"
 import { useTraderAccountContext } from "../providers/TraderAccountProvider"
+import useDeploymentArtifacts from "./useDeploymentArtifacts"
 import useExplorerUrl from "./useExplorerUrl"
 import useResolvedPackageId from "./useResolvedPackageId"
 
@@ -58,6 +55,10 @@ export const useRefreshQuotesState = () => {
   const explorerUrl = useExplorerUrl()
   const { overview, resolution, refreshTraderAccount } =
     useTraderAccountContext()
+  const {
+    pythMockPackageId: localnetPythMockPackageId,
+    pythStateId: localnetPythStateId
+  } = useDeploymentArtifacts()
   const localnetClient = useMemo(() => getLocalnetClient(), [])
   const isLocalnet = network === ENetwork.LOCALNET
   const localnetExecutor = useMemo(
@@ -84,7 +85,7 @@ export const useRefreshQuotesState = () => {
     : signAndExecuteTransaction.isPending
 
   const localnetArtifactsMissing =
-    isLocalnet && (!LOCALNET_PYTH_MOCK_PACKAGE_ID || !LOCALNET_PYTH_STATE_ID)
+    isLocalnet && (!localnetPythMockPackageId || !localnetPythStateId)
 
   const supportsNetwork = isLocalnet
   const canSubmit =
@@ -103,7 +104,7 @@ export const useRefreshQuotesState = () => {
     if (!supportsNetwork)
       return "Manual refresh is implemented for localnet only. Real Pyth updates require Hermes VAA integration."
     if (localnetArtifactsMissing)
-      return "Mock Pyth package/price info IDs missing from .env.local."
+      return "Mock Pyth package/state IDs missing — run `pnpm mock:setup` and reload."
     if (!traderAccount) return "Market maker overview still loading."
     if (traderAccount.active === false)
       return "Executor is paused — unpause first."
@@ -140,11 +141,11 @@ export const useRefreshQuotesState = () => {
       })
       return
     }
-    if (!LOCALNET_PYTH_MOCK_PACKAGE_ID || !LOCALNET_PYTH_STATE_ID) {
+    if (!localnetPythMockPackageId || !localnetPythStateId) {
       setTransactionState({
         status: "error",
         error:
-          "Mock Pyth artifacts are not configured. Check NEXT_PUBLIC_LOCALNET_PYTH_MOCK_PACKAGE_ID and NEXT_PUBLIC_LOCALNET_PYTH_STATE_ID in .env.local."
+          "Mock Pyth artifacts are not configured. Re-run `pnpm mock:setup` and reload the page."
       })
       return
     }
@@ -210,8 +211,8 @@ export const useRefreshQuotesState = () => {
       // state id as a stand-in is safe on localnet.
       const pythClient = new SuiPythClient(
         suiClient,
-        LOCALNET_PYTH_STATE_ID,
-        LOCALNET_PYTH_STATE_ID
+        localnetPythStateId,
+        localnetPythStateId
       )
       const [basePriceInfoObjectId, quotePriceInfoObjectId] = await Promise.all(
         [
@@ -221,7 +222,7 @@ export const useRefreshQuotesState = () => {
       )
       if (!basePriceInfoObjectId || !quotePriceInfoObjectId) {
         throw new Error(
-          `Pyth state ${LOCALNET_PYTH_STATE_ID} has no PriceInfoObject for feed(s) ${[
+          `Pyth state ${localnetPythStateId} has no PriceInfoObject for feed(s) ${[
             !basePriceInfoObjectId
               ? `base ${traderAccount.basePythPriceFeedIdHex}`
               : undefined,
@@ -275,7 +276,7 @@ export const useRefreshQuotesState = () => {
         pool: poolShared,
         baseAssetTypeTag: traderAccount.baseCoinType,
         quoteAssetTypeTag: traderAccount.quoteCoinType,
-        pythMockPackageId: LOCALNET_PYTH_MOCK_PACKAGE_ID,
+        pythMockPackageId: localnetPythMockPackageId,
         basePriceInfoObject: basePriceInfo,
         quotePriceInfoObject: quotePriceInfo,
         basePriceComponents,

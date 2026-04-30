@@ -2,18 +2,25 @@
  * Localnet-only. Spams a DeepBook pool with random market orders so the order
  * book has price/quantity flow for the UI's chart, fills, and inventory views.
  *
- * Each tick:
- *   1. Pick a random side — buy base (USDC → SUI) or sell base (SUI → USDC).
- *   2. Pick a random size up to `--max-base` SUI for sells or `--max-quote`
+ * Each tick (single PTB, one signature):
+ *   1. Walk the SUI/USD mock Pyth feed by a random step in
+ *      `[-maxPriceDelta, +maxPriceDelta]` and call
+ *      `pyth-mock::price_info::update_price_feed` so AMM quote refreshes pick
+ *      up the new price. Skipped when `--max-price-delta 0`.
+ *   2. Pick a random side — buy base (USDC → SUI) or sell base (SUI → USDC).
+ *   3. Pick a random size up to `--max-base` SUI for sells or `--max-quote`
  *      USDC for buys.
- *   3. Submit a `pool::swap_exact_*_for_*` PTB and log the digest.
+ *   4. Submit the combined PTB and log the digest.
  *
  * Configuration:
- *   - Pool id, DeepBook package id, and the USDC coin type are sourced from
- *     `packages/dapp/deployments/mock.localnet.json` (populated by `mock:setup`
- *     and `mock:pool:create`).
+ *   - Pool id, package ids, USDC coin type, and the SUI/USD PriceInfoObject id
+ *     are sourced from `packages/dapp/deployments/mock.localnet.json`
+ *     (populated by `mock:setup` and `mock:pool:create`).
  *   - Tick cadence and per-side caps come from CLI flags (`--interval-ms`,
  *     `--max-base`, `--max-quote`); defaults: 5000 ms, 1 SUI, 2 USDC.
+ *   - Price walk: `--start-price` / `--max-price-delta` (human dollars). The
+ *     mock feed has no auth on `update_price_feed`, so the bot's signer is
+ *     enough.
  *   - The DEEP type tag is derived from the DeepBook package id — on localnet
  *     `sui client test-publish` inlines the token dep into deepbook itself, so
  *     `DEEP` lives at `<deepbookPackageId>::deep::DEEP`.
@@ -29,9 +36,11 @@ import {
   requestSuiFromFaucetV2
 } from "@mysten/sui/faucet"
 import type { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519"
+import type { Transaction } from "@mysten/sui/transactions"
 import { normalizeStructTag } from "@mysten/sui/utils"
 import yargs from "yargs"
 
+import { SUI_USD_FEED } from "@sui-amm/domain-core/models/pyth"
 import {
   fetchCoinBalances,
   selectRichestCoin
@@ -80,6 +89,14 @@ const FAUCET_REQUEST_PAUSE_MS = 100
 // SUI; larger asks would need batching.
 const MAX_GAS_PAYMENT_COINS = 256
 
+// Pyth price-walk parameters. The mock SUI/USD feed stores price as a u64
+// magnitude with an `exponent` field; SUI_USD_FEED.exponent = -2 means the
+// human-dollar value is `magnitude / 10^2`. PRICE_SCALE bridges human dollars
+// (CLI args) to the on-chain magnitude. MIN_PRICE_DOLLARS keeps a random
+// downward walk from clamping the price to zero or below.
+const PRICE_SCALE = 10 ** Math.abs(SUI_USD_FEED.exponent)
+const MIN_PRICE_DOLLARS = 0.01
+
 const requireMockField = <T>(value: T | undefined, label: string): T => {
   if (value === undefined || value === null || value === "") {
     throw new Error(
@@ -108,11 +125,17 @@ runSuiScript(
     const intervalMs = cliArguments.intervalMs
     const maxBase = cliArguments.maxBase
     const maxQuote = cliArguments.maxQuote
+    const startPriceDollars = cliArguments.startPrice
+    const maxPriceDeltaDollars = cliArguments.maxPriceDelta
 
     const mockArtifact = await readArtifact<MockArtifact>(mockArtifactPath, {})
     const deepbookPackageId = requireMockField(
       mockArtifact.deepbookPackageId,
       "deepbookPackageId"
+    )
+    const pythPackageId = requireMockField(
+      mockArtifact.pythPackageId,
+      "pythPackageId"
     )
     const poolFromArtifact = mockArtifact.pools?.[0]
     const poolId =
@@ -122,6 +145,14 @@ runSuiScript(
     if (!usdcCoin) {
       throw new Error(
         "USDC mock coin missing from mock.localnet.json; re-run mock:setup."
+      )
+    }
+    const suiUsdFeed = mockArtifact.priceFeeds?.find(
+      (feed) => feed.label === "SUI_USD"
+    )
+    if (maxPriceDeltaDollars > 0 && !suiUsdFeed?.priceInfoObjectId) {
+      throw new Error(
+        "SUI_USD price feed missing from mock.localnet.json; re-run mock:setup."
       )
     }
 
@@ -184,8 +215,21 @@ runSuiScript(
     logKeyValueGreen("interval-ms")(String(intervalMs))
     logKeyValueGreen("max-base")(`${maxBase} SUI`)
     logKeyValueGreen("max-quote")(`${maxQuote} USDC`)
+    if (maxPriceDeltaDollars > 0) {
+      logKeyValueGreen("price-walk")(
+        `start=$${startPriceDollars.toFixed(2)} · max-delta=±$${maxPriceDeltaDollars.toFixed(2)}`
+      )
+    } else {
+      logKeyValueGreen("price-walk")("disabled (--max-price-delta=0)")
+    }
 
     const poolShared = await tooling.getMutableSharedObject({ objectId: poolId })
+    const priceInfoShared =
+      maxPriceDeltaDollars > 0 && suiUsdFeed?.priceInfoObjectId
+        ? await tooling.getMutableSharedObject({
+            objectId: suiUsdFeed.priceInfoObjectId
+          })
+        : undefined
 
     // Caps are interpreted as human-denominated upper bounds.
     const maxBaseAtoms = BigInt(
@@ -195,6 +239,7 @@ runSuiScript(
       Math.floor(maxQuote * Number(USDC_ATOMS_PER_UNIT))
     )
 
+    let currentPriceDollars = startPriceDollars
     let tick = 0
     // Loop forever until the user Ctrl-Cs the script. Any per-iteration error
     // (insufficient funds, transient RPC failure) is logged and the loop
@@ -204,34 +249,78 @@ runSuiScript(
       const isSellBase = Math.random() < 0.5
 
       try {
+        const transaction = newTransaction(DEFAULT_TX_GAS_BUDGET)
+
+        if (priceInfoShared) {
+          // Uniform random step in [-maxPriceDeltaDollars, +maxPriceDeltaDollars].
+          const step = (Math.random() * 2 - 1) * maxPriceDeltaDollars
+          currentPriceDollars = Math.max(
+            MIN_PRICE_DOLLARS,
+            currentPriceDollars + step
+          )
+          const priceMagnitude = BigInt(
+            Math.max(1, Math.round(currentPriceDollars * PRICE_SCALE))
+          )
+          addPriceUpdate(transaction, {
+            pythPackageId,
+            priceInfoSharedRef: priceInfoShared.sharedRef,
+            priceMagnitude
+          })
+        }
+
+        let swapDescription: string | undefined
         if (isSellBase) {
           const baseAtoms = randomBigIntInRange(MIN_BASE_ATOMS, maxBaseAtoms)
-          await submitSellBase({
-            tooling,
-            signer,
+          addSellBase(transaction, {
             ownerAddress,
             deepbookPackageId,
             poolSharedRef: poolShared.sharedRef,
             baseCoinType,
             quoteCoinType,
             deepCoinType,
-            baseAtoms,
-            tick
+            baseAtoms
           })
+          swapDescription = `sell-base ${baseAtoms.toString()} base-atoms`
         } else {
           const quoteAtoms = randomBigIntInRange(MIN_QUOTE_ATOMS, maxQuoteAtoms)
-          await submitBuyBase({
-            tooling,
-            signer,
-            ownerAddress,
-            deepbookPackageId,
-            poolSharedRef: poolShared.sharedRef,
-            baseCoinType,
-            quoteCoinType,
-            deepCoinType,
-            quoteAtoms,
-            tick
+          const ownedQuoteCoins = await fetchCoinBalances(
+            { owner: ownerAddress, coinType: quoteCoinType },
+            { suiClient: tooling.suiClient }
+          )
+          const richestQuote = selectRichestCoin(ownedQuoteCoins)
+          if (!richestQuote || BigInt(richestQuote.balance) < quoteAtoms) {
+            logWarning(
+              `tick ${tick} buy-base skipped: not enough USDC (need ${quoteAtoms.toString()} atoms, have ${
+                richestQuote?.balance ?? "0"
+              })`
+            )
+          } else {
+            addBuyBase(transaction, {
+              ownerAddress,
+              deepbookPackageId,
+              poolSharedRef: poolShared.sharedRef,
+              baseCoinType,
+              quoteCoinType,
+              deepCoinType,
+              quoteAtoms,
+              quoteCoinObjectId: richestQuote.coinObjectId
+            })
+            swapDescription = `buy-base ${quoteAtoms.toString()} quote-atoms`
+          }
+        }
+
+        if (priceInfoShared || swapDescription) {
+          const { transactionResult } = await tooling.signAndExecute({
+            transaction,
+            signer
           })
+          const priceLabel = priceInfoShared
+            ? `price=$${currentPriceDollars.toFixed(2)}`
+            : undefined
+          const fragments = [swapDescription, priceLabel].filter(Boolean)
+          logKeyValueGreen(`tick ${tick}`)(
+            `${fragments.join(" · ")} · digest=${transactionResult.digest}`
+          )
         }
       } catch (error) {
         logWarning(
@@ -280,6 +369,20 @@ runSuiScript(
       description:
         "Top up the bot's USDC balance to this amount (in human USDC) on startup; minted from the publisher's TreasuryCap. Only runs when MARKET_ACTIVITY_PRIVATE_KEY is set.",
       default: 100000
+    })
+    .option("startPrice", {
+      alias: ["start-price"],
+      type: "number",
+      description:
+        "Initial SUI/USD price in human dollars. Each tick the script walks this value by a random step in [-maxPriceDelta, +maxPriceDelta] and writes it to the mock Pyth SUI_USD PriceInfoObject before the market order.",
+      default: Number(SUI_USD_FEED.price) / PRICE_SCALE
+    })
+    .option("maxPriceDelta", {
+      alias: ["max-price-delta"],
+      type: "number",
+      description:
+        "Maximum per-tick SUI/USD price step in human dollars (positive). The bot picks the step uniformly from [-maxPriceDelta, +maxPriceDelta]. Set to 0 to disable price updates.",
+      default: 0.05
     })
     .strict()
 )
@@ -376,36 +479,18 @@ const ensureBotSuiSeeded = async ({
   // funded. Top the publisher up first so a single split can carry the whole
   // delta in one transaction.
   const publisherAddress = publisherKeypair.toSuiAddress()
-  const publisherAtoms = await topUpPublisherSuiViaFaucet({
+  await topUpPublisherSuiViaFaucet({
     tooling,
     publisherAddress,
     requiredAtoms: requestedTransferAtoms + PUBLISHER_GAS_HEADROOM_ATOMS
   })
 
-  const spendable =
-    publisherAtoms > PUBLISHER_GAS_HEADROOM_ATOMS
-      ? publisherAtoms - PUBLISHER_GAS_HEADROOM_ATOMS
-      : 0n
-  const transferAtoms =
-    requestedTransferAtoms < spendable ? requestedTransferAtoms : spendable
-  if (transferAtoms <= 0n) {
-    logWarning(
-      `skip SUI seed: publisher only holds ${publisherAtoms.toString()} atoms (need ${(requestedTransferAtoms + PUBLISHER_GAS_HEADROOM_ATOMS).toString()})`
-    )
-    return
-  }
-  if (transferAtoms < requestedTransferAtoms) {
-    logWarning(
-      `SUI seed capped to ${transferAtoms.toString()} atoms (requested ${requestedTransferAtoms.toString()}); faucet couldn't supply more`
-    )
-  }
-
   // Localnet faucet calls each create a fresh ~200 SUI coin object, so the
   // publisher ends up with many small coins. `splitCoins(tx.gas, ...)` only
-  // operates on whichever single coin Sui picks for gas payment, so a multi-
-  // hundred-SUI split fails with InsufficientCoinBalance even when the total
-  // owned balance is plenty. Pin all SUI coins as the gas payment set so Sui
-  // merges them into `tx.gas` before the split runs.
+  // operates on whichever single coin Sui picks for gas payment, so pin all
+  // SUI coins as the gas payment set — Sui merges them into `tx.gas` before
+  // the split runs. The pool is bounded by `MAX_GAS_PAYMENT_COINS`, which
+  // also caps how much SUI a single seed tx can transfer.
   const publisherCoinPage = await tooling.suiClient.getCoins({
     owner: publisherAddress,
     coinType: SUI_COIN_TYPE,
@@ -414,6 +499,31 @@ const ensureBotSuiSeeded = async ({
   if (publisherCoinPage.data.length === 0) {
     logWarning("skip SUI seed: publisher has no SUI coins to spend")
     return
+  }
+
+  // Cap by what's actually spendable in one tx (sum of pinned coins minus
+  // gas headroom), not by the publisher's total balance — the rest is held
+  // in coins the gas-payment array can't fit.
+  const pinnedAtoms = publisherCoinPage.data.reduce(
+    (total, coin) => total + BigInt(coin.balance),
+    0n
+  )
+  const spendable =
+    pinnedAtoms > PUBLISHER_GAS_HEADROOM_ATOMS
+      ? pinnedAtoms - PUBLISHER_GAS_HEADROOM_ATOMS
+      : 0n
+  const transferAtoms =
+    requestedTransferAtoms < spendable ? requestedTransferAtoms : spendable
+  if (transferAtoms <= 0n) {
+    logWarning(
+      `skip SUI seed: publisher's first ${publisherCoinPage.data.length} SUI coins only hold ${pinnedAtoms.toString()} atoms (need ${(requestedTransferAtoms + PUBLISHER_GAS_HEADROOM_ATOMS).toString()})`
+    )
+    return
+  }
+  if (transferAtoms < requestedTransferAtoms) {
+    logWarning(
+      `SUI seed capped to ${transferAtoms.toString()} atoms (requested ${requestedTransferAtoms.toString()}); single-tx limit is ${MAX_GAS_PAYMENT_COINS} gas-payment coins`
+    )
   }
 
   const transaction = newTransaction(DEFAULT_TX_GAS_BUDGET)
@@ -496,36 +606,30 @@ const ensureBotUsdcSeeded = async ({
   )
 }
 
-const submitSellBase = async ({
-  tooling,
-  signer,
-  ownerAddress,
-  deepbookPackageId,
-  poolSharedRef,
-  baseCoinType,
-  quoteCoinType,
-  deepCoinType,
-  baseAtoms,
-  tick
-}: {
-  tooling: Parameters<Parameters<typeof runSuiScript>[0]>[0]
-  signer: ReturnType<
-    Parameters<Parameters<typeof runSuiScript>[0]>[0]["loadedEd25519KeyPair"]["getPublicKey"]
-  > extends never
-    ? never
-    : Parameters<Parameters<typeof runSuiScript>[0]>[0]["loadedEd25519KeyPair"]
-  ownerAddress: string
-  deepbookPackageId: string
-  poolSharedRef: Parameters<
-    ReturnType<typeof newTransaction>["sharedObjectRef"]
-  >[0]
-  baseCoinType: string
-  quoteCoinType: string
-  deepCoinType: string
-  baseAtoms: bigint
-  tick: number
-}) => {
-  const transaction = newTransaction(DEFAULT_TX_GAS_BUDGET)
+type SharedRef = Parameters<
+  ReturnType<typeof newTransaction>["sharedObjectRef"]
+>[0]
+
+const addSellBase = (
+  transaction: Transaction,
+  {
+    ownerAddress,
+    deepbookPackageId,
+    poolSharedRef,
+    baseCoinType,
+    quoteCoinType,
+    deepCoinType,
+    baseAtoms
+  }: {
+    ownerAddress: string
+    deepbookPackageId: string
+    poolSharedRef: SharedRef
+    baseCoinType: string
+    quoteCoinType: string
+    deepCoinType: string
+    baseAtoms: bigint
+  }
+) => {
   const [baseIn] = transaction.splitCoins(transaction.gas, [
     transaction.pure.u64(baseAtoms)
   ])
@@ -548,58 +652,32 @@ const submitSellBase = async ({
     [baseRem, quoteOut, deepOut],
     transaction.pure.address(ownerAddress)
   )
-
-  const { transactionResult } = await tooling.signAndExecute({
-    transaction,
-    signer
-  })
-  logKeyValueGreen(`tick ${tick} sell-base`)(
-    `${baseAtoms.toString()} base-atoms · digest=${transactionResult.digest}`
-  )
 }
 
-const submitBuyBase = async ({
-  tooling,
-  signer,
-  ownerAddress,
-  deepbookPackageId,
-  poolSharedRef,
-  baseCoinType,
-  quoteCoinType,
-  deepCoinType,
-  quoteAtoms,
-  tick
-}: {
-  tooling: Parameters<Parameters<typeof runSuiScript>[0]>[0]
-  signer: Parameters<Parameters<typeof runSuiScript>[0]>[0]["loadedEd25519KeyPair"]
-  ownerAddress: string
-  deepbookPackageId: string
-  poolSharedRef: Parameters<
-    ReturnType<typeof newTransaction>["sharedObjectRef"]
-  >[0]
-  baseCoinType: string
-  quoteCoinType: string
-  deepCoinType: string
-  quoteAtoms: bigint
-  tick: number
-}) => {
-  const ownedQuoteCoins = await fetchCoinBalances(
-    { owner: ownerAddress, coinType: quoteCoinType },
-    { suiClient: tooling.suiClient }
-  )
-  const richestQuote = selectRichestCoin(ownedQuoteCoins)
-  if (!richestQuote || BigInt(richestQuote.balance) < quoteAtoms) {
-    logWarning(
-      `tick ${tick} buy-base skipped: not enough USDC (need ${quoteAtoms.toString()} atoms, have ${
-        richestQuote?.balance ?? "0"
-      })`
-    )
-    return
+const addBuyBase = (
+  transaction: Transaction,
+  {
+    ownerAddress,
+    deepbookPackageId,
+    poolSharedRef,
+    baseCoinType,
+    quoteCoinType,
+    deepCoinType,
+    quoteAtoms,
+    quoteCoinObjectId
+  }: {
+    ownerAddress: string
+    deepbookPackageId: string
+    poolSharedRef: SharedRef
+    baseCoinType: string
+    quoteCoinType: string
+    deepCoinType: string
+    quoteAtoms: bigint
+    quoteCoinObjectId: string
   }
-
-  const transaction = newTransaction(DEFAULT_TX_GAS_BUDGET)
+) => {
   const [quoteIn] = transaction.splitCoins(
-    transaction.object(richestQuote.coinObjectId),
+    transaction.object(quoteCoinObjectId),
     [transaction.pure.u64(quoteAtoms)]
   )
   const deepIn = transaction.moveCall({
@@ -621,12 +699,35 @@ const submitBuyBase = async ({
     [baseOut, quoteRem, deepOut],
     transaction.pure.address(ownerAddress)
   )
+}
 
-  const { transactionResult } = await tooling.signAndExecute({
-    transaction,
-    signer
+/**
+ * Adds a `pyth-mock::price_info::update_price_feed` call that overwrites the
+ * SUI/USD feed with a fresh magnitude (still at the SUI_USD_FEED exponent).
+ * The mock has no auth on this entrypoint, so the bot's signer is enough.
+ */
+const addPriceUpdate = (
+  transaction: Transaction,
+  {
+    pythPackageId,
+    priceInfoSharedRef,
+    priceMagnitude
+  }: {
+    pythPackageId: string
+    priceInfoSharedRef: SharedRef
+    priceMagnitude: bigint
+  }
+) => {
+  transaction.moveCall({
+    target: `${pythPackageId}::price_info::update_price_feed`,
+    arguments: [
+      transaction.sharedObjectRef(priceInfoSharedRef),
+      transaction.pure.u64(priceMagnitude),
+      transaction.pure.bool(false),
+      transaction.pure.u64(SUI_USD_FEED.confidence),
+      transaction.pure.u64(Math.abs(SUI_USD_FEED.exponent)),
+      transaction.pure.bool(SUI_USD_FEED.exponent < 0),
+      transaction.object(SUI_CLOCK_ID)
+    ]
   })
-  logKeyValueGreen(`tick ${tick} buy-base`)(
-    `${quoteAtoms.toString()} quote-atoms · digest=${transactionResult.digest}`
-  )
 }

@@ -5,6 +5,7 @@ import { useMemo } from "react"
 import { supportedNetworks } from "../helpers/network"
 import type { TNetworkOption } from "../types/TNetworkOption"
 import useCustomNetworks from "./useCustomNetworks"
+import useDeploymentArtifacts from "./useDeploymentArtifacts"
 import useHostNetworkPolicy from "./useHostNetworkPolicy"
 
 const baseNetworks: ENetwork[] = [ENetwork.LOCALNET, ENetwork.TESTNET]
@@ -17,7 +18,12 @@ const formatNetworkLabel = (network: string) => {
 const useNetworkOptions = (currentNetwork?: string) => {
   const { allowNetworkSwitching } = useHostNetworkPolicy()
   const { networks: customNetworks } = useCustomNetworks()
-  const configuredNetworks = useMemo(() => supportedNetworks(), [])
+  const { contractPackageId: localnetContractPackageId } =
+    useDeploymentArtifacts()
+  const configuredNetworks = useMemo(
+    () => supportedNetworks(localnetContractPackageId),
+    [localnetContractPackageId]
+  )
 
   return useMemo(() => {
     if (!allowNetworkSwitching) return []

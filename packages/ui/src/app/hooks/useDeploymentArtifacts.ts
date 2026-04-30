@@ -1,0 +1,95 @@
+"use client"
+
+import { useEffect, useState } from "react"
+
+/**
+ * Localnet contract IDs sourced at runtime from `packages/dapp/deployments/`,
+ * which is symlinked into `packages/ui/public/deployments` so the JSONs are
+ * served as static assets. Re-running `pnpm mock:setup` (or `move:publish`)
+ * rewrites the JSONs in place; a UI reload picks up the new ids without a
+ * rebuild.
+ */
+export type DeploymentArtifacts = {
+  contractPackageId: string | undefined
+  deepbookPackageId: string | undefined
+  deepbookRegistryId: string | undefined
+  pythMockPackageId: string | undefined
+  pythStateId: string | undefined
+}
+
+const EMPTY_ARTIFACTS: DeploymentArtifacts = {
+  contractPackageId: undefined,
+  deepbookPackageId: undefined,
+  deepbookRegistryId: undefined,
+  pythMockPackageId: undefined,
+  pythStateId: undefined
+}
+
+const AMM_PACKAGE_NAME = "openzeppelin_market_maker"
+
+type MockArtifact = {
+  pythPackageId?: string
+  pythStateId?: string
+  deepbookPackageId?: string
+  deepbookRegistryId?: string
+}
+
+type DeploymentRecord = {
+  packageName?: string
+  packageId?: string
+}
+
+const fetchJson = async <T>(path: string): Promise<T | undefined> => {
+  try {
+    const response = await fetch(path, { cache: "no-cache" })
+    if (!response.ok) return undefined
+    return (await response.json()) as T
+  } catch {
+    return undefined
+  }
+}
+
+const loadArtifacts = async (): Promise<DeploymentArtifacts> => {
+  const [mock, deployment] = await Promise.all([
+    fetchJson<MockArtifact>("/deployments/mock.localnet.json"),
+    fetchJson<DeploymentRecord[]>("/deployments/deployment.localnet.json")
+  ])
+  // Pick the most recent AMM publish — the file accumulates an entry per
+  // re-publish, and only the latest one matches the deps the AMM bytecode
+  // is currently bound to.
+  const ammRecord = deployment?.findLast(
+    (entry) => entry.packageName === AMM_PACKAGE_NAME
+  )
+  return {
+    contractPackageId: ammRecord?.packageId,
+    deepbookPackageId: mock?.deepbookPackageId,
+    deepbookRegistryId: mock?.deepbookRegistryId,
+    pythMockPackageId: mock?.pythPackageId,
+    pythStateId: mock?.pythStateId
+  }
+}
+
+// Module-scoped cache: a single promise is shared by all hook instances so we
+// don't re-fetch the JSONs on every mount. Cleared implicitly on full reload.
+let pending: Promise<DeploymentArtifacts> | undefined
+
+const ensureLoad = () => {
+  if (!pending) pending = loadArtifacts()
+  return pending
+}
+
+export const useDeploymentArtifacts = (): DeploymentArtifacts => {
+  const [artifacts, setArtifacts] = useState<DeploymentArtifacts>(EMPTY_ARTIFACTS)
+  useEffect(() => {
+    let cancelled = false
+    ensureLoad().then((value) => {
+      if (!cancelled) setArtifacts(value)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  return artifacts
+}
+
+export default useDeploymentArtifacts

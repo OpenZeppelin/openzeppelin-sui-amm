@@ -19,7 +19,7 @@ deps = { MoveStdlib = "MoveStdlib" }
 [pinned.test-publish.deepbook]
 source = { local = "../../../../vendor/deepbookv3/packages/deepbook" }
 use_environment = "test-publish"
-manifest_digest = "0111ADCF9A1F35E86E37B09A396FFCEE42182DD7E19EBC157E2C9CA9DA8FA10C"
+manifest_digest = "81F61E8684F0CB5B4C1C6AF3E1DE3757BC413C1E0C0F6A3A61A0D3F47BAA06D3"
 deps = { std = "MoveStdlib", sui = "Sui", token = "token" }
 
 [pinned.test-publish.local_mock_pyth]

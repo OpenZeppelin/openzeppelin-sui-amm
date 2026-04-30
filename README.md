@@ -85,17 +85,11 @@ pnpm --filter dapp mock:pool:create
 #    "Pub.localnet.toml workaround" below.
 pnpm --filter dapp move:publish --package-path prop-amm --re-publish --use-cli-publish
 
-# 9. Wire ids into the UI env. Copy from `mock.localnet.json` and from
-#    the AMM publish output above.
-cp packages/ui/.env.example packages/ui/.env.local
-# Then edit packages/ui/.env.local and set:
-#   NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=<AMM packageId from step 8>
-#   NEXT_PUBLIC_LOCALNET_DEEPBOOK_REGISTRY_ID=<deepbookRegistryId>
-#   NEXT_PUBLIC_LOCALNET_DEEPBOOK_PACKAGE_ID=<deepbookPackageId>
-#   NEXT_PUBLIC_LOCALNET_PYTH_MOCK_PACKAGE_ID=<pythPackageId>
-#   NEXT_PUBLIC_LOCALNET_PYTH_STATE_ID=<pythStateId>
-
-# 10. Run the UI and open http://localhost:3000
+# 9. Run the UI and open http://localhost:3000. Localnet ids are read at
+#    runtime from `packages/dapp/deployments/{mock,deployment}.localnet.json`
+#    via the symlink at `packages/ui/public/deployments`, so re-running
+#    mock:setup or move:publish is picked up on the next page reload — no
+#    manual `.env` editing.
 pnpm --filter ui dev
 ```
 

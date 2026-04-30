@@ -2,7 +2,7 @@
 
 import { formatCoinBalance } from "@sui-amm/tooling-core/utils/formatters"
 import { useMemo } from "react"
-import { LOCALNET_DEEPBOOK_PACKAGE_ID } from "../config/network"
+import useDeploymentArtifacts from "../hooks/useDeploymentArtifacts"
 import { useDeepbookMidPrices } from "../hooks/useDeepbookMidPrices"
 import {
   useExecutorEventLog,
@@ -250,6 +250,7 @@ const Sparkline = ({ points }: { points: SeriesPoint[] }) => {
 const PriceChartCard = () => {
   const { resolution, overview } = useTraderAccountContext()
   const packageId = useResolvedPackageId()
+  const { deepbookPackageId } = useDeploymentArtifacts()
   const events = useExecutorEventLog({
     packageId,
     executorId: resolution.traderAccountId,
@@ -259,7 +260,7 @@ const PriceChartCard = () => {
 
   const deepbookByEventId = useDeepbookMidPrices({
     events,
-    deepbookPackageId: LOCALNET_DEEPBOOK_PACKAGE_ID,
+    deepbookPackageId,
     poolId: traderAccount?.poolId,
     baseCoinType: traderAccount?.baseCoinType,
     quoteCoinType: traderAccount?.quoteCoinType

@@ -4,11 +4,11 @@ import { createNetworkConfig } from "@mysten/dapp-kit"
 import { getFullnodeUrl } from "@mysten/sui/client"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import {
+  CONTRACT_PACKAGE_ID_UNDEFINED,
   CONTRACT_PACKAGE_VARIABLE_NAME,
   DEVNET_CONTRACT_PACKAGE_ID,
   DEVNET_EXPLORER_URL,
   EXPLORER_URL_VARIABLE_NAME,
-  LOCALNET_CONTRACT_PACKAGE_ID,
   LOCALNET_EXPLORER_URL,
   MAINNET_CONTRACT_PACKAGE_ID,
   MAINNET_EXPLORER_URL,
@@ -16,6 +16,7 @@ import {
   TESTNET_EXPLORER_URL
 } from "../config/network"
 import useCustomNetworks from "./useCustomNetworks"
+import useDeploymentArtifacts from "./useDeploymentArtifacts"
 import useHostNetworkPolicy from "./useHostNetworkPolicy"
 
 /**
@@ -26,11 +27,14 @@ import useHostNetworkPolicy from "./useHostNetworkPolicy"
 const useNetworkConfig = () => {
   const { allowNetworkSwitching } = useHostNetworkPolicy()
   const { networks: customNetworks } = useCustomNetworks()
+  const { contractPackageId: localnetContractPackageId } =
+    useDeploymentArtifacts()
   const fullNetworkConfig = {
     [ENetwork.LOCALNET]: {
       url: getFullnodeUrl(ENetwork.LOCALNET),
       variables: {
-        [CONTRACT_PACKAGE_VARIABLE_NAME]: LOCALNET_CONTRACT_PACKAGE_ID,
+        [CONTRACT_PACKAGE_VARIABLE_NAME]:
+          localnetContractPackageId ?? CONTRACT_PACKAGE_ID_UNDEFINED,
         [EXPLORER_URL_VARIABLE_NAME]: LOCALNET_EXPLORER_URL
       }
     },

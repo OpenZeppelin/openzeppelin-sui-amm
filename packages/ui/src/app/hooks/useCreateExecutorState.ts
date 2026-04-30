@@ -11,11 +11,11 @@ import {
 import type { SuiTransactionBlockResponse } from "@mysten/sui/client"
 import type { IdentifierString } from "@mysten/wallet-standard"
 import { resolveAmmConfigInputs } from "@sui-amm/domain-core/models/amm"
+import { findMockPriceFeedByCoinType } from "@sui-amm/domain-core/models/pyth"
 import { buildCreateExecutorTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { resolveCurrencyObjectId } from "@sui-amm/tooling-core/coin-registry"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
-import { validateRequiredHexBytes } from "@sui-amm/tooling-core/utils/validation"
 import { useCallback, useMemo, useState } from "react"
 import type {
   AmmConfigFieldKey,
@@ -50,8 +50,6 @@ import useExplorerUrl from "./useExplorerUrl"
 import { useIdleFieldValidation } from "./useIdleFieldValidation"
 import useResolvedPackageId from "./useResolvedPackageId"
 
-const PYTH_FEED_ID_BYTES = 32
-
 const parseMoveTypeArguments = (type: string): string[] => {
   const open = type.indexOf("<")
   if (open < 0) return []
@@ -85,9 +83,7 @@ const parseMoveTypeArguments = (type: string): string[] => {
 }
 
 const buildMarketConfigFormState = (): MarketConfigFormState => ({
-  poolId: "",
-  basePythPriceFeedIdHex: "",
-  quotePythPriceFeedIdHex: ""
+  poolId: ""
 })
 
 const buildMarketConfigFieldErrors = (
@@ -100,20 +96,6 @@ const buildMarketConfigFieldErrors = (
     "DeepBook pool object ID"
   )
   if (poolError) errors.poolId = poolError
-
-  const baseFeedError = validateRequiredHexBytes({
-    value: formState.basePythPriceFeedIdHex,
-    expectedBytes: PYTH_FEED_ID_BYTES,
-    label: "Base Pyth price feed id"
-  })
-  if (baseFeedError) errors.basePythPriceFeedIdHex = baseFeedError
-
-  const quoteFeedError = validateRequiredHexBytes({
-    value: formState.quotePythPriceFeedIdHex,
-    expectedBytes: PYTH_FEED_ID_BYTES,
-    label: "Quote Pyth price feed id"
-  })
-  if (quoteFeedError) errors.quotePythPriceFeedIdHex = quoteFeedError
 
   return errors
 }
@@ -371,11 +353,27 @@ export const useCreateExecutorState = () => {
         { suiClient }
       )
 
+      // Derive feed-id hexes straight from the pool's base/quote coin types
+      // so the user can't accidentally pin the same feed to both sides (which
+      // makes oracle ratio = 1 always and breaks the chart's mid price).
+      const baseFeed = findMockPriceFeedByCoinType(baseAssetTypeTag)
+      if (!baseFeed) {
+        throw new Error(
+          `No known Pyth feed for base coin ${baseAssetTypeTag}. Add a config in domain-core/models/pyth.ts or pick a different pool.`
+        )
+      }
+      const quoteFeed = findMockPriceFeedByCoinType(quoteAssetTypeTag)
+      if (!quoteFeed) {
+        throw new Error(
+          `No known Pyth feed for quote coin ${quoteAssetTypeTag}. Add a config in domain-core/models/pyth.ts or pick a different pool.`
+        )
+      }
+
       const inputs = resolveAmmConfigInputs({
         baseSpreadBps: ammFormState.baseSpreadBps.trim(),
         volatilityMultiplierBps: ammFormState.volatilityMultiplierBps.trim(),
-        basePythPriceFeedIdHex: marketFormState.basePythPriceFeedIdHex.trim(),
-        quotePythPriceFeedIdHex: marketFormState.quotePythPriceFeedIdHex.trim(),
+        basePythPriceFeedIdHex: baseFeed.feedIdHex,
+        quotePythPriceFeedIdHex: quoteFeed.feedIdHex,
         orderExpirationTimeMs: ammFormState.orderExpirationTimeMs.trim(),
         maxPriceAgeSecs: ammFormState.maxPriceAgeSecs.trim(),
         maxConfRatioBps: ammFormState.maxConfRatioBps.trim(),

@@ -4,7 +4,7 @@ import { useSuiClient } from "@mysten/dapp-kit"
 import type { SuiEvent } from "@mysten/sui/client"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import { useEffect, useState } from "react"
-import { LOCALNET_DEEPBOOK_PACKAGE_ID } from "../config/network"
+import useDeploymentArtifacts from "./useDeploymentArtifacts"
 
 const safeNormalize = (value?: string) => {
   if (!value) return undefined
@@ -56,8 +56,8 @@ const collectMatchingOrderIds = (
  * Returns a `Set<string>` of order IDs (decimal strings) that appeared as
  * either `maker_order_id` or `taker_order_id` in any matching fill event.
  *
- * Localnet only: uses `LOCALNET_DEEPBOOK_PACKAGE_ID` from `.env.local`. On
- * other networks the hook returns an empty set (and logs a warning).
+ * Localnet only: reads `deepbookPackageId` from the runtime deployment
+ * artifacts. On other networks the hook returns an empty set.
  */
 export const useDeepbookFillsForPool = ({
   poolId,
@@ -67,12 +67,12 @@ export const useDeepbookFillsForPool = ({
   balanceManagerId?: string
 }) => {
   const suiClient = useSuiClient()
+  const { deepbookPackageId } = useDeploymentArtifacts()
   const [filledOrderIds, setFilledOrderIds] = useState<Set<string>>(
     () => new Set()
   )
 
   useEffect(() => {
-    const deepbookPackageId = LOCALNET_DEEPBOOK_PACKAGE_ID
     if (!deepbookPackageId || !poolId || !balanceManagerId) {
       setFilledOrderIds(new Set())
       return
@@ -167,7 +167,7 @@ export const useDeepbookFillsForPool = ({
       cancelled = true
       if (unsubscribeFn) void unsubscribeFn()
     }
-  }, [balanceManagerId, poolId, suiClient])
+  }, [balanceManagerId, deepbookPackageId, poolId, suiClient])
 
   return filledOrderIds
 }

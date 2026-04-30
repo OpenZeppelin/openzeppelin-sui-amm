@@ -11,8 +11,6 @@ import {
 
 export type MarketConfigFormState = {
   poolId: string
-  basePythPriceFeedIdHex: string
-  quotePythPriceFeedIdHex: string
 }
 
 export type MarketConfigFieldErrors = Partial<
@@ -33,20 +31,8 @@ const FIELD_SPECS: FieldSpec[] = [
     key: "poolId",
     title: "DeepBook pool object ID",
     description:
-      "Shared Pool<Base, Quote> object. Base/quote asset types and Currency<T> objects are auto-resolved.",
+      "Shared Pool<Base, Quote> object. Base/quote asset types, Currency<T> objects, and Pyth price feed IDs are auto-resolved from the pool's coin types.",
     placeholder: "0x..."
-  },
-  {
-    key: "basePythPriceFeedIdHex",
-    title: "Base Pyth price feed ID",
-    description: "32-byte hex identifier for the base asset's USD feed.",
-    placeholder: "0x... (64 hex chars)"
-  },
-  {
-    key: "quotePythPriceFeedIdHex",
-    title: "Quote Pyth price feed ID",
-    description: "32-byte hex identifier for the quote asset's USD feed.",
-    placeholder: "0x... (64 hex chars)"
   }
 ]
 
