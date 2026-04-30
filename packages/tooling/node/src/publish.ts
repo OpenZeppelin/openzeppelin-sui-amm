@@ -204,15 +204,20 @@ export const publishPackage = async (
       }
     )
   } catch (error) {
+    // The pre-publish `sui move build` is for metadata extraction only; the
+    // actual publish (especially the `sui client test-publish` retry) handles
+    // unpublished local deps and Move-env lookups via different code paths.
+    // Skip the pre-build when the failure is one those downstream paths can
+    // recover from.
     const canSkipPreBuild =
       publishPlan.useCliPublish &&
-      publishPlan.shouldUseUnpublishedDependencies &&
-      isMoveEnvironmentLookupError(error)
+      (isMoveEnvironmentLookupError(error) ||
+        isUnpublishedDependencyError(error))
 
     if (!canSkipPreBuild) throw error
 
     logWarning(
-      "Skipping pre-publish `sui move build` due Move.toml environment lookup error from this Sui CLI. Proceeding with CLI publish and persisting empty build metadata."
+      "Skipping pre-publish `sui move build`; the publish path will rebuild from source."
     )
   }
 
@@ -545,6 +550,11 @@ const isMoveEnvironmentLookupError = (error: unknown) => {
     message.includes("Environment `") &&
     message.includes("is not present in Move.toml")
   )
+}
+
+const isUnpublishedDependencyError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("Unpublished dependencies:")
 }
 
 /**

@@ -159,7 +159,7 @@ describe("testing script helpers", () => {
       (options as { env: Record<string, string> }).env.SUI_KEYSTORE_PATH
     ).toBe("/tmp/sui-localnet.keystore")
     expect(
-      (options as { env: Record<string, string> }).env.SUI_ACCOUNT_PRIVATE_KEY
+      (options as { env: Record<string, string> }).env.TRADER_PRIVATE_KEY
     ).toBe("secret")
   })
 

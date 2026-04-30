@@ -75,10 +75,10 @@ export default defineSuiConfig({
 - `SUI_NETWORK`: override the selected network
 - `SUI_RPC_URL` or `SUI_NETWORK_URL`: override the RPC endpoint
 - `SUI_KEYSTORE_PATH`: override keystore location
-- `SUI_ACCOUNT_INDEX`: keystore account index to use
-- `SUI_ACCOUNT_ADDRESS`: explicit account address
-- `SUI_ACCOUNT_PRIVATE_KEY`: bech32 or base64 private key
-- `SUI_ACCOUNT_MNEMONIC`: BIP-39 mnemonic
+- `TRADER_INDEX`: keystore account index to use
+- `TRADER_ADDRESS`: explicit account address
+- `TRADER_PRIVATE_KEY`: bech32 or base64 private key
+- `TRADER_MNEMONIC`: BIP-39 mnemonic
 - `SUI_ARTIFACTS_DIR`: where artifacts are written (default: `deployments/`)
 - `SUI_CONFIG_DIR` / `SUI_LOCALNET_CONFIG_DIR`: localnet config directory
 - `SUI_SKIP_MOVE_CHAIN_ID_SYNC`: skip Move.toml test-publish environment sync for localnet

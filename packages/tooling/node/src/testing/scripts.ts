@@ -147,8 +147,8 @@ const resolveBaseEnvironment = ({
   }
 
   if (account) {
-    baseEnvironment.SUI_ACCOUNT_PRIVATE_KEY = account.keypair.getSecretKey()
-    baseEnvironment.SUI_ACCOUNT_ADDRESS = account.address
+    baseEnvironment.TRADER_PRIVATE_KEY = account.keypair.getSecretKey()
+    baseEnvironment.TRADER_ADDRESS = account.address
   }
 
   return {

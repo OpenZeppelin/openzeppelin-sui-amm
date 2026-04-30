@@ -3,5 +3,5 @@ name = "local_mock_pyth"
 edition = "2024"
 
 [environments]
-test-publish = "305e72d1"
+test-publish = "771452e4"
 localnet = "305e72d1"

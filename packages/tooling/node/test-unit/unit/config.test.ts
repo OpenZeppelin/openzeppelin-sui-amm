@@ -16,10 +16,10 @@ import {
 const clearConfigEnv = {
   SUI_NETWORK: undefined,
   SUI_KEYSTORE_PATH: undefined,
-  SUI_ACCOUNT_INDEX: undefined,
-  SUI_ACCOUNT_ADDRESS: undefined,
-  SUI_ACCOUNT_PRIVATE_KEY: undefined,
-  SUI_ACCOUNT_MNEMONIC: undefined
+  TRADER_INDEX: undefined,
+  TRADER_ADDRESS: undefined,
+  TRADER_PRIVATE_KEY: undefined,
+  TRADER_MNEMONIC: undefined
 }
 
 describe("loadSuiConfig", () => {

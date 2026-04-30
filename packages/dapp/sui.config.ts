@@ -3,9 +3,9 @@ import { defineSuiConfig } from "@sui-amm/tooling-node/config"
 import { DEFAULT_PUBLISH_GAS_BUDGET } from "@sui-amm/tooling-node/constants"
 
 const defaultAccount = {
-  accountAddress: process.env.SUI_ACCOUNT_ADDRESS,
-  accountPrivateKey: process.env.SUI_ACCOUNT_PRIVATE_KEY,
-  accountMnemonic: process.env.SUI_ACCOUNT_MNEMONIC
+  accountAddress: process.env.TRADER_ADDRESS,
+  accountPrivateKey: process.env.TRADER_PRIVATE_KEY,
+  accountMnemonic: process.env.TRADER_MNEMONIC
 }
 
 export default defineSuiConfig({
