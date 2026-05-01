@@ -10,7 +10,10 @@ import {
 } from "./ModalPrimitives"
 
 export type MarketConfigFormState = {
-  poolId: string
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
+  basePythPriceFeedIdHex: string
+  quotePythPriceFeedIdHex: string
 }
 
 export type MarketConfigFieldErrors = Partial<
@@ -28,11 +31,32 @@ type FieldSpec = {
 
 const FIELD_SPECS: FieldSpec[] = [
   {
-    key: "poolId",
-    title: "DeepBook pool object ID",
+    key: "baseAssetTypeTag",
+    title: "Base asset coin type",
     description:
-      "Shared Pool<Base, Quote> object. Base/quote asset types, Currency<T> objects, and Pyth price feed IDs are auto-resolved from the pool's coin types.",
-    placeholder: "0x..."
+      "Move type tag of the base asset (e.g. 0x2::sui::SUI). The matching DeepBook pool is resolved from the deployment artifact's `pools` list.",
+    placeholder: "0x...::module::TYPE"
+  },
+  {
+    key: "quoteAssetTypeTag",
+    title: "Quote asset coin type",
+    description:
+      "Move type tag of the quote asset (e.g. <coinPackageId>::mock_coin::USDC). Defaults to the localnet USDC mock from the deployment artifact.",
+    placeholder: "0x...::module::TYPE"
+  },
+  {
+    key: "basePythPriceFeedIdHex",
+    title: "Base Pyth price feed ID",
+    description:
+      "32-byte hex identifier for the base asset's USD feed. Pre-filled with the SUI/USD feed; override if your base isn't SUI.",
+    placeholder: "0x... (64 hex chars)"
+  },
+  {
+    key: "quotePythPriceFeedIdHex",
+    title: "Quote Pyth price feed ID",
+    description:
+      "32-byte hex identifier for the quote asset's USD feed. Pre-filled with the USDC/USD feed; override if your quote isn't USDC.",
+    placeholder: "0x... (64 hex chars)"
   }
 ]
 

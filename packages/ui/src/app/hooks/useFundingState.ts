@@ -22,7 +22,6 @@ import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { parseCoinAmount } from "@sui-amm/tooling-core/utils/formatters"
 import { useCallback, useMemo, useState } from "react"
-import { resolveAmmAdminCapId } from "../helpers/ammAdminCap"
 import {
   getLocalnetClient,
   makeLocalnetExecutor,
@@ -249,11 +248,7 @@ export const useFundingState = (mode: FundingMode) => {
           : traderAccount.quoteCoinType
 
       failureStage = "resolve-admin-cap"
-      const adminCapId = await resolveAmmAdminCapId({
-        ownerAddress: walletAddress,
-        packageId: contractPackageId,
-        suiClient
-      })
+      const adminCapId = resolution.adminCapId
       if (!adminCapId) {
         throw new Error("AdminCap not found for the connected wallet.")
       }

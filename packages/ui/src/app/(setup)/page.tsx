@@ -1,11 +1,18 @@
 "use client"
 
+import { AMM_ADMIN_CAP_TYPE_SUFFIX } from "@sui-amm/domain-core/models/amm"
+import { findCreatedObjectIds } from "@sui-amm/tooling-core/transactions"
 import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import AmmConfigForm from "../components/AmmConfigForm"
 import Button from "../components/Button"
+import ExecutorPickerCard from "../components/ExecutorPickerCard"
 import MarketConfigForm from "../components/MarketConfigForm"
 import NetworkSupportChecker from "../components/NetworkSupportChecker"
+import {
+  readSelectedAdminCapId,
+  writeSelectedAdminCapId
+} from "../helpers/selectedAdminCap"
 import { useCreateExecutorState } from "../hooks/useCreateExecutorState"
 import { useTraderAccountContext } from "../providers/TraderAccountProvider"
 
@@ -52,18 +59,34 @@ export default function SetupPage() {
     handleCreateExecutor
   } = useCreateExecutorState()
 
-  useEffect(() => {
-    if (resolution.status === "ready") {
-      router.replace("/dashboard")
-    }
-  }, [resolution.status, router])
+  // Track the active selection so the picker can highlight the current pick
+  // and the page can keep showing the create form even when an executor is
+  // already resolved (otherwise a user with executors couldn't create more).
+  const [selectedAdminCapId, setSelectedAdminCapId] = useState<
+    string | undefined
+  >(() => readSelectedAdminCapId())
 
-  if (resolution.status === "ready") {
-    return null
-  }
+  // After a successful create, capture the freshly minted AdminCap from the
+  // tx's objectChanges, persist it as the active selection, and route to the
+  // dashboard. Done in an effect so the success card flashes briefly first.
+  useEffect(() => {
+    if (transactionState.status !== "success") return
+    const newAdminCapId = findCreatedObjectIds(
+      transactionState.summary.transactionBlock,
+      AMM_ADMIN_CAP_TYPE_SUFFIX
+    )[0]
+    if (newAdminCapId) {
+      writeSelectedAdminCapId(newAdminCapId)
+      setSelectedAdminCapId(newAdminCapId)
+    }
+    const timeoutId = window.setTimeout(() => router.replace("/dashboard"), 600)
+    return () => window.clearTimeout(timeoutId)
+  }, [router, transactionState])
 
   const isProcessing = transactionState.status === "processing"
   const submitLabel = isProcessing ? "Submitting..." : "Create market maker"
+  const showResolutionError =
+    resolution.status === "error" && resolution.error
 
   return (
     <>
@@ -72,19 +95,26 @@ export default function SetupPage() {
         <div className="flex w-full max-w-4xl flex-col gap-6">
           <header className="flex flex-col gap-2">
             <h1 className="text-2xl font-semibold text-sds-dark dark:text-sds-light">
-              Create your market maker
+              Manage market makers
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-200/70">
-              Configure a DeepBook market and AMM parameters, then submit to
-              publish a new executor on-chain. Base and quote asset types are
-              derived from the pool; currency objects are resolved via the coin
-              registry.
+              Pick an executor your wallet already controls, or create a new
+              one. Base and quote asset types are derived from the pool;
+              currency objects and Pyth price feeds are resolved automatically.
             </p>
           </header>
 
+          <ExecutorPickerCard selectedAdminCapId={selectedAdminCapId} />
+
+          {showResolutionError ? (
+            <div className="rounded-xl border border-amber-300/70 bg-amber-50/70 px-4 py-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+              {resolution.error}
+            </div>
+          ) : undefined}
+
           <SectionCard
-            title="Market configuration"
-            subtitle="DeepBook pool + Pyth price feeds for base and quote."
+            title="Create a new executor"
+            subtitle="DeepBook pool — base/quote types and Pyth feeds are auto-resolved."
           >
             <MarketConfigForm
               formState={marketFormState}

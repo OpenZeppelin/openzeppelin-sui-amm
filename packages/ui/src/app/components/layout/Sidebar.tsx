@@ -5,6 +5,7 @@ import {
   Bot,
   CircleDollarSign,
   LayoutDashboard,
+  Plus,
   Settings,
   type LucideIcon
 } from "lucide-react"
@@ -24,6 +25,11 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/bot", label: "Bot Status", icon: Bot },
   { href: "/funding", label: "Funding", icon: CircleDollarSign }
 ]
+
+// Routes back to the setup page so the user can switch between owned
+// executors or create a new one. Kept separate from `NAV_ITEMS` so the
+// "active page" highlight only applies to terminal sections.
+const SETUP_HREF = "/"
 
 const isActiveHref = (pathname: string | null, href: string) => {
   if (!pathname) return false
@@ -58,6 +64,15 @@ const Sidebar = () => {
           )
         })}
       </nav>
+      <div className="mt-2 border-t border-slate-200/60 pt-3 dark:border-slate-50/15">
+        <Link
+          href={SETUP_HREF}
+          className="flex items-center gap-2.5 rounded-lg border border-dashed border-sds-blue/30 px-3 py-2 text-sm font-medium text-sds-blue transition-colors hover:bg-sds-blue/10 dark:border-sds-blue/40 dark:hover:bg-sds-blue/20"
+        >
+          <Plus size={16} aria-hidden />
+          <span>New executor</span>
+        </Link>
+      </div>
     </aside>
   )
 }

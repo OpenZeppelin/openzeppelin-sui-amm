@@ -9,12 +9,25 @@ import { useEffect, useState } from "react"
  * rewrites the JSONs in place; a UI reload picks up the new ids without a
  * rebuild.
  */
+export type DeploymentCoinEntry = {
+  label: string
+  coinType: string
+}
+
+export type DeploymentPoolEntry = {
+  poolId: string
+  baseCoinType: string
+  quoteCoinType: string
+}
+
 export type DeploymentArtifacts = {
   contractPackageId: string | undefined
   deepbookPackageId: string | undefined
   deepbookRegistryId: string | undefined
   pythMockPackageId: string | undefined
   pythStateId: string | undefined
+  coins: DeploymentCoinEntry[]
+  pools: DeploymentPoolEntry[]
 }
 
 const EMPTY_ARTIFACTS: DeploymentArtifacts = {
@@ -22,16 +35,31 @@ const EMPTY_ARTIFACTS: DeploymentArtifacts = {
   deepbookPackageId: undefined,
   deepbookRegistryId: undefined,
   pythMockPackageId: undefined,
-  pythStateId: undefined
+  pythStateId: undefined,
+  coins: [],
+  pools: []
 }
 
 const AMM_PACKAGE_NAME = "openzeppelin_market_maker"
+
+type MockArtifactCoin = {
+  label?: string
+  coinType?: string
+}
+
+type MockArtifactPool = {
+  poolId?: string
+  baseCoinType?: string
+  quoteCoinType?: string
+}
 
 type MockArtifact = {
   pythPackageId?: string
   pythStateId?: string
   deepbookPackageId?: string
   deepbookRegistryId?: string
+  coins?: MockArtifactCoin[]
+  pools?: MockArtifactPool[]
 }
 
 type DeploymentRecord = {
@@ -60,12 +88,32 @@ const loadArtifacts = async (): Promise<DeploymentArtifacts> => {
   const ammRecord = deployment?.findLast(
     (entry) => entry.packageName === AMM_PACKAGE_NAME
   )
+  const coins =
+    mock?.coins?.flatMap((entry) =>
+      entry.label && entry.coinType
+        ? [{ label: entry.label, coinType: entry.coinType }]
+        : []
+    ) ?? []
+  const pools =
+    mock?.pools?.flatMap((entry) =>
+      entry.poolId && entry.baseCoinType && entry.quoteCoinType
+        ? [
+            {
+              poolId: entry.poolId,
+              baseCoinType: entry.baseCoinType,
+              quoteCoinType: entry.quoteCoinType
+            }
+          ]
+        : []
+    ) ?? []
   return {
     contractPackageId: ammRecord?.packageId,
     deepbookPackageId: mock?.deepbookPackageId,
     deepbookRegistryId: mock?.deepbookRegistryId,
     pythMockPackageId: mock?.pythPackageId,
-    pythStateId: mock?.pythStateId
+    pythStateId: mock?.pythStateId,
+    coins,
+    pools
   }
 }
 

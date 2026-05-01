@@ -11,12 +11,18 @@ import {
 import type { SuiTransactionBlockResponse } from "@mysten/sui/client"
 import type { IdentifierString } from "@mysten/wallet-standard"
 import { resolveAmmConfigInputs } from "@sui-amm/domain-core/models/amm"
-import { findMockPriceFeedByCoinType } from "@sui-amm/domain-core/models/pyth"
+import {
+  SUI_USD_FEED,
+  USDC_USD_FEED
+} from "@sui-amm/domain-core/models/pyth"
 import { buildCreateExecutorTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { normalizeStructTag } from "@mysten/sui/utils"
 import { resolveCurrencyObjectId } from "@sui-amm/tooling-core/coin-registry"
+import { SUI_COIN_TYPE } from "@sui-amm/tooling-core/constants"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
-import { useCallback, useMemo, useState } from "react"
+import { validateRequiredHexBytes } from "@sui-amm/tooling-core/utils/validation"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type {
   AmmConfigFieldKey,
   AmmConfigFormState
@@ -37,7 +43,6 @@ import {
 } from "../helpers/localnet"
 import { transactionUrl } from "../helpers/network"
 import { notification } from "../helpers/notification"
-import { validateSuiObjectId } from "../helpers/suiIds"
 import {
   extractErrorDetails,
   formatErrorMessage,
@@ -46,56 +51,79 @@ import {
 } from "../helpers/transactionErrors"
 import { waitForTransactionBlock } from "../helpers/transactionWait"
 import { useTraderAccountContext } from "../providers/TraderAccountProvider"
+import type { DeploymentArtifacts } from "./useDeploymentArtifacts"
+import useDeploymentArtifacts from "./useDeploymentArtifacts"
 import useExplorerUrl from "./useExplorerUrl"
 import { useIdleFieldValidation } from "./useIdleFieldValidation"
 import useResolvedPackageId from "./useResolvedPackageId"
 
-const parseMoveTypeArguments = (type: string): string[] => {
-  const open = type.indexOf("<")
-  if (open < 0) return []
-  let depth = 0
-  let close = -1
-  for (let i = open; i < type.length; i++) {
-    if (type[i] === "<") depth++
-    else if (type[i] === ">") {
-      depth--
-      if (depth === 0) {
-        close = i
-        break
-      }
-    }
-  }
-  if (close < 0) return []
-  const inside = type.substring(open + 1, close)
-  const args: string[] = []
-  let start = 0
-  depth = 0
-  for (let i = 0; i < inside.length; i++) {
-    if (inside[i] === "<") depth++
-    else if (inside[i] === ">") depth--
-    else if (inside[i] === "," && depth === 0) {
-      args.push(inside.substring(start, i).trim())
-      start = i + 1
-    }
-  }
-  args.push(inside.substring(start).trim())
-  return args
+const PYTH_FEED_ID_BYTES = 32
+
+// Move type tags are 2-3 hex packageId + `::module::TYPE`. The simplest test
+// that's useful as a form-time validation is "non-empty + at least one `::`";
+// real type-tag well-formedness is enforced at submit by `normalizeStructTag`,
+// which throws on garbage.
+const isPlausibleTypeTag = (value: string): boolean =>
+  value.trim().length > 0 && value.trim().includes("::")
+
+const findArtifactPool = ({
+  artifacts,
+  baseAssetTypeTag,
+  quoteAssetTypeTag
+}: {
+  artifacts: DeploymentArtifacts
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
+}) => {
+  const normalizedBase = normalizeStructTag(baseAssetTypeTag)
+  const normalizedQuote = normalizeStructTag(quoteAssetTypeTag)
+  return artifacts.pools.find(
+    (entry) =>
+      normalizeStructTag(entry.baseCoinType) === normalizedBase &&
+      normalizeStructTag(entry.quoteCoinType) === normalizedQuote
+  )
 }
 
-const buildMarketConfigFormState = (): MarketConfigFormState => ({
-  poolId: ""
-})
+// The localnet USDC mock's coin type embeds a per-deployment package id, so
+// the default for the quote-asset field has to come from the artifact rather
+// than a static constant. SUI is fixed at `0x2::sui::SUI` and used unchanged.
+const buildMarketConfigFormState = (
+  artifacts?: DeploymentArtifacts
+): MarketConfigFormState => {
+  const usdcCoin = artifacts?.coins.find((coin) => coin.label === "USDC")
+  return {
+    baseAssetTypeTag: SUI_COIN_TYPE,
+    quoteAssetTypeTag: usdcCoin?.coinType ?? "",
+    basePythPriceFeedIdHex: SUI_USD_FEED.feedIdHex,
+    quotePythPriceFeedIdHex: USDC_USD_FEED.feedIdHex
+  }
+}
 
 const buildMarketConfigFieldErrors = (
   formState: MarketConfigFormState
 ): MarketConfigFieldErrors => {
   const errors: MarketConfigFieldErrors = {}
 
-  const poolError = validateSuiObjectId(
-    formState.poolId,
-    "DeepBook pool object ID"
-  )
-  if (poolError) errors.poolId = poolError
+  if (!isPlausibleTypeTag(formState.baseAssetTypeTag)) {
+    errors.baseAssetTypeTag = "Base asset coin type is required."
+  }
+  if (!isPlausibleTypeTag(formState.quoteAssetTypeTag)) {
+    errors.quoteAssetTypeTag = "Quote asset coin type is required."
+  }
+
+  const baseFeedError = validateRequiredHexBytes({
+    value: formState.basePythPriceFeedIdHex,
+    expectedBytes: PYTH_FEED_ID_BYTES,
+    label: "Base Pyth price feed id"
+  })
+  if (baseFeedError) errors.basePythPriceFeedIdHex = baseFeedError
+
+  const quoteFeedError = validateRequiredHexBytes({
+    value: formState.quotePythPriceFeedIdHex,
+    expectedBytes: PYTH_FEED_ID_BYTES,
+    label: "Quote Pyth price feed id"
+  })
+  if (quoteFeedError) errors.quotePythPriceFeedIdHex = quoteFeedError
 
   return errors
 }
@@ -124,6 +152,7 @@ export const useCreateExecutorState = () => {
   const contractPackageId = useResolvedPackageId()
   const explorerUrl = useExplorerUrl()
   const { refreshTraderAccount } = useTraderAccountContext()
+  const artifacts = useDeploymentArtifacts()
   const localnetClient = useMemo(() => getLocalnetClient(), [])
   const isLocalnet = network === ENetwork.LOCALNET
   const localnetExecutor = useMemo(
@@ -141,6 +170,19 @@ export const useCreateExecutorState = () => {
   const [marketFormState, setMarketFormState] = useState<MarketConfigFormState>(
     () => buildMarketConfigFormState()
   )
+  // The localnet USDC mock's package id is generated per-deployment, so the
+  // quote-asset default has to come from the artifact. Backfill once the
+  // artifact resolves, but only when the field is still empty so we don't
+  // clobber a user-entered type tag.
+  useEffect(() => {
+    const usdcCoin = artifacts.coins.find((coin) => coin.label === "USDC")
+    if (!usdcCoin) return
+    setMarketFormState((previous) =>
+      previous.quoteAssetTypeTag.trim() === ""
+        ? { ...previous, quoteAssetTypeTag: usdcCoin.coinType }
+        : previous
+    )
+  }, [artifacts.coins])
   const [transactionState, setTransactionState] = useState<TransactionState>({
     status: "idle"
   })
@@ -299,7 +341,6 @@ export const useCreateExecutorState = () => {
     let failureStage:
       | "prepare"
       | "resolve-pool"
-      | "parse-types"
       | "resolve-currency-base"
       | "resolve-currency-quote"
       | "execute"
@@ -307,21 +348,22 @@ export const useCreateExecutorState = () => {
 
     try {
       failureStage = "resolve-pool"
-      const poolShared = await getSuiSharedObject(
-        { objectId: marketFormState.poolId.trim(), mutable: true },
-        { suiClient }
-      )
-      const poolType = poolShared.object.type
-      if (!poolType) throw new Error("Pool object type is missing.")
-
-      failureStage = "parse-types"
-      const typeArguments = parseMoveTypeArguments(poolType)
-      if (typeArguments.length < 2) {
+      const baseAssetTypeTag = marketFormState.baseAssetTypeTag.trim()
+      const quoteAssetTypeTag = marketFormState.quoteAssetTypeTag.trim()
+      const matchingPool = findArtifactPool({
+        artifacts,
+        baseAssetTypeTag,
+        quoteAssetTypeTag
+      })
+      if (!matchingPool) {
         throw new Error(
-          "Pool type does not expose <Base, Quote> generic arguments."
+          `No DeepBook pool found for ${baseAssetTypeTag} / ${quoteAssetTypeTag} in the deployment artifact. Run \`pnpm --filter dapp mock:pool:create\` or pick types from an existing pool.`
         )
       }
-      const [baseAssetTypeTag, quoteAssetTypeTag] = typeArguments
+      const poolShared = await getSuiSharedObject(
+        { objectId: matchingPool.poolId, mutable: true },
+        { suiClient }
+      )
 
       failureStage = "resolve-currency-base"
       const baseCurrencyId = await resolveCurrencyObjectId(
@@ -353,27 +395,11 @@ export const useCreateExecutorState = () => {
         { suiClient }
       )
 
-      // Derive feed-id hexes straight from the pool's base/quote coin types
-      // so the user can't accidentally pin the same feed to both sides (which
-      // makes oracle ratio = 1 always and breaks the chart's mid price).
-      const baseFeed = findMockPriceFeedByCoinType(baseAssetTypeTag)
-      if (!baseFeed) {
-        throw new Error(
-          `No known Pyth feed for base coin ${baseAssetTypeTag}. Add a config in domain-core/models/pyth.ts or pick a different pool.`
-        )
-      }
-      const quoteFeed = findMockPriceFeedByCoinType(quoteAssetTypeTag)
-      if (!quoteFeed) {
-        throw new Error(
-          `No known Pyth feed for quote coin ${quoteAssetTypeTag}. Add a config in domain-core/models/pyth.ts or pick a different pool.`
-        )
-      }
-
       const inputs = resolveAmmConfigInputs({
         baseSpreadBps: ammFormState.baseSpreadBps.trim(),
         volatilityMultiplierBps: ammFormState.volatilityMultiplierBps.trim(),
-        basePythPriceFeedIdHex: baseFeed.feedIdHex,
-        quotePythPriceFeedIdHex: quoteFeed.feedIdHex,
+        basePythPriceFeedIdHex: marketFormState.basePythPriceFeedIdHex.trim(),
+        quotePythPriceFeedIdHex: marketFormState.quotePythPriceFeedIdHex.trim(),
         orderExpirationTimeMs: ammFormState.orderExpirationTimeMs.trim(),
         maxPriceAgeSecs: ammFormState.maxPriceAgeSecs.trim(),
         maxConfRatioBps: ammFormState.maxConfRatioBps.trim(),
@@ -470,6 +496,7 @@ export const useCreateExecutorState = () => {
     }
   }, [
     ammFormState,
+    artifacts,
     contractPackageId,
     currentAccount,
     currentWallet,

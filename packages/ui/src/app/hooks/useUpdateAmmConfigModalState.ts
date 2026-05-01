@@ -25,6 +25,7 @@ import type {
   AmmConfigFormState
 } from "../components/AmmConfigForm"
 import { resolveAmmAdminCapId } from "../helpers/ammAdminCap"
+import { readSelectedAdminCapId } from "../helpers/selectedAdminCap"
 import {
   buildAmmConfigFieldErrors,
   buildAmmConfigFormState
@@ -294,6 +295,7 @@ export const useUpdateAmmConfigModalState = ({
       const adminCapId = await resolveAmmAdminCapId({
         ownerAddress: walletAddress,
         packageId,
+        preferredAdminCapId: readSelectedAdminCapId(),
         suiClient
       })
 
