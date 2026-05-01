@@ -5,7 +5,7 @@ import {
   getStructLabel
 } from "@sui-amm/tooling-core/utils/formatters"
 import { useMemo } from "react"
-import { useDeepbookFillsForPool } from "../hooks/useDeepbookFillsForPool"
+import { useDeepbookFullyFilledOrders } from "../hooks/useDeepbookFullyFilledOrders"
 import { useExecutorEventLog } from "../hooks/useExecutorEventLog"
 import useResolvedPackageId from "../hooks/useResolvedPackageId"
 import { useTraderAccountContext } from "../providers/TraderAccountProvider"
@@ -116,7 +116,7 @@ const ActiveOrdersCard = () => {
   })
   const traderAccount = overview.traderAccount
 
-  const filledOrderIds = useDeepbookFillsForPool({
+  const filledOrderIds = useDeepbookFullyFilledOrders({
     poolId: traderAccount?.poolId,
     balanceManagerId: traderAccount?.balanceManagerId
   })

@@ -87,6 +87,14 @@ const FundingCard = ({
 
   const isProcessing = transactionState.status === "processing"
 
+  // Withdraw needs the BalanceManager unlocked, which the contract enforces by
+  // requiring the executor to be paused. Block the button (and the auto-
+  // pause/unpause atomic wrapper) until the user has paused on /bot — that
+  // makes the gating explicit instead of doing it silently per-call.
+  const isWithdrawBlockedByActive =
+    mode === "withdraw" && traderAccount?.active === true
+  const submitDisabled = !canSubmit || isWithdrawBlockedByActive
+
   const baseSymbol = traderAccount
     ? getStructLabel(traderAccount.baseCoinType)
     : undefined
@@ -201,7 +209,7 @@ const FundingCard = ({
         ) : undefined}
 
         <div className="flex justify-end">
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
+          <Button onClick={handleSubmit} disabled={submitDisabled}>
             {isProcessing ? "Processing..." : submitLabel}
           </Button>
         </div>

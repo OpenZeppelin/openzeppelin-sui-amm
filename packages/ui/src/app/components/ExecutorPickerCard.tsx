@@ -29,7 +29,7 @@ const ExecutorPickerCard = ({
     return (
       <section className={cardClassName}>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-sds-dark dark:text-sds-light">
-          Your executors
+          Your amm executors
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-200/70">
           Loading owned `AdminCap` objects…
@@ -46,7 +46,7 @@ const ExecutorPickerCard = ({
     return (
       <section className={cardClassName}>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-sds-dark dark:text-sds-light">
-          Your executors
+          Your amm executors
         </h2>
         <p className="text-xs text-rose-700/90 dark:text-rose-200/90">
           {owned.error}
@@ -63,7 +63,7 @@ const ExecutorPickerCard = ({
     <section className={cardClassName}>
       <div className="mb-4 flex flex-col gap-1">
         <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-sds-dark dark:text-sds-light">
-          Your executors
+          Your amm executors
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-200/70">
           Pick an existing executor to manage. Sourced from `AdminCap` objects

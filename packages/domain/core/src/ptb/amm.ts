@@ -175,7 +175,7 @@ export const buildUpdateConfigTransaction = ({
   return transaction
 }
 
-type MockPriceComponents = {
+export type MockPriceComponents = {
   priceMagnitude: bigint | number
   priceIsNegative: boolean
   confidence: bigint | number
@@ -210,11 +210,12 @@ const appendMockPriceFeedUpdate = (
 }
 
 /**
- * Builds a localnet-only refresh_quotes_permissionless transaction. First
- * stamps both mock Pyth `PriceInfoObject`s with fresh timestamps so the
- * `max_price_age_secs` check passes, then calls
- * `executor::refresh_quotes_permissionless<Base, Quote>`. The executor must
- * be active (unpaused) for the call to succeed.
+ * Builds a localnet-only `refresh_quotes_permissionless` transaction. Stamps
+ * each `PriceInfoObject` with the SAME magnitude/expo it already holds so the
+ * `assert_price_age_within_limit` check passes (we just refresh the
+ * `timestamp` to the current chain clock) — that way the market-activity bot's
+ * walked price is preserved instead of clobbered by hardcoded defaults.
+ * Callers must read the current on-chain values and pass them in unchanged.
  */
 export const buildLocalnetRefreshQuotesTransaction = ({
   packageId,
@@ -247,9 +248,8 @@ export const buildLocalnetRefreshQuotesTransaction = ({
     components: basePriceComponents
   })
 
-  // Only append the second update when the quote feed is a distinct object —
-  // double-updating the same shared object in one PTB violates Sui's
-  // single-mutation-per-object rule.
+  // Skip the second stamp when both feeds map to the same object — Sui
+  // forbids two `&mut` references to the same shared object in a single PTB.
   if (
     basePriceInfoObject.sharedRef.objectId !==
     quotePriceInfoObject.sharedRef.objectId

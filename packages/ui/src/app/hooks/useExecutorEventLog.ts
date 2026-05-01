@@ -1,9 +1,9 @@
 "use client"
 
-import { useSuiClient } from "@mysten/dapp-kit"
 import type { SuiEvent } from "@mysten/sui/client"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
-import { useEffect, useState } from "react"
+import { useMemo } from "react"
+import useMoveModuleEvents from "./useMoveModuleEvents"
 
 export type ExecutorEventType =
   | "ExecutorCreated"
@@ -82,20 +82,6 @@ const toExecutorEvent = (event: SuiEvent): ExecutorEvent | undefined => {
   }
 }
 
-const dedupeAndCap = (current: ExecutorEvent[], limit: number) => {
-  const seen = new Set<string>()
-  const result: ExecutorEvent[] = []
-  // Preserve insertion order; iterate latest-first so newer entries win on dedupe.
-  for (let i = current.length - 1; i >= 0; i--) {
-    const event = current[i]
-    if (seen.has(event.id)) continue
-    seen.add(event.id)
-    result.push(event)
-    if (result.length >= limit) break
-  }
-  return result.reverse()
-}
-
 const sortByTimeAscending = (events: ExecutorEvent[]) =>
   [...events].sort((left, right) => {
     const leftTime = left.timestampMs ?? 0
@@ -112,75 +98,25 @@ export const useExecutorEventLog = ({
   packageId?: string
   executorId?: string
   limit?: number
-}) => {
-  const suiClient = useSuiClient()
-  const [events, setEvents] = useState<ExecutorEvent[]>([])
+}): ExecutorEvent[] => {
+  const rawEvents = useMoveModuleEvents({
+    packageId,
+    module: "events"
+  })
 
-  useEffect(() => {
-    if (!packageId || !executorId) {
-      setEvents([])
-      return
-    }
-
+  return useMemo(() => {
     const normalizedExecutorId = safeNormalize(executorId)
-    if (!normalizedExecutorId) {
-      setEvents([])
-      return
+    if (!normalizedExecutorId) return []
+    const filtered: ExecutorEvent[] = []
+    for (const event of rawEvents) {
+      if (!matchesExecutor(event, normalizedExecutorId)) continue
+      const parsed = toExecutorEvent(event)
+      if (!parsed) continue
+      filtered.push(parsed)
+      if (filtered.length >= limit) break
     }
-
-    let cancelled = false
-    let unsubscribeFn: (() => Promise<boolean>) | undefined
-
-    const backfill = async () => {
-      try {
-        const result = await suiClient.queryEvents({
-          query: { MoveEventModule: { package: packageId, module: "events" } },
-          limit,
-          order: "descending"
-        })
-        if (cancelled) return
-        const filtered = result.data
-          .filter((event) => matchesExecutor(event, normalizedExecutorId))
-          .map(toExecutorEvent)
-          .filter((event): event is ExecutorEvent => event !== undefined)
-        setEvents(sortByTimeAscending(filtered))
-      } catch (error) {
-        console.warn("Event backfill failed:", error)
-      }
-    }
-
-    const startSubscription = async () => {
-      try {
-        const fn = await suiClient.subscribeEvent({
-          filter: { MoveEventModule: { package: packageId, module: "events" } },
-          onMessage: (event) => {
-            if (cancelled) return
-            if (!matchesExecutor(event, normalizedExecutorId)) return
-            const parsed = toExecutorEvent(event)
-            if (!parsed) return
-            setEvents((previous) => dedupeAndCap([...previous, parsed], limit))
-          }
-        })
-        if (cancelled) {
-          await fn()
-          return
-        }
-        unsubscribeFn = fn
-      } catch (error) {
-        console.warn("Event subscription failed:", error)
-      }
-    }
-
-    void backfill()
-    void startSubscription()
-
-    return () => {
-      cancelled = true
-      if (unsubscribeFn) void unsubscribeFn()
-    }
-  }, [executorId, limit, packageId, suiClient])
-
-  return events
+    return sortByTimeAscending(filtered)
+  }, [executorId, limit, rawEvents])
 }
 
 export default useExecutorEventLog

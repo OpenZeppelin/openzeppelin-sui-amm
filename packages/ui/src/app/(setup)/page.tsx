@@ -113,7 +113,7 @@ export default function SetupPage() {
           ) : undefined}
 
           <SectionCard
-            title="Create a new executor"
+            title="Create a new amm executor"
             subtitle="DeepBook pool — base/quote types and Pyth feeds are auto-resolved."
           >
             <MarketConfigForm
