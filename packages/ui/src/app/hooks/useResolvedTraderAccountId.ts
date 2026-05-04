@@ -68,7 +68,14 @@ const useResolvedTraderAccountId = (
       }
     }
 
-    setState({ status: "loading" })
+    // Only show the `loading` state on the FIRST resolve — once we have a
+    // ready snapshot, keep showing it while subsequent refreshes (driven by
+    // QuoteUpdated etc.) re-fetch in the background. Otherwise the terminal
+    // layout's `status !== "ready" -> return null` guard unmounts the whole
+    // page tree on every event and the dashboard scrolls back to the top.
+    setState((previous) =>
+      previous.status === "ready" ? previous : { status: "loading" }
+    )
 
     const load = async () => {
       try {

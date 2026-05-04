@@ -1,16 +1,10 @@
 "use client"
 
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import { formatCoinBalance } from "@sui-amm/tooling-core/utils/formatters"
 import { useMemo } from "react"
-import {
-  useExecutorEventLog,
-  type ExecutorEvent
-} from "../hooks/useExecutorEventLog"
-import {
-  useDeepbookOrderFills,
-  type DeepbookOrderFill
-} from "../hooks/useDeepbookOrderFills"
-import useResolvedPackageId from "../hooks/useResolvedPackageId"
+import { useAccumulatedDeepbookOrderFills } from "../hooks/useAccumulatedDeepbookOrderFills"
+import type { DeepbookOrderFill } from "../hooks/useDeepbookOrderFills"
 import { useTraderAccountContext } from "../providers/TraderAccountProvider"
 import { shortenId } from "../helpers/format"
 
@@ -23,35 +17,44 @@ type TradeRow = {
   timestamp: string
 }
 
-type LimitOrderEntry = {
-  order_id?: string | number
-  is_bid?: boolean
+const safeNormalize = (value?: string) => {
+  if (!value) return undefined
+  try {
+    return normalizeSuiObjectId(value)
+  } catch {
+    return undefined
+  }
 }
 
 /**
- * Fold every `QuoteUpdated` event into a `Map<orderIdDecimalString, isBid>`
- * so we can look up the side an AMM order was placed with even after it has
- * been cancelled / replaced by a later refresh. Order ids are u128, parsed
- * to decimal strings to match DeepBook event payloads exactly.
+ * Derive (orderId, side) for one of the executor's fills using only the
+ * `OrderFilled` event payload — `taker_is_bid` tells us the taker's
+ * direction, and whether the executor's BalanceManager sat on the maker or
+ * taker side flips that to the AMM's order side.
+ *
+ * Skipping the `QuoteUpdated` cross-reference entirely makes every fill
+ * showable: we no longer drop rows when an old `QuoteUpdated` has aged out
+ * of the shared poller's event window.
  */
-const buildOrderSideMap = (events: ExecutorEvent[]): Map<string, boolean> => {
-  const map = new Map<string, boolean>()
-  for (const event of events) {
-    if (event.type !== "QuoteUpdated") continue
-    const orders = (event.data as { orders?: unknown }).orders
-    if (!Array.isArray(orders)) continue
-    for (const order of orders as LimitOrderEntry[]) {
-      const orderId = order.order_id
-      if (orderId === undefined || orderId === null) continue
-      const idStr = String(orderId)
-      if (!idStr) continue
-      // Older entries may already be in the map; keep the first observation
-      // (the moment the AMM placed the order). Subsequent QuoteUpdated events
-      // shouldn't change `is_bid` for an existing order id.
-      if (!map.has(idStr)) map.set(idStr, Boolean(order.is_bid))
+const resolveOurFillRole = (
+  fill: DeepbookOrderFill,
+  balanceManagerId: string
+): { orderId: string; side: "BUY" | "SELL" } | undefined => {
+  if (fill.makerBalanceManagerId === balanceManagerId) {
+    return {
+      orderId: fill.makerOrderId,
+      // Maker rests on the opposite side of the taker.
+      side: fill.takerIsBid ? "SELL" : "BUY"
     }
   }
-  return map
+  if (fill.takerBalanceManagerId === balanceManagerId) {
+    return {
+      orderId: fill.takerOrderId,
+      // Taker is on the same side as the market-order direction.
+      side: fill.takerIsBid ? "BUY" : "SELL"
+    }
+  }
+  return undefined
 }
 
 const formatTimestamp = (ms: number | null): string => {
@@ -98,33 +101,28 @@ const cardClassName =
   "rounded-2xl border border-slate-200/70 bg-white/90 p-5 shadow-[0_14px_35px_-30px_rgba(15,23,42,0.4)] dark:border-slate-50/15 dark:bg-slate-950/70"
 
 const TradeHistoryCard = () => {
-  const { resolution, overview } = useTraderAccountContext()
-  const packageId = useResolvedPackageId()
+  const { overview } = useTraderAccountContext()
   const traderAccount = overview.traderAccount
-  const events = useExecutorEventLog({
-    packageId,
-    executorId: resolution.traderAccountId,
-    limit: 500
-  })
-  const fills = useDeepbookOrderFills({
+  // The accumulated stream is held in a module-scoped store keyed by
+  // (pool, BalanceManager), so it survives navigation between terminal pages
+  // — the local rows used to reset every time the user clicked away.
+  const fills = useAccumulatedDeepbookOrderFills({
     poolId: traderAccount?.poolId,
     balanceManagerId: traderAccount?.balanceManagerId
   })
 
-  const orderSideMap = useMemo(() => buildOrderSideMap(events), [events])
-
   const rows = useMemo<TradeRow[]>(() => {
     if (!traderAccount) return []
+    const balanceManagerId = safeNormalize(traderAccount.balanceManagerId)
+    if (!balanceManagerId) return []
     const out: TradeRow[] = []
     for (const fill of fills) {
-      const ourId = pickMatchingOrderId(fill, orderSideMap)
-      if (!ourId) continue
-      const isBid = orderSideMap.get(ourId)
-      if (isBid === undefined) continue
+      const role = resolveOurFillRole(fill, balanceManagerId)
+      if (!role) continue
       out.push({
         key: fill.eventId,
-        orderId: ourId,
-        side: isBid ? "BUY" : "SELL",
+        orderId: role.orderId,
+        side: role.side,
         price: formatPrice({
           rawPrice: fill.price,
           baseDecimals: traderAccount.baseDecimals,
@@ -139,7 +137,7 @@ const TradeHistoryCard = () => {
       if (out.length >= MAX_ROWS) break
     }
     return out
-  }, [fills, orderSideMap, traderAccount])
+  }, [fills, traderAccount])
 
   return (
     <section className={cardClassName}>
@@ -148,10 +146,9 @@ const TradeHistoryCard = () => {
           Trade History
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-200/70">
-          DeepBook `OrderFilled` events that match one of the executor's
-          posted orders. Side is taken from the
-          <code className="font-mono"> QuoteUpdated </code>
-          payload that placed the matching order.
+          DeepBook `OrderFilled` events that touch the executor's
+          BalanceManager. Side is derived from `taker_is_bid` plus whether
+          the executor sat on the maker or taker side of the trade.
         </p>
       </div>
       {rows.length === 0 ? (
@@ -210,15 +207,6 @@ const TradeHistoryCard = () => {
       )}
     </section>
   )
-}
-
-const pickMatchingOrderId = (
-  fill: DeepbookOrderFill,
-  orderSideMap: Map<string, boolean>
-): string | undefined => {
-  if (orderSideMap.has(fill.makerOrderId)) return fill.makerOrderId
-  if (orderSideMap.has(fill.takerOrderId)) return fill.takerOrderId
-  return undefined
 }
 
 export default TradeHistoryCard

@@ -100,6 +100,60 @@ const PYTH_PRICE_INFO_TYPE = "price_info::PriceInfoObject"
 export const getPythPriceInfoType = (pythPackageId: string) =>
   `${normalizeSuiObjectId(pythPackageId)}::${PYTH_PRICE_INFO_TYPE}`
 
+type PythI64Field = { magnitude: string | number; negative: boolean }
+type PythPriceFields = {
+  price: { fields: PythI64Field }
+  conf: string | number
+  expo: { fields: PythI64Field }
+}
+
+/**
+ * Reads the current `magnitude / negative / conf / expo` from a fetched mock
+ * Pyth `PriceInfoObject` so callers can re-stamp it without changing the
+ * price (only the timestamp moves). Used by the UI's Refresh Quotes flow and
+ * by the maintenance script to satisfy
+ * `assert_price_age_within_limit` while preserving whatever the
+ * market-activity bot has walked the feed to.
+ *
+ * Pass the parsed `content` Sui returns from `getObject({ showContent: true })`
+ * (or any wrapper that exposes that content unmodified). Throws when the
+ * caller forgot to ask for parsed Move content.
+ */
+export const readPythPriceComponentsFromContent = (
+  content: { dataType?: string } | null | undefined
+): MockPriceFeedComponents => {
+  if (!content || content.dataType !== "moveObject") {
+    throw new Error(
+      "PriceInfoObject content missing parsed Move fields (caller needs `showContent: true`)."
+    )
+  }
+  const fields = (
+    content as unknown as {
+      fields: {
+        price_info: {
+          fields: { price_feed: { fields: { price: { fields: PythPriceFields } } } }
+        }
+      }
+    }
+  ).fields
+  const priceFields = fields.price_info.fields.price_feed.fields.price.fields
+  return {
+    priceMagnitude: BigInt(priceFields.price.fields.magnitude),
+    priceIsNegative: Boolean(priceFields.price.fields.negative),
+    confidence: BigInt(priceFields.conf),
+    exponentMagnitude: BigInt(priceFields.expo.fields.magnitude),
+    exponentIsNegative: Boolean(priceFields.expo.fields.negative)
+  }
+}
+
+export type MockPriceFeedComponents = {
+  priceMagnitude: bigint
+  priceIsNegative: boolean
+  confidence: bigint
+  exponentMagnitude: bigint
+  exponentIsNegative: boolean
+}
+
 export const deriveMockPriceComponents = (config: MockPriceFeedConfig) => {
   const priceMagnitude = config.price >= 0n ? config.price : -config.price
   const priceIsNegative = config.price < 0n

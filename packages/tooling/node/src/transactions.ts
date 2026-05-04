@@ -46,6 +46,17 @@ type ExecuteParams = {
   requestType?: "WaitForEffectsCert" | "WaitForLocalExecution"
   retryOnGasStale?: boolean
   assertSuccess?: boolean
+  /**
+   * When `false`, skips reading and writing the per-network
+   * `objects.<network>.json` artifact ledger. High-frequency scripts (e.g.
+   * `bot:market-activity`, `bot:maintenance`) pass `false` because their
+   * per-tick `Coin<T>` outputs are throwaway — and concurrent writers across
+   * scripts can otherwise corrupt the artifact file via interleaved
+   * read-modify-write. Defaults to `true` so one-shot scripts that rely on
+   * the ledger for cross-script lookups (publish, owner:amm:*, etc.) keep
+   * their current behavior.
+   */
+  persistCreatedObjects?: boolean
 }
 
 export {
@@ -160,6 +171,7 @@ type ExecuteOnceArgs = {
   signer: Ed25519Keypair
   requestType: ExecuteParams["requestType"]
   assertSuccess: boolean
+  persistCreatedObjects?: boolean
 }
 
 /**
@@ -167,7 +179,13 @@ type ExecuteOnceArgs = {
  * Artifacts mirror the objectChanges response so scripts can reuse created IDs.
  */
 export const executeTransactionOnce = async (
-  { transaction, signer, requestType, assertSuccess }: ExecuteOnceArgs,
+  {
+    transaction,
+    signer,
+    requestType,
+    assertSuccess,
+    persistCreatedObjects = true
+  }: ExecuteOnceArgs,
   toolingContext: ToolingContext
 ) => {
   const transactionResult =
@@ -193,12 +211,18 @@ export const executeTransactionOnce = async (
 
   if (assertSuccess) assertTransactionSuccess(transactionResult)
 
-  const objectArtifacts = await persistObjectsIfAny({
-    transactionResult,
-    suiClient: toolingContext.suiClient,
-    signerAddress: signer.toSuiAddress(),
-    networkName: toolingContext.suiConfig.network.networkName
-  })
+  // High-frequency callers (market-activity bot, maintenance loop) opt out so
+  // their per-tick swaps don't churn `objects.<network>.json`. Returning the
+  // empty placeholder keeps the caller's destructure on `.objectArtifacts`
+  // working without forcing every call site to handle two return shapes.
+  const objectArtifacts = persistCreatedObjects
+    ? await persistObjectsIfAny({
+        transactionResult,
+        suiClient: toolingContext.suiClient,
+        signerAddress: signer.toSuiAddress(),
+        networkName: toolingContext.suiConfig.network.networkName
+      })
+    : EMPTY_OBJECT_ARTIFACTS
 
   return {
     transactionResult,
@@ -249,7 +273,8 @@ export const signAndExecute = async (
     signer,
     requestType = "WaitForLocalExecution",
     retryOnGasStale = true,
-    assertSuccess = true
+    assertSuccess = true,
+    persistCreatedObjects = true
   }: ExecuteParams,
   toolingContext: ToolingContext
 ): Promise<{
@@ -280,7 +305,8 @@ export const signAndExecute = async (
           transaction,
           signer,
           requestType,
-          assertSuccess
+          assertSuccess,
+          persistCreatedObjects
         },
         toolingContext
       )

@@ -43,7 +43,15 @@ const useTraderAccountOverview = (
       }
     }
 
-    setState({ status: "loading" })
+    // Only flash the `loading` state on the FIRST fetch. On subsequent
+    // refreshes (driven by QuoteUpdated/Deposited/etc.) keep the previous
+    // `success` snapshot visible so consumer pages don't unmount their
+    // content — the Performance page's `status === "loading" → <Loading />`
+    // guard would otherwise wipe scroll position and component state on
+    // every refresh.
+    setState((previous) =>
+      previous.status === "success" ? previous : { status: "loading" }
+    )
 
     const load = async () => {
       try {

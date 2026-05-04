@@ -10,11 +10,8 @@ import {
 } from "@mysten/dapp-kit"
 import type { IdentifierString } from "@mysten/wallet-standard"
 import { SuiPythClient } from "@pythnetwork/pyth-sui-js"
-import {
-  buildLocalnetRefreshQuotesTransaction,
-  type MockPriceComponents
-} from "@sui-amm/domain-core/ptb/amm"
-import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
+import { readPythPriceComponentsFromContent } from "@sui-amm/domain-core/models/pyth"
+import { buildLocalnetRefreshQuotesTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useCallback, useMemo, useState } from "react"
@@ -42,44 +39,6 @@ type TransactionState =
   | { status: "processing" }
   | { status: "success"; digest: string }
   | { status: "error"; error: string; details?: string }
-
-type PythI64Field = { magnitude: string | number; negative: boolean }
-type PythPriceFields = {
-  price: { fields: PythI64Field }
-  conf: string | number
-  expo: { fields: PythI64Field }
-}
-
-/**
- * Pull magnitude/expo/conf out of a fetched mock `PriceInfoObject` so a
- * follow-up `update_price_feed` call can re-stamp the timestamp without
- * changing the price. Throws if the SDK didn't return parsed Move fields —
- * which means the caller forgot to pass `showContent: true`.
- */
-const readPythPriceComponents = (
-  priceInfoObject: WrappedSuiSharedObject
-): MockPriceComponents => {
-  const content = priceInfoObject.object.content
-  if (!content || content.dataType !== "moveObject")
-    throw new Error("PriceInfoObject content missing parsed Move fields")
-  const fields = (
-    content as unknown as {
-      fields: {
-        price_info: {
-          fields: { price_feed: { fields: { price: { fields: PythPriceFields } } } }
-        }
-      }
-    }
-  ).fields
-  const priceFields = fields.price_info.fields.price_feed.fields.price.fields
-  return {
-    priceMagnitude: BigInt(priceFields.price.fields.magnitude),
-    priceIsNegative: Boolean(priceFields.price.fields.negative),
-    confidence: BigInt(priceFields.conf),
-    exponentMagnitude: BigInt(priceFields.expo.fields.magnitude),
-    exponentIsNegative: Boolean(priceFields.expo.fields.negative)
-  }
-}
 
 export const useRefreshQuotesState = () => {
   const currentAccount = useCurrentAccount()
@@ -295,8 +254,12 @@ export const useRefreshQuotesState = () => {
       // `assert_price_age_within_limit` check passes. Reading the on-chain
       // magnitude/expo first preserves whatever the market-activity bot has
       // walked the price to instead of clobbering it with a hardcoded default.
-      const basePriceComponents = readPythPriceComponents(basePriceInfo)
-      const quotePriceComponents = readPythPriceComponents(quotePriceInfo)
+      const basePriceComponents = readPythPriceComponentsFromContent(
+        basePriceInfo.object.content
+      )
+      const quotePriceComponents = readPythPriceComponentsFromContent(
+        quotePriceInfo.object.content
+      )
 
       const transaction = buildLocalnetRefreshQuotesTransaction({
         packageId: contractPackageId,

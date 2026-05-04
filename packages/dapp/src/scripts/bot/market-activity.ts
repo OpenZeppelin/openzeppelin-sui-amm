@@ -17,7 +17,7 @@
  *     are sourced from `packages/dapp/deployments/mock.localnet.json`
  *     (populated by `mock:setup` and `mock:pool:create`).
  *   - Tick cadence and per-side caps come from CLI flags (`--interval-ms`,
- *     `--max-base`, `--max-quote`); defaults: 5000 ms, 1 SUI, 2 USDC.
+ *     `--max-base`, `--max-quote`); defaults: 2000 ms, 1 SUI, 2 USDC.
  *   - Price walk: `--start-price` / `--max-price-delta` (human dollars). The
  *     mock feed has no auth on `update_price_feed`, so the bot's signer is
  *     enough.
@@ -312,7 +312,11 @@ runSuiScript(
         if (priceInfoShared || swapDescription) {
           const { transactionResult } = await tooling.signAndExecute({
             transaction,
-            signer
+            signer,
+            // Per-tick swaps churn `Coin<T>` outputs and racing other scripts
+            // on the artifact ledger has corrupted it before. We don't read
+            // the ledger here, so opting out keeps the file clean.
+            persistCreatedObjects: false
           })
           const priceLabel = priceInfoShared
             ? `price=$${currentPriceDollars.toFixed(2)}`
@@ -342,7 +346,7 @@ runSuiScript(
       alias: ["interval-ms", "interval"],
       type: "number",
       description: "Delay between market orders, in milliseconds",
-      default: 5000
+      default: 2000
     })
     .option("maxBase", {
       alias: ["max-base"],
@@ -541,7 +545,8 @@ const ensureBotSuiSeeded = async ({
 
   const { transactionResult } = await tooling.signAndExecute({
     transaction,
-    signer: publisherKeypair
+    signer: publisherKeypair,
+    persistCreatedObjects: false
   })
   logKeyValueGreen("bot-sui-seeded")(
     `${transferAtoms.toString()} atoms · digest=${transactionResult.digest}`
@@ -599,7 +604,8 @@ const ensureBotUsdcSeeded = async ({
   })
   const { transactionResult } = await tooling.signAndExecute({
     transaction,
-    signer: publisherKeypair
+    signer: publisherKeypair,
+    persistCreatedObjects: false
   })
   logKeyValueGreen("bot-usdc-seeded")(
     `${mintAtoms.toString()} atoms · digest=${transactionResult.digest}`
