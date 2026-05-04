@@ -165,7 +165,7 @@ const FundingCard = ({
             onChange={(event) =>
               handleInputChange("amount", event.target.value)
             }
-            disabled={isProcessing}
+            disabled={isProcessing || formState.withdrawAll}
             className={modalFieldInputClassName}
             placeholder="0.5"
             inputMode="decimal"
@@ -174,6 +174,26 @@ const FundingCard = ({
             <span className={modalFieldErrorTextClassName}>{amountError}</span>
           ) : undefined}
         </label>
+
+        {mode === "withdraw" ? (
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-200/80">
+            <input
+              type="checkbox"
+              checked={formState.withdrawAll}
+              onChange={(event) =>
+                handleInputChange("withdrawAll", event.target.checked)
+              }
+              disabled={isProcessing}
+              className="accent-sds-blue"
+            />
+            <span>
+              Withdraw all
+              {activeSymbol ? ` (${activeSymbol})` : ""} — calls
+              <code className="font-mono"> executor::withdraw_all </code>
+              and ignores the amount input.
+            </span>
+          </label>
+        ) : undefined}
 
         {mode === "withdraw" ? (
           <div className="rounded-xl border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-[0.7rem] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">

@@ -395,12 +395,14 @@ export const buildDepositTransaction = ({
 }
 
 /**
- * Builds a withdraw transaction that wraps `executor::withdraw<T>` with an
- * optional pause/unpause envelope. The on-chain withdraw requires the executor
- * to be paused; when `currentActive` is true the PTB emits:
+ * Builds a withdraw transaction that wraps `executor::withdraw<T>` (or
+ * `executor::withdraw_all<T>` when `amount` is omitted) with an optional
+ * pause/unpause envelope. The on-chain withdraw requires the executor to be
+ * paused; when `currentActive` is true the PTB emits:
  *
  *   `pause(<Base, Quote>, executor, cap, pool, clock)` →
- *   `withdraw<T>(executor, cap, amount)` → `transfer(withdrawn, sender)` →
+ *   `withdraw[_all]<T>(executor, cap[, amount])` →
+ *   `transfer(withdrawn, sender)` →
  *   `unpause(executor, cap)`
  *
  * Otherwise (already paused) only withdraw + transfer are emitted, leaving the
@@ -422,7 +424,8 @@ export const buildWithdrawWithPauseTransaction = ({
   executor: WrappedSuiSharedObject
   adminCapId: string
   coinTypeTag: string
-  amount: bigint | number
+  /** Withdraw amount in atoms. Omit to call `withdraw_all<T>` instead, which drains the BalanceManager's full balance for `T`. */
+  amount?: bigint | number
   recipientAddress: string
   currentActive: boolean
   pool: WrappedSuiSharedObject
@@ -444,15 +447,25 @@ export const buildWithdrawWithPauseTransaction = ({
     })
   }
 
-  const [withdrawnCoin] = transaction.moveCall({
-    target: `${packageId}::executor::withdraw`,
-    typeArguments: [coinTypeTag],
-    arguments: [
-      transaction.sharedObjectRef(executor.sharedRef),
-      transaction.object(adminCapId),
-      transaction.pure.u64(amount)
-    ]
-  })
+  const [withdrawnCoin] =
+    amount === undefined
+      ? transaction.moveCall({
+          target: `${packageId}::executor::withdraw_all`,
+          typeArguments: [coinTypeTag],
+          arguments: [
+            transaction.sharedObjectRef(executor.sharedRef),
+            transaction.object(adminCapId)
+          ]
+        })
+      : transaction.moveCall({
+          target: `${packageId}::executor::withdraw`,
+          typeArguments: [coinTypeTag],
+          arguments: [
+            transaction.sharedObjectRef(executor.sharedRef),
+            transaction.object(adminCapId),
+            transaction.pure.u64(amount)
+          ]
+        })
 
   transaction.transferObjects(
     [withdrawnCoin],

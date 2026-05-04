@@ -46,6 +46,11 @@ export type CoinSide = "base" | "quote"
 type FormState = {
   coinSide: CoinSide
   amount: string
+  /**
+   * Withdraw-only flag. When `true` the PTB calls `executor::withdraw_all<T>`
+   * and the amount input is ignored. Has no effect for `mode === "deposit"`.
+   */
+  withdrawAll: boolean
 }
 
 type TransactionState =
@@ -56,7 +61,8 @@ type TransactionState =
 
 const initialFormState = (): FormState => ({
   coinSide: "base",
-  amount: ""
+  amount: "",
+  withdrawAll: false
 })
 
 const normalizeCoinType = (raw: string) => raw.trim().toLowerCase()
@@ -104,7 +110,12 @@ export const useFundingState = (mode: FundingMode) => {
       : traderAccount.quoteDecimals
   }, [formState.coinSide, traderAccount])
 
+  const isWithdrawAll = mode === "withdraw" && formState.withdrawAll
+
   const amountError = useMemo(() => {
+    // Withdraw-all drains the full BalanceManager balance for the chosen
+    // side, so the amount input is intentionally ignored.
+    if (isWithdrawAll) return undefined
     const trimmed = formState.amount.trim()
     if (!trimmed) return "Amount is required."
     if (activeDecimals === undefined) return undefined
@@ -120,7 +131,7 @@ export const useFundingState = (mode: FundingMode) => {
         ? error.message
         : "Amount must be a positive decimal number."
     }
-  }, [activeDecimals, formState.amount])
+  }, [activeDecimals, formState.amount, isWithdrawAll])
 
   const isSubmissionPending = isLocalnet
     ? signTransaction.isPending
@@ -237,11 +248,19 @@ export const useFundingState = (mode: FundingMode) => {
         formState.coinSide === "base"
           ? traderAccount.baseDecimals
           : traderAccount.quoteDecimals
-      const amount = parseCoinAmount({
-        value: formState.amount.trim(),
-        decimals
-      })
-      if (amount <= 0n) throw new Error("Amount must be greater than zero.")
+      // Parse the amount up-front for branches that need it (deposit always,
+      // withdraw when the user didn't pick "withdraw all"). The withdraw-all
+      // branch passes `amount: undefined` straight through to the PTB so the
+      // contract's `withdraw_all<T>` is invoked.
+      const parsedAmount = isWithdrawAll
+        ? undefined
+        : parseCoinAmount({
+            value: formState.amount.trim(),
+            decimals
+          })
+      if (parsedAmount !== undefined && parsedAmount <= 0n) {
+        throw new Error("Amount must be greater than zero.")
+      }
       const coinTypeTag =
         formState.coinSide === "base"
           ? traderAccount.baseCoinType
@@ -261,6 +280,11 @@ export const useFundingState = (mode: FundingMode) => {
 
       let transaction
       if (mode === "deposit") {
+        // Deposit always needs a concrete amount — `withdrawAll` is gated to
+        // the withdraw mode so this branch can safely require it.
+        if (parsedAmount === undefined) {
+          throw new Error("Amount must be greater than zero.")
+        }
         let sourceCoinId: string | undefined
         if (!isSuiCoinType(coinTypeTag)) {
           failureStage = "resolve-source-coin"
@@ -274,9 +298,9 @@ export const useFundingState = (mode: FundingMode) => {
               `Wallet holds no Coin<${coinTypeTag}>. Mint or transfer some before depositing.`
             )
           }
-          if (richest.balance < amount) {
+          if (richest.balance < parsedAmount) {
             throw new Error(
-              `Wallet holds only ${richest.balance} atoms of ${coinTypeTag}; need ${amount}.`
+              `Wallet holds only ${richest.balance} atoms of ${coinTypeTag}; need ${parsedAmount}.`
             )
           }
           sourceCoinId = richest.coinObjectId
@@ -287,7 +311,7 @@ export const useFundingState = (mode: FundingMode) => {
           executor: executorShared,
           adminCapId,
           coinTypeTag,
-          amount,
+          amount: parsedAmount,
           sourceCoinId
         })
       } else {
@@ -301,7 +325,9 @@ export const useFundingState = (mode: FundingMode) => {
           executor: executorShared,
           adminCapId,
           coinTypeTag,
-          amount,
+          // `undefined` flips the PTB to `executor::withdraw_all<T>` and
+          // ignores the amount input.
+          amount: parsedAmount,
           recipientAddress: walletAddress,
           currentActive: traderAccount.active,
           pool: poolShared,
