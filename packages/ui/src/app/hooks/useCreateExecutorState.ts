@@ -11,10 +11,7 @@ import {
 import type { SuiTransactionBlockResponse } from "@mysten/sui/client"
 import type { IdentifierString } from "@mysten/wallet-standard"
 import { resolveAmmConfigInputs } from "@sui-amm/domain-core/models/amm"
-import {
-  SUI_USD_FEED,
-  USDC_USD_FEED
-} from "@sui-amm/domain-core/models/pyth"
+import { SUI_USD_FEED, USDC_USD_FEED } from "@sui-amm/domain-core/models/pyth"
 import { buildCreateExecutorTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { normalizeStructTag } from "@mysten/sui/utils"
 import { resolveCurrencyObjectId } from "@sui-amm/tooling-core/coin-registry"

@@ -106,7 +106,10 @@ const requireMockField = <T>(value: T | undefined, label: string): T => {
   return value
 }
 
-const randomBigIntInRange = (minInclusive: bigint, maxExclusive: bigint): bigint => {
+const randomBigIntInRange = (
+  minInclusive: bigint,
+  maxExclusive: bigint
+): bigint => {
   if (maxExclusive <= minInclusive) return minInclusive
   const span = Number(maxExclusive - minInclusive)
   return minInclusive + BigInt(Math.floor(Math.random() * span))
@@ -223,7 +226,9 @@ runSuiScript(
       logKeyValueGreen("price-walk")("disabled (--max-price-delta=0)")
     }
 
-    const poolShared = await tooling.getMutableSharedObject({ objectId: poolId })
+    const poolShared = await tooling.getMutableSharedObject({
+      objectId: poolId
+    })
     const priceInfoShared =
       maxPriceDeltaDollars > 0 && suiUsdFeed?.priceInfoObjectId
         ? await tooling.getMutableSharedObject({
@@ -357,7 +362,8 @@ runSuiScript(
     .option("maxQuote", {
       alias: ["max-quote"],
       type: "number",
-      description: "Upper bound for quote-side (USDC) order size, in human USDC",
+      description:
+        "Upper bound for quote-side (USDC) order size, in human USDC",
       default: 2
     })
     .option("seedBaseSui", {
@@ -424,10 +430,7 @@ const topUpPublisherSuiViaFaucet = async ({
 
   let requests = 0
   let lastError: unknown
-  while (
-    publisherAtoms < requiredAtoms &&
-    requests < MAX_FAUCET_REQUESTS
-  ) {
+  while (publisherAtoms < requiredAtoms && requests < MAX_FAUCET_REQUESTS) {
     try {
       await requestSuiFromFaucetV2({
         host: faucetHost,

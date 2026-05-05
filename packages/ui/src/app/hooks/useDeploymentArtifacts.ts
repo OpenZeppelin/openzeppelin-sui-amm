@@ -127,7 +127,8 @@ const ensureLoad = () => {
 }
 
 export const useDeploymentArtifacts = (): DeploymentArtifacts => {
-  const [artifacts, setArtifacts] = useState<DeploymentArtifacts>(EMPTY_ARTIFACTS)
+  const [artifacts, setArtifacts] =
+    useState<DeploymentArtifacts>(EMPTY_ARTIFACTS)
   useEffect(() => {
     let cancelled = false
     ensureLoad().then((value) => {

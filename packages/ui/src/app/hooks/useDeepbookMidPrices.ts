@@ -30,9 +30,7 @@ const isBrowser = (): boolean =>
 // Persisted shape: `bigint` values are written as `{ kind: "bigint", value }`
 // since BigInt isn't natively JSON-serializable. The "error" sentinel rides
 // along as a plain string.
-type SerializedMidEntry =
-  | { kind: "bigint"; value: string }
-  | { kind: "error" }
+type SerializedMidEntry = { kind: "bigint"; value: string } | { kind: "error" }
 
 const serializeEntry = (entry: DeepbookMidEntry): SerializedMidEntry =>
   entry === "error"
@@ -69,7 +67,10 @@ const writePersisted = (key: string, map: Map<string, DeepbookMidEntry>) => {
     for (const [id, entry] of map.entries()) {
       payload[id] = serializeEntry(entry)
     }
-    window.localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(payload))
+    window.localStorage.setItem(
+      STORAGE_KEY_PREFIX + key,
+      JSON.stringify(payload)
+    )
   } catch {
     // Quota / privacy errors are recoverable — in-memory map still works.
   }

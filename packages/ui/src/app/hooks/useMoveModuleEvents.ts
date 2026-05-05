@@ -41,18 +41,12 @@ const getRegistryFor = (suiClient: SuiClient) => {
   return registry
 }
 
-const eventIdsEqual = (
-  before: SuiEvent[],
-  after: SuiEvent[]
-): boolean => {
+const eventIdsEqual = (before: SuiEvent[], after: SuiEvent[]): boolean => {
   if (before.length !== after.length) return false
   for (let index = 0; index < before.length; index += 1) {
     const a = before[index]
     const b = after[index]
-    if (
-      a.id.txDigest !== b.id.txDigest ||
-      a.id.eventSeq !== b.id.eventSeq
-    ) {
+    if (a.id.txDigest !== b.id.txDigest || a.id.eventSeq !== b.id.eventSeq) {
       return false
     }
   }

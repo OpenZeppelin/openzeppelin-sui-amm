@@ -37,10 +37,7 @@ const readPersisted = (key: string): DeepbookOrderFill[] => {
 const writePersisted = (key: string, fills: DeepbookOrderFill[]) => {
   if (!isBrowser()) return
   try {
-    window.localStorage.setItem(
-      STORAGE_KEY_PREFIX + key,
-      JSON.stringify(fills)
-    )
+    window.localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(fills))
   } catch {
     // Ignore quota / privacy-mode errors — the in-memory store still works.
   }

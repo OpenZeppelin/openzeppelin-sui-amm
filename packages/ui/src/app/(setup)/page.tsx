@@ -85,8 +85,7 @@ export default function SetupPage() {
 
   const isProcessing = transactionState.status === "processing"
   const submitLabel = isProcessing ? "Submitting..." : "Create market maker"
-  const showResolutionError =
-    resolution.status === "error" && resolution.error
+  const showResolutionError = resolution.status === "error" && resolution.error
 
   return (
     <>

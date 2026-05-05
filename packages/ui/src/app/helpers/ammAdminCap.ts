@@ -11,8 +11,9 @@ export type OwnedAmmAdminCap = {
 const readExecutorIdField = (
   data: { content?: unknown } | undefined
 ): string | undefined => {
-  const content = (data as { content?: { dataType?: string; fields?: unknown } } | undefined)
-    ?.content
+  const content = (
+    data as { content?: { dataType?: string; fields?: unknown } } | undefined
+  )?.content
   if (!content || content.dataType !== "moveObject") return undefined
   const fields = (content.fields as { executor_id?: unknown } | undefined) ?? {}
   const raw = fields.executor_id

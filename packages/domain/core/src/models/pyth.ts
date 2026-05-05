@@ -131,7 +131,9 @@ export const readPythPriceComponentsFromContent = (
     content as unknown as {
       fields: {
         price_info: {
-          fields: { price_feed: { fields: { price: { fields: PythPriceFields } } } }
+          fields: {
+            price_feed: { fields: { price: { fields: PythPriceFields } } }
+          }
         }
       }
     }

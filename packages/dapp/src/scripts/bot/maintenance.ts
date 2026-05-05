@@ -79,7 +79,10 @@ runSuiScript(
       mockArtifact.pythPackageId,
       "pythPackageId"
     )
-    const pythStateId = requireMockField(mockArtifact.pythStateId, "pythStateId")
+    const pythStateId = requireMockField(
+      mockArtifact.pythStateId,
+      "pythStateId"
+    )
     const poolId =
       cliArguments.poolId ??
       requireMockField(mockArtifact.pools?.[0]?.poolId, "pools[0].poolId")

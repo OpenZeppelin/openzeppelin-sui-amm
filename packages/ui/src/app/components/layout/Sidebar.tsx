@@ -67,7 +67,7 @@ const Sidebar = () => {
       <div className="mt-2 border-t border-slate-200/60 pt-3 dark:border-slate-50/15">
         <Link
           href={SETUP_HREF}
-          className="flex items-center gap-2.5 rounded-lg border border-dashed border-sds-blue/30 px-3 py-2 text-sm font-medium text-sds-blue transition-colors hover:bg-sds-blue/10 dark:border-sds-blue/40 dark:hover:bg-sds-blue/20"
+          className="border-sds-blue/30 hover:bg-sds-blue/10 dark:border-sds-blue/40 dark:hover:bg-sds-blue/20 flex items-center gap-2.5 rounded-lg border border-dashed px-3 py-2 text-sm font-medium text-sds-blue transition-colors"
         >
           <Plus size={16} aria-hidden />
           <span>New executor</span>

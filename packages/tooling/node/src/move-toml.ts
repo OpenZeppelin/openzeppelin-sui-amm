@@ -115,11 +115,7 @@ const removePublishedArrayEntriesForPackagePath = (
     const blockStart = lineOffsets[index] ?? 0
     let blockEnd = contents.length
     let matchesPath = false
-    for (
-      let inner = index + 1;
-      inner < lines.length;
-      inner += 1
-    ) {
+    for (let inner = index + 1; inner < lines.length; inner += 1) {
       const line = lines[inner] ?? ""
       if (anyHeaderRegex.test(line)) {
         blockEnd = lineOffsets[inner] ?? contents.length
@@ -147,7 +143,8 @@ const removePublishedArrayEntriesForPackagePath = (
   // Collapse triple+ newlines that the splice may have introduced.
   updated = updated.replace(/(\r?\n){3,}/g, `${lineEnding}${lineEnding}`)
   updated = ensureTrailingNewline(
-    trimTrailingEmptyLines(updated) + (shouldPreserveTrailingNewline ? lineEnding : ""),
+    trimTrailingEmptyLines(updated) +
+      (shouldPreserveTrailingNewline ? lineEnding : ""),
     lineEnding,
     shouldPreserveTrailingNewline
   )

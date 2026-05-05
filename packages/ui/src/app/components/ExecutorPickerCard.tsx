@@ -100,7 +100,7 @@ const ExecutorPickerCard = ({
                   "self-start rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors lg:self-auto",
                   isSelected
                     ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200 dark:hover:bg-emerald-400/20"
-                    : "border-sds-blue/30 bg-sds-blue/10 text-sds-blue hover:bg-sds-blue/20 dark:border-sds-blue/40 dark:bg-sds-blue/20"
+                    : "border-sds-blue/30 bg-sds-blue/10 hover:bg-sds-blue/20 dark:border-sds-blue/40 dark:bg-sds-blue/20 text-sds-blue"
                 ].join(" ")}
               >
                 {isSelected ? "Open dashboard" : "Use this executor"}

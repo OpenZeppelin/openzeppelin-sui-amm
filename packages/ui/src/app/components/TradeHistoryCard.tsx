@@ -147,8 +147,8 @@ const TradeHistoryCard = () => {
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-200/70">
           DeepBook `OrderFilled` events that touch the executor's
-          BalanceManager. Side is derived from `taker_is_bid` plus whether
-          the executor sat on the maker or taker side of the trade.
+          BalanceManager. Side is derived from `taker_is_bid` plus whether the
+          executor sat on the maker or taker side of the trade.
         </p>
       </div>
       {rows.length === 0 ? (
@@ -194,8 +194,12 @@ const TradeHistoryCard = () => {
                       {row.side}
                     </span>
                   </td>
-                  <td className="py-2 pr-4 text-right font-mono">{row.price}</td>
-                  <td className="py-2 pr-4 text-right font-mono">{row.quantity}</td>
+                  <td className="py-2 pr-4 text-right font-mono">
+                    {row.price}
+                  </td>
+                  <td className="py-2 pr-4 text-right font-mono">
+                    {row.quantity}
+                  </td>
                   <td className="py-2 font-mono text-[0.7rem] text-slate-500 dark:text-slate-200/70">
                     {row.timestamp}
                   </td>

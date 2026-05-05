@@ -54,10 +54,7 @@ export const useExecutorEventSubscription = ({
           ? safeNormalize(data.executor_id)
           : undefined
       seenRef.current.add(id)
-      if (
-        eventExecutorId === normalizedExecutorId &&
-        !firedThisPass
-      ) {
+      if (eventExecutorId === normalizedExecutorId && !firedThisPass) {
         // Coalesce — multiple new matching events in a single batch only
         // trigger one refetch.
         firedThisPass = true
