@@ -55,7 +55,7 @@ sui client new-address ed25519 publisher
 # 3. Point the scripts at this address. Either set the active client env to
 #    `localnet` (`sui client switch --env localnet`) or export the trio below.
 export TRADER_ADDRESS=<0x...>
-export TRADER_PRIVATE_KEY=<base64 or hex>
+export TRADER_PRIVATE_KEY=<bech32 or base64>
 export SUI_NETWORK=localnet
 
 # 4. Start localnet in a separate terminal. `--force-regenesis` wipes any

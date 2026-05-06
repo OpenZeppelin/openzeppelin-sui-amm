@@ -10,10 +10,7 @@ import {
   writeFileTree
 } from "../../../test-helpers/helpers/fs.ts"
 import { createSuiClientMock } from "../../../test-helpers/helpers/sui.ts"
-import {
-  MOVE_LOCK_PINNED,
-  MOVE_TOML
-} from "../../../test-helpers/fixtures.ts"
+import { MOVE_LOCK_PINNED, MOVE_TOML } from "../../../test-helpers/fixtures.ts"
 import { getDeploymentArtifactPath } from "../../src/artifacts.ts"
 
 const moveMocks = vi.hoisted(() => ({

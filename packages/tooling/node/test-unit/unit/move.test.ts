@@ -6,10 +6,7 @@ import {
   withTempDir,
   writeFileTree
 } from "../../../test-helpers/helpers/fs.ts"
-import {
-  MOVE_TOML,
-  PUBLISHED_TOML
-} from "../../../test-helpers/fixtures.ts"
+import { MOVE_TOML, PUBLISHED_TOML } from "../../../test-helpers/fixtures.ts"
 import {
   buildMoveEnvironmentFlags,
   buildMoveTestArguments,
