@@ -6,7 +6,6 @@
 import type { SuiClient, SuiTransactionBlockResponse } from "@mysten/sui/client"
 import type { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519"
 import { normalizeSuiAddress, normalizeSuiObjectId } from "@mysten/sui/utils"
-import path from "node:path"
 import yargs from "yargs"
 
 import {
@@ -27,7 +26,11 @@ import { deriveCurrencyObjectId } from "@sui-amm/tooling-core/coin-registry"
 import { assertLocalnetNetwork } from "@sui-amm/tooling-core/network"
 import { objectTypeMatches } from "@sui-amm/tooling-core/object"
 import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
-import { readArtifact } from "@sui-amm/tooling-node/artifacts"
+import {
+  getLatestDeploymentFromArtifact,
+  readArtifact
+} from "@sui-amm/tooling-node/artifacts"
+import { AMM_PACKAGE_NAME } from "@sui-amm/domain-node/amm"
 import {
   DEFAULT_TX_GAS_BUDGET,
   SUI_CLOCK_ID,
@@ -39,14 +42,6 @@ import {
   logKeyValueGreen,
   logWarning
 } from "@sui-amm/tooling-node/log"
-import {
-  ensureMoveTomlEnvironmentChainId,
-  removeMoveTomlAddressesSection,
-  resolveChainIdentifier,
-  resolveMoveCliEnvironmentName,
-  syncMoveTomlDependencyLocalPath,
-  syncMoveTomlDependencyPublishedIds
-} from "@sui-amm/tooling-node/move"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
 import { waitForObjectState } from "@sui-amm/tooling-node/testing/objects"
 import {
@@ -54,7 +49,6 @@ import {
   findCreatedObjectIds,
   newTransaction
 } from "@sui-amm/tooling-node/transactions"
-import { syncAmmDeepbookDependencyLocalReplacement } from "../../utils/amm.ts"
 import type {
   CoinArtifact,
   MockArtifact,
@@ -62,9 +56,6 @@ import type {
 } from "../../utils/mocks.ts"
 import {
   DEFAULT_COIN_CONTRACT_PATH,
-  DEFAULT_DEEPBOOK_PATH,
-  DEFAULT_DEEPBOOK_TOKEN_PATH,
-  DEFAULT_PYTH_CONTRACT_PATH,
   mockArtifactPath,
   writeMockArtifact
 } from "../../utils/mocks.ts"
@@ -75,28 +66,13 @@ type SetupLocalCliArgs = {
   traderAddress?: string
   coinPackageId?: string
   coinContractPath: string
-  deepbookPackageId?: string
-  deepbookContractPath: string
-  deepbookTokenPackageId?: string
-  deepbookTokenContractPath: string
-  pythPackageId?: string
-  pythStateId?: string
-  pythContractPath: string
   rePublish?: boolean
   useCliPublish?: boolean
 }
 
 type ExistingMockState = Pick<
   MockArtifact,
-  | "coinPackageId"
-  | "coins"
-  | "pythPackageId"
-  | "pythStateId"
-  | "priceFeeds"
-  | "deepbookPackageId"
-  | "deepbookRegistryId"
-  | "deepbookAdminCapId"
-  | "deepbookTokenPackageId"
+  "coinPackageId" | "coins" | "priceFeeds" | "pythStateId"
 >
 
 type SeededCoin = {
@@ -115,8 +91,6 @@ type CoinSeed = Pick<CoinArtifact, "label" | "coinType"> & {
 const DEFAULT_FEEDS: LabeledMockPriceFeedConfig[] = ALL_MOCK_PRICE_FEEDS
 const PACKAGE_AVAILABILITY_TIMEOUT_MS = 20_000
 const PACKAGE_AVAILABILITY_INTERVAL_MS = 250
-const LOCALNET_MOVE_ENVIRONMENT_NAME =
-  resolveMoveCliEnvironmentName("localnet") ?? "test-publish"
 
 const normalizeSetupInputs = (
   cliArguments: SetupLocalCliArgs
@@ -128,37 +102,26 @@ const normalizeSetupInputs = (
 })
 
 // Parse CLI flags and reuse prior mock artifacts unless --re-publish is set.
+// deepbook/pyth ids and shared objects always come from the latest AMM publish
+// (resolved in publishLocalnetPackages), so they're not part of the reusable
+// existing-state cache.
 const extendCliArguments = async (
   baseScriptArguments: SetupLocalCliArgs
 ): Promise<ExistingMockState> => {
   const mockArtifact = await readArtifact<MockArtifact>(mockArtifactPath, {})
 
   return {
-    pythPackageId: baseScriptArguments.rePublish
-      ? undefined
-      : baseScriptArguments.pythPackageId || mockArtifact.pythPackageId,
-    pythStateId: baseScriptArguments.rePublish
-      ? undefined
-      : baseScriptArguments.pythStateId || mockArtifact.pythStateId,
     coinPackageId: baseScriptArguments.rePublish
       ? undefined
       : baseScriptArguments.coinPackageId || mockArtifact.coinPackageId,
-    deepbookPackageId: baseScriptArguments.rePublish
-      ? undefined
-      : baseScriptArguments.deepbookPackageId || mockArtifact.deepbookPackageId,
-    deepbookRegistryId: baseScriptArguments.rePublish
-      ? undefined
-      : mockArtifact.deepbookRegistryId,
-    deepbookAdminCapId: baseScriptArguments.rePublish
-      ? undefined
-      : mockArtifact.deepbookAdminCapId,
-    deepbookTokenPackageId: baseScriptArguments.rePublish
-      ? undefined
-      : baseScriptArguments.deepbookTokenPackageId ||
-        mockArtifact.deepbookTokenPackageId,
-    priceFeeds: baseScriptArguments.rePublish
-      ? undefined
-      : mockArtifact.priceFeeds,
+    // priceFeeds and pythStateId are always carried over from the previous
+    // run (regardless of --re-publish). The runner cross-checks them against
+    // the freshly-discovered pythStateId and only re-publishes feeds when the
+    // State id has actually changed (i.e., the AMM was re-published).
+    // Otherwise re-publishing the same feed_id into a live State aborts with
+    // a dynamic-field key collision.
+    priceFeeds: mockArtifact.priceFeeds,
+    pythStateId: mockArtifact.pythStateId,
     coins: baseScriptArguments.rePublish ? undefined : mockArtifact.coins
   }
 }
@@ -237,10 +200,15 @@ runSuiScript(
       )
     else logWarning("--trader-address not supplied skipping fund transfer")
 
-    // Ensure mock price feeds exist with fresh timestamps; reuse if valid objects already present.
-    const desiredExistingPriceFeeds = filterPriceFeedsToDefaults(
-      existingState.priceFeeds || []
-    )
+    // Cached feeds belong to a specific State id. If the AMM was re-published
+    // since the last mock:setup, the State id rotated and any cached
+    // PriceInfoObjects point at a dead State — drop them so ensurePriceFeeds
+    // creates fresh ones in the new State.
+    const cachedFeedsAreLive =
+      existingState.pythStateId === pythStateId
+    const desiredExistingPriceFeeds = cachedFeedsAreLive
+      ? filterPriceFeedsToDefaults(existingState.priceFeeds || [])
+      : []
     const priceFeeds = await ensurePriceFeeds(
       {
         pythPackageId,
@@ -298,72 +266,6 @@ runSuiScript(
       description: "Path to the local coin stub Move package to publish",
       default: DEFAULT_COIN_CONTRACT_PATH
     })
-    .option("deepbookPackageId", {
-      alias: "deepbook-package-id",
-      type: "string",
-      description: "Package ID of DeepBook on the local network"
-    })
-    .option("deepbookTokenPackageId", {
-      alias: "deepbook-token-package-id",
-      type: "string",
-      description: "Package ID of the DeepBook token dependency on localnet"
-    })
-    .option("deepbookContractPath", {
-      alias: "deepbook-contract-path",
-      type: "string",
-      description:
-        "Path to the local DeepBook Move package to publish (defaults to vendor/deepbookv3/packages/deepbook when present)",
-      default: DEFAULT_DEEPBOOK_PATH
-    })
-    .option("deepbookTokenContractPath", {
-      alias: "deepbook-token-contract-path",
-      type: "string",
-      description:
-        "Path to the DeepBook token Move package to publish (defaults to vendor/deepbookv3/packages/token when present)",
-      default: DEFAULT_DEEPBOOK_TOKEN_PATH
-    })
-    .option("pythPackageId", {
-      alias: "pyth-package-id",
-      type: "string",
-      description:
-        "Package ID of the Pyth Move package on the local localNetwork"
-    })
-    .option("pythStateId", {
-      alias: "pyth-state-id",
-      type: "string",
-      description:
-        "Shared object ID of the mock Pyth `pyth_state::State` registry. Required when reusing a `--pyth-package-id` from a context where mock.localnet.json doesn't already record the matching state id."
-    })
-    .option("pythContractPath", {
-      alias: "pyth-contract-path",
-      type: "string",
-      description: "Path to the local Pyth stub Move package to publish",
-      default: DEFAULT_PYTH_CONTRACT_PATH
-    })
-    .option("deepbookPackageId", {
-      alias: "deepbook-package-id",
-      type: "string",
-      description: "Package ID of DeepBook on the local network"
-    })
-    .option("deepbookTokenPackageId", {
-      alias: "deepbook-token-package-id",
-      type: "string",
-      description: "Package ID of the DeepBook token dependency on localnet"
-    })
-    .option("deepbookContractPath", {
-      alias: "deepbook-contract-path",
-      type: "string",
-      description:
-        "Path to the local DeepBook Move package to publish (defaults to vendor/deepbookv3/packages/deepbook when present)",
-      default: DEFAULT_DEEPBOOK_PATH
-    })
-    .option("deepbookTokenContractPath", {
-      alias: "deepbook-token-contract-path",
-      type: "string",
-      description:
-        "Path to the DeepBook token Move package to publish (defaults to vendor/deepbookv3/packages/token when present)",
-      default: DEFAULT_DEEPBOOK_TOKEN_PATH
-    })
     .option("rePublish", {
       alias: "re-publish",
       type: "boolean",
@@ -390,120 +292,73 @@ const publishLocalnetPackages = async (
   },
   tooling: Tooling
 ) => {
-  // Publish or reuse the local Pyth stub. We allow unpublished deps here because this is localnet-only.
-  let pythPackageId = existingState.pythPackageId
-  let pythStateId = existingState.pythStateId
-  if (!pythPackageId) {
-    const pythPublish = await tooling.publishMovePackageWithFunding({
-      packagePath: cliArguments.pythContractPath,
-      withUnpublishedDependencies: true,
+  // The AMM publish (run separately via `pnpm --filter dapp move:publish
+  // --package-path prop-amm`) is expected to have run first. With
+  // `--with-unpublished-dependencies` it inlines deepbook + token + pyth-mock
+  // bytecode into the AMM's package address, and those deps' `init` functions
+  // run during the same publish — auto-sharing the DeepBook `Registry` /
+  // `DeepbookAdminCap` and the Pyth `State`. We discover them here rather
+  // than republishing standalone copies that would type-mismatch the AMM.
+  const ammArtifact =
+    await getLatestDeploymentFromArtifact(AMM_PACKAGE_NAME)("localnet")
+  if (!ammArtifact) {
+    throw new Error(
+      "AMM not yet published. Run `pnpm --filter dapp move:publish --package-path prop-amm --re-publish` before `mock:setup`."
+    )
+  }
+  const mergedPackageId = normalizeSuiObjectId(ammArtifact.packageId)
+  const ammPublishDigest = ammArtifact.digest
+  if (!ammPublishDigest)
+    throw new Error(
+      "Latest AMM deployment artifact has no `digest`; cannot recover deepbook/pyth shared objects from the publish txn."
+    )
+
+  // The merged AMM provides deepbook, token, and pyth modules at its own id,
+  // so the three "package id" slots all collapse to the AMM id.
+  const deepbookPackageId = mergedPackageId
+  const deepbookTokenPackageId = mergedPackageId
+  const pythPackageId = mergedPackageId
+
+  // Always re-discover from the latest AMM publish: a fresh `move:publish`
+  // produces new shared-object ids even if the user didn't pass --re-publish
+  // to mock:setup, and stale ids would silently route writes into ghost
+  // objects.
+  const { deepbookRegistryId, deepbookAdminCapId } =
+    await resolveDeepbookObjectsFromPublish(
+      ammPublishDigest,
+      tooling.suiClient
+    )
+  const pythStateId = await resolvePythStateFromPublish(
+    ammPublishDigest,
+    tooling.suiClient
+  )
+
+  // coin-mock is the only mock that isn't a dep of the AMM, so it stays a
+  // standalone package (idempotent: re-uses the cached id when present).
+  let coinPackageId = existingState.coinPackageId
+  if (!coinPackageId) {
+    const coinPublish = await tooling.publishMovePackageWithFunding({
+      packagePath: cliArguments.coinContractPath,
       clearPublishedEntry: true,
       useCliPublish: cliArguments.useCliPublish
     })
-    pythPackageId = pythPublish.packageId
-    await waitForPackageAvailability(
-      pythPackageId,
-      tooling.suiClient,
-      "pyth-mock"
-    )
-    // The mock pyth's `state::init` shares a single `State` object — find it in
-    // the publish tx's object changes.
-    pythStateId = await resolvePythStateFromPublish(
-      pythPublish.digest,
-      tooling.suiClient
-    )
-    await writeMockArtifact(mockArtifactPath, {
-      pythPackageId,
-      pythStateId
-    })
-  } else if (!pythStateId) {
-    throw new Error(
-      "pythPackageId present in mock.localnet.json but pythStateId is missing. Re-run with --re-publish to regenerate."
-    )
-  }
-
-  // Publish or reuse the local mock coin package.
-  const coinPackageId =
-    existingState.coinPackageId ||
-    (
-      await tooling.publishMovePackageWithFunding({
-        packagePath: cliArguments.coinContractPath,
-        clearPublishedEntry: true,
-        useCliPublish: cliArguments.useCliPublish
-      })
-    ).packageId
-
-  if (coinPackageId !== existingState.coinPackageId)
+    coinPackageId = coinPublish.packageId
     await waitForPackageAvailability(
       coinPackageId,
       tooling.suiClient,
       "coin-mock"
     )
+  }
 
-  if (coinPackageId !== existingState.coinPackageId)
-    await writeMockArtifact(mockArtifactPath, {
-      coinPackageId
-    })
-
-  const localnetChainId = await resolveChainIdentifier(
-    { environmentName: "localnet" },
-    tooling
-  )
-  if (!localnetChainId)
-    throw new Error("Unable to resolve localnet chain id for DeepBook setup.")
-
-  const moveTomlUpdates = await ensureDeepbookMoveTomlReadyForLocalnet({
-    deepbookContractPath: cliArguments.deepbookContractPath,
-    tokenContractPath: cliArguments.deepbookTokenContractPath,
-    chainId: localnetChainId
+  await writeMockArtifact(mockArtifactPath, {
+    coinPackageId,
+    deepbookPackageId,
+    deepbookTokenPackageId,
+    deepbookRegistryId,
+    deepbookAdminCapId,
+    pythPackageId,
+    pythStateId
   })
-  moveTomlUpdates.forEach(({ moveTomlPath }) =>
-    logKeyValueBlue("Move.toml")(
-      `updated DeepBook dependencies (${moveTomlPath})`
-    )
-  )
-
-  const { deepbookTokenPackageId } = await ensureDeepbookTokenArtifacts(
-    {
-      cliArguments,
-      existingState
-    },
-    tooling
-  )
-
-  if (deepbookTokenPackageId) {
-    const tokenDependencyUpdate = await syncDeepbookTokenDependencyPublishedIds(
-      {
-        deepbookContractPath: cliArguments.deepbookContractPath,
-        tokenPackageId: deepbookTokenPackageId
-      }
-    )
-    if (tokenDependencyUpdate.didUpdate)
-      logKeyValueBlue("Move.toml")(
-        `updated DeepBook token address (${tokenDependencyUpdate.moveTomlPath})`
-      )
-  }
-
-  const { deepbookPackageId, deepbookRegistryId, deepbookAdminCapId } =
-    await ensureDeepbookArtifacts(
-      {
-        cliArguments,
-        existingState
-      },
-      tooling
-    )
-
-  if (deepbookPackageId) {
-    const moveTomlUpdate = await syncAmmDeepbookDependencyLocalReplacement({
-      tooling,
-      environmentName: LOCALNET_MOVE_ENVIRONMENT_NAME,
-      deepbookContractPath: cliArguments.deepbookContractPath
-    })
-    if (moveTomlUpdate.didUpdate)
-      logKeyValueBlue("Move.toml")(
-        `updated PropAmm deepbook dependency (${moveTomlUpdate.moveTomlPath})`
-      )
-  }
 
   return {
     pythPackageId,
@@ -563,191 +418,6 @@ const resolveDeepbookObjectsFromPublish = async (
   ).objectId
 
   return {
-    deepbookRegistryId,
-    deepbookAdminCapId
-  }
-}
-
-const syncDeepbookTokenDependencyPublishedIds = async ({
-  deepbookContractPath,
-  tokenPackageId
-}: {
-  deepbookContractPath: string
-  tokenPackageId: string
-}) => {
-  const moveTomlPath = path.join(deepbookContractPath, "Move.toml")
-
-  return await syncMoveTomlDependencyPublishedIds({
-    moveTomlPath,
-    environmentName: LOCALNET_MOVE_ENVIRONMENT_NAME,
-    dependencyName: "token",
-    publishedAt: tokenPackageId,
-    originalId: tokenPackageId
-  })
-}
-
-const syncDeepbookTokenDependencyLocalPath = async ({
-  deepbookContractPath,
-  tokenContractPath
-}: {
-  deepbookContractPath: string
-  tokenContractPath: string
-}) => {
-  const moveTomlPath = path.join(deepbookContractPath, "Move.toml")
-  const relativeTokenPath = path.relative(
-    deepbookContractPath,
-    tokenContractPath
-  )
-  const normalizedTokenPath = relativeTokenPath.startsWith(".")
-    ? relativeTokenPath
-    : `./${relativeTokenPath}`
-
-  return await syncMoveTomlDependencyLocalPath({
-    moveTomlPath,
-    dependencyName: "token",
-    localPath: normalizedTokenPath
-  })
-}
-
-const normalizeDeepbookMoveTomlForLocalnet = async ({
-  moveTomlPath,
-  chainId
-}: {
-  moveTomlPath: string
-  chainId: string
-}) => {
-  const addressesResult = await removeMoveTomlAddressesSection({ moveTomlPath })
-  const environmentResult = await ensureMoveTomlEnvironmentChainId({
-    moveTomlPath,
-    environmentName: LOCALNET_MOVE_ENVIRONMENT_NAME,
-    chainId
-  })
-
-  return {
-    didUpdate: environmentResult.didUpdate || addressesResult.didUpdate,
-    moveTomlPath
-  }
-}
-
-const ensureDeepbookMoveTomlReadyForLocalnet = async ({
-  deepbookContractPath,
-  tokenContractPath,
-  chainId
-}: {
-  deepbookContractPath: string
-  tokenContractPath: string
-  chainId: string
-}) => {
-  const deepbookResult = await normalizeDeepbookMoveTomlForLocalnet({
-    moveTomlPath: path.join(deepbookContractPath, "Move.toml"),
-    chainId
-  })
-  const tokenResult = await normalizeDeepbookMoveTomlForLocalnet({
-    moveTomlPath: path.join(tokenContractPath, "Move.toml"),
-    chainId
-  })
-  const tokenDependencyResult = await syncDeepbookTokenDependencyLocalPath({
-    deepbookContractPath,
-    tokenContractPath
-  })
-
-  return [deepbookResult, tokenResult, tokenDependencyResult].filter(
-    (result) => result.didUpdate
-  )
-}
-
-const ensureDeepbookTokenArtifacts = async (
-  {
-    cliArguments,
-    existingState
-  }: {
-    cliArguments: SetupLocalCliArgs
-    existingState: ExistingMockState
-  },
-  tooling: Tooling
-): Promise<{ deepbookTokenPackageId?: string }> => {
-  if (existingState.deepbookTokenPackageId) {
-    return {
-      deepbookTokenPackageId: existingState.deepbookTokenPackageId
-    }
-  }
-
-  const tokenPublish = await tooling.publishMovePackageWithFunding({
-    packagePath: cliArguments.deepbookTokenContractPath,
-    withUnpublishedDependencies: false,
-    allowAutoUnpublishedDependencies: false,
-    clearPublishedEntry: true,
-    useCliPublish: cliArguments.useCliPublish
-  })
-
-  await waitForPackageAvailability(
-    tokenPublish.packageId,
-    tooling.suiClient,
-    "deepbook-token"
-  )
-
-  await writeMockArtifact(mockArtifactPath, {
-    deepbookTokenPackageId: tokenPublish.packageId
-  })
-
-  return { deepbookTokenPackageId: tokenPublish.packageId }
-}
-
-const ensureDeepbookArtifacts = async (
-  {
-    cliArguments,
-    existingState
-  }: {
-    cliArguments: SetupLocalCliArgs
-    existingState: ExistingMockState
-  },
-  tooling: Tooling
-): Promise<{
-  deepbookPackageId?: string
-  deepbookRegistryId?: string
-  deepbookAdminCapId?: string
-}> => {
-  if (
-    existingState.deepbookPackageId &&
-    existingState.deepbookRegistryId &&
-    existingState.deepbookAdminCapId
-  ) {
-    return {
-      deepbookPackageId: existingState.deepbookPackageId,
-      deepbookRegistryId: existingState.deepbookRegistryId,
-      deepbookAdminCapId: existingState.deepbookAdminCapId
-    }
-  }
-
-  const deepbookPublish = await tooling.publishMovePackageWithFunding({
-    packagePath: cliArguments.deepbookContractPath,
-    withUnpublishedDependencies: false,
-    allowAutoUnpublishedDependencies: false,
-    clearPublishedEntry: true,
-    useCliPublish: cliArguments.useCliPublish,
-    skipDependencyVerification: true
-  })
-
-  await waitForPackageAvailability(
-    deepbookPublish.packageId,
-    tooling.suiClient,
-    "deepbook"
-  )
-
-  const { deepbookRegistryId, deepbookAdminCapId } =
-    await resolveDeepbookObjectsFromPublish(
-      deepbookPublish.digest,
-      tooling.suiClient
-    )
-
-  await writeMockArtifact(mockArtifactPath, {
-    deepbookPackageId: deepbookPublish.packageId,
-    deepbookRegistryId,
-    deepbookAdminCapId
-  })
-
-  return {
-    deepbookPackageId: deepbookPublish.packageId,
     deepbookRegistryId,
     deepbookAdminCapId
   }

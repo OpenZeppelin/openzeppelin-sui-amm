@@ -34,8 +34,11 @@ const dedupeArtifacts = <TArtifact>(entries: TArtifact[]): TArtifact[] =>
 const resolveMockCoinKey = (coin: unknown): string | undefined => {
   if (!coin || typeof coin !== "object") return undefined
   const record = coin as Record<string, unknown>
-  if (typeof record.coinType === "string") return `coinType:${record.coinType}`
+  // Label first: a coin's `label` is the stable identifier across re-publishes,
+  // while `coinType` rotates with the package id. Keying by coinType would let
+  // two entries for the same logical coin coexist after a `--re-publish`.
   if (typeof record.label === "string") return `label:${record.label}`
+  if (typeof record.coinType === "string") return `coinType:${record.coinType}`
   return undefined
 }
 

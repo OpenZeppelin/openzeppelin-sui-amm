@@ -82,12 +82,12 @@ const TraderAccountCardView = ({
             {traderAccountId ? (
               <CopyableId
                 value={traderAccountId}
-                label="Market maker"
+                label="AMM Executor"
                 explorerUrl={explorerUrl}
               />
             ) : (
               <span className="text-slate-400 dark:text-slate-200/60">
-                No market maker detected
+                No AMM executor detected
               </span>
             )}
           </div>

@@ -62,108 +62,79 @@ export SUI_NETWORK=localnet
 #    previous chain state. Keep this process running.
 pnpm --filter dapp chain:localnet:start --force-regenesis --with-faucet
 
-# 5. Publish mock dependencies (pyth-mock, coin-mock, deepbook, deepbook
-#    token) and seed the SUI/USD + USDC/USD price feeds. Re-runs are
-#    idempotent unless `--re-publish` is passed.
+# 5. Publish the AMM. With `--with-unpublished-dependencies` (auto-enabled
+#    on localnet) Sui CLI inlines deepbook + token + pyth-mock bytecode into
+#    the AMM's package address, and those deps' `init` functions auto-share
+#    `DeepBook::Registry`, `DeepbookAdminCap`, and `pyth_state::State` in the
+#    same publish. mock:setup discovers them rather than republishing.
+pnpm --filter dapp move:publish --package-path prop-amm --re-publish
+
+# 6. Publish coin-mock + mint USDC, discover the merged-AMM shared objects,
+#    and seed the SUI/USD + USDC/USD Pyth price feeds. Re-runs are idempotent
+#    unless `--re-publish` is passed.
 pnpm --filter dapp mock:setup
 
-# 6. Register `0x2::sui::SUI` in the coin registry (one-time per chain;
+# 7. Register `0x2::sui::SUI` in the coin registry (one-time per chain;
 #    SUI predates the registry so it has to be migrated explicitly).
 pnpm --filter dapp mock:sui:migrate
 
-# 7. Create the whitelisted DeepBook SUI/USDC pool (zero fees, zero DEEP
-#    cost). The script reads the coin types from `mock.localnet.json`.
+# 8. Create the whitelisted DeepBook SUI/USDC pool against the merged AMM's
+#    deepbook modules. The script reads the coin types from `mock.localnet.json`.
 pnpm --filter dapp mock:pool:create
-
-# 8. Publish the AMM contract.
-#    NOTE: Sui CLI ≥ 1.70 ignores `published-at` directives in
-#    dep-replacements during `sui client test-publish`. Until the tooling
-#    auto-writes a chained pubfile, you must hand-craft
-#    `packages/dapp/contracts/prop-amm/Pub.localnet.toml` with `[[published]]`
-#    entries for `deepbook`, `token`, and `pyth-mock` pointing to the actual
-#    on-chain ids from `packages/dapp/deployments/mock.localnet.json`. See
-#    "Pub.localnet.toml workaround" below.
-pnpm --filter dapp move:publish --package-path prop-amm --re-publish --use-cli-publish
 
 # 9. Run the UI and open http://localhost:3000. Localnet ids are read at
 #    runtime from `packages/dapp/deployments/{mock,deployment}.localnet.json`
 #    via the symlink at `packages/ui/public/deployments`, so re-running
-#    mock:setup or move:publish is picked up on the next page reload — no
+#    move:publish or mock:setup is picked up on the next page reload — no
 #    manual `.env` editing.
 pnpm --filter ui dev
 ```
 
 In the dApp:
 
-- `/setup` → create the executor against the SUI/USDC pool id from step 7, using the real Pyth feed-id hexes (`0x50c67b3f…ea266` for SUI/USD, `0x41f36259…e722` for USDC/USD).
+- `/setup` → create the executor against the SUI/USDC pool id from step 8, using the real Pyth feed-id hexes (`0x50c67b3f…ea266` for SUI/USD, `0x41f36259…e722` for USDC/USD).
 - `/funding` → deposit base + quote into the BalanceManager.
 - `/bot` → trigger Refresh quotes.
 
-## Pub.localnet.toml workaround
+## Why move:publish runs before mock:setup
 
-`sui client test-publish` (Sui ≥ 1.70) inlines local-replaced deps and binds them
-to ephemeral addresses unless the deps already appear in the package's
-`Pub.<env>.toml`. To make AMM's bytecode reference the *actual* on-chain
-DeepBook / pyth-mock / token packages, write a file like this **before** step 8:
+Sui CLI ≥ 1.70 ignores `published-at` directives in `[dep-replacements]`
+during `sui client test-publish` whenever a `local = ...` is also present.
+That means publishing deepbook/pyth standalone first and then "linking" the
+AMM to those addresses doesn't work — the AMM publish would re-merge new
+copies and produce a `Pool<...>` type incompatible with the standalone Pool.
 
-```toml
-# packages/dapp/contracts/prop-amm/Pub.localnet.toml
-build-env = "test-publish"
-chain-id = "<localnet chain id, e.g. 305e72d1>"
+So the AMM is published first with `--with-unpublished-dependencies`,
+inlining deepbook + token + pyth-mock into its own package address. The
+deps' `init` functions auto-share `DeepBook::Registry`, `DeepbookAdminCap`,
+and `pyth_state::State` in the same publish transaction. mock:setup then
+reads those shared-object ids out of the AMM publish's `objectChanges` and
+records them in `mock.localnet.json` with `deepbookPackageId` /
+`pythPackageId` / `deepbookTokenPackageId` all collapsed to the AMM id.
 
-[[published]]
-source = { local = "<absolute path>/vendor/deepbookv3/packages/deepbook" }
-published-at = "<deepbookPackageId>"
-original-id = "<deepbookPackageId>"
-version = 1
-toolchain-version = "1.70.2"
-build-config = { flavor = "sui", edition = "2024.beta" }
-upgrade-capability = "<deepbook upgradeCap from deployment.localnet.json>"
-
-[[published]]
-source = { local = "<absolute path>/vendor/deepbookv3/packages/token" }
-published-at = "<deepbookTokenPackageId>"
-original-id = "<deepbookTokenPackageId>"
-version = 1
-toolchain-version = "1.70.2"
-build-config = { flavor = "sui", edition = "2024.beta" }
-upgrade-capability = "<token upgradeCap>"
-
-[[published]]
-source = { local = "<absolute path>/packages/dapp/contracts/pyth-mock" }
-published-at = "<pythPackageId>"
-original-id = "<pythPackageId>"
-version = 1
-toolchain-version = "1.70.2"
-build-config = { flavor = "sui", edition = "2024" }
-upgrade-capability = "<pyth-mock upgradeCap>"
-```
-
-`packageId`s come from `packages/dapp/deployments/mock.localnet.json`;
-matching `upgradeCap`s come from `packages/dapp/deployments/deployment.localnet.json`.
-After step 8 succeeds, verify with:
-
-```bash
-curl -sX POST -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"sui_getNormalizedMoveFunction","params":["<AMM packageId>","market","new"]}' \
-  http://127.0.0.1:9000 | jq '.result.parameters[0]'
-```
-
-— the `Pool` reference's `address` should equal the deepbook packageId, **not**
-the AMM packageId.
+coin-mock isn't a dep of the AMM, so it stays a standalone publish.
 
 ## Troubleshooting
 
 - **`sui --version` hangs**: stale `sui-test-validator` / `sui` processes
   holding a lock. `pgrep -af sui` and kill them, then retry.
+- **`AMM not yet published`** during `mock:setup`: run step 5
+  (`move:publish --package-path prop-amm --re-publish`) first.
 - **`Dry run failed: TypeMismatch in command 0`** when creating an executor:
-  the AMM was published without the Pub.localnet.toml workaround, so its
-  bytecode references the wrong DeepBook address. Redo step 8 with the
-  workaround in place.
-- **`Your package is already published`** during `mock:setup`: an ephemeral
-  `Pub.<env>.toml` is left over. Delete it (the tooling does this for the
-  packages it manages, but stragglers happen):
+  the AMM and the on-chain Pool came from different deepbook copies. Re-run
+  steps 5–8 in order; verify with `curl … sui_getNormalizedMoveFunction
+  market new` that `result.parameters[0]` references `Pool` at the AMM
+  packageId.
+- **`Your package is already published`**: an ephemeral `Pub.<env>.toml`
+  is left over. Delete it (the tooling does this for the packages it
+  manages, but stragglers happen):
   `find packages/dapp/contracts vendor/deepbookv3 -name "Pub.*.toml" -delete`.
+- **`MoveAbort … dynamic_field … add` while seeding price feeds**: the on-chain
+  pyth-mock `State` already has the SUI/USD or USDC/USD entry from a prior
+  `mock:setup` run, but `mock.localnet.json` was wiped and forgot about it.
+  The fix is to re-publish the AMM (which mints a fresh empty `State`)
+  before re-running `mock:setup`: `pnpm --filter dapp move:publish
+  --package-path prop-amm --re-publish`.
 - **`The package does not define an localnet environment`**: the active
   `sui client` env name (`localnet`) doesn't match any `[environments]` key
   in the package's `Move.toml`. The mock packages declare `test-publish`,

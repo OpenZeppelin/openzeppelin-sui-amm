@@ -1,7 +1,7 @@
 "use client"
 
 import { formatCoinBalance } from "@sui-amm/tooling-core/utils/formatters"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import useDeploymentArtifacts from "../hooks/useDeploymentArtifacts"
 import { useDeepbookMidPrices } from "../hooks/useDeepbookMidPrices"
 import {
@@ -20,6 +20,13 @@ type SeriesPoint = {
   deepbookRaw: bigint | undefined
   deepbookDisplay: string | undefined
   deepbookValue: number | undefined
+  // Inner/outer order prices derived from QuoteUpdated.orders. Inner = closest
+  // to mid, outer = furthest. Either side may be missing for single-sided
+  // refreshes (e.g. when one side has no inventory).
+  innerBidValue: number | undefined
+  outerBidValue: number | undefined
+  innerAskValue: number | undefined
+  outerAskValue: number | undefined
 }
 
 const formatRawPrice = ({
@@ -55,6 +62,53 @@ const parseRawPriceField = (value: unknown): bigint | undefined => {
     return BigInt(String(value))
   } catch {
     return undefined
+  }
+}
+
+// Reduce a QuoteUpdated `orders` array into inner/outer prices per side.
+// Inner = closest to mid (highest bid, lowest ask); outer = furthest.
+// Returns undefined for sides with no orders.
+const extractSpreadPrices = (
+  rawOrders: unknown,
+  adjustedDecimals: number
+): {
+  innerBid: number | undefined
+  outerBid: number | undefined
+  innerAsk: number | undefined
+  outerAsk: number | undefined
+} => {
+  const empty = {
+    innerBid: undefined,
+    outerBid: undefined,
+    innerAsk: undefined,
+    outerAsk: undefined
+  }
+  if (!Array.isArray(rawOrders)) return empty
+  const bids: bigint[] = []
+  const asks: bigint[] = []
+  for (const entry of rawOrders) {
+    if (!entry || typeof entry !== "object") continue
+    const record = entry as Record<string, unknown>
+    if (typeof record.is_bid !== "boolean") continue
+    if (typeof record.price !== "string" && typeof record.price !== "number")
+      continue
+    let price: bigint
+    try {
+      price = BigInt(String(record.price))
+    } catch {
+      continue
+    }
+    ;(record.is_bid ? bids : asks).push(price)
+  }
+  const toNumber = (raw: bigint) => rawPriceToNumber(raw, adjustedDecimals)
+  const finite = (n: number) => (Number.isFinite(n) ? n : undefined)
+  const reduceMax = (arr: bigint[]) => arr.reduce((a, b) => (b > a ? b : a))
+  const reduceMin = (arr: bigint[]) => arr.reduce((a, b) => (b < a ? b : a))
+  return {
+    innerBid: bids.length ? finite(toNumber(reduceMax(bids))) : undefined,
+    outerBid: bids.length ? finite(toNumber(reduceMin(bids))) : undefined,
+    innerAsk: asks.length ? finite(toNumber(reduceMin(asks))) : undefined,
+    outerAsk: asks.length ? finite(toNumber(reduceMax(asks))) : undefined
   }
 }
 
@@ -97,6 +151,11 @@ const buildSeries = ({
         ? rawPriceToNumber(deepbookRaw, adjustedDecimals)
         : undefined
 
+    const spread = extractSpreadPrices(
+      (event.data as { orders?: unknown }).orders,
+      adjustedDecimals
+    )
+
     points.push({
       timestampMs: event.timestampMs ?? 0,
       oracleRaw,
@@ -107,7 +166,11 @@ const buildSeries = ({
       deepbookValue:
         deepbookValueRaw !== undefined && Number.isFinite(deepbookValueRaw)
           ? deepbookValueRaw
-          : undefined
+          : undefined,
+      innerBidValue: spread.innerBid,
+      outerBidValue: spread.outerBid,
+      innerAskValue: spread.innerAsk,
+      outerAskValue: spread.outerAsk
     })
   }
 
@@ -116,16 +179,80 @@ const buildSeries = ({
 
 const ORACLE_COLOR = "#4da2ff"
 const DEEPBOOK_COLOR = "#f97316"
+// Inner spread = AMM's tightest order ring (around the reservation mid). Outer
+// spread is the volatility-buffered ring outside it. Greenish for inner so it
+// reads "core liquidity"; amber for outer so it reads "volatility cushion".
+const INNER_SPREAD_COLOR = "#10b981"
+const OUTER_SPREAD_COLOR = "#f59e0b"
+
+type SeriesKey = "oracle" | "deepbook" | "inner" | "outer"
+
+const LegendPill = ({
+  label,
+  color,
+  swatchOpacity,
+  visible,
+  onClick
+}: {
+  label: string
+  color: string
+  swatchOpacity?: number
+  visible: boolean
+  onClick: () => void
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={visible}
+    className={`flex items-center gap-1.5 rounded transition-opacity hover:opacity-100 ${
+      visible ? "opacity-100" : "opacity-40 line-through"
+    }`}
+  >
+    <span
+      className="inline-block h-2 w-3 rounded"
+      style={{ backgroundColor: color, opacity: swatchOpacity }}
+    />
+    {label}
+  </button>
+)
 
 const Sparkline = ({ points }: { points: SeriesPoint[] }) => {
   const width = 600
   const height = 160
   const padding = 6
 
+  // Click a legend pill to hide that series. Y-range and rendered geometry
+  // both react: hiding the outer band lets the chart re-zoom into the
+  // remaining values without a giant amber blob squashing everything else.
+  const [hidden, setHidden] = useState<Set<SeriesKey>>(() => new Set())
+  const isVisible = (key: SeriesKey) => !hidden.has(key)
+  const toggleSeries = (key: SeriesKey) => {
+    setHidden((previous) => {
+      const next = new Set(previous)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   const allValues: number[] = []
   for (const point of points) {
-    if (Number.isFinite(point.oracleValue)) allValues.push(point.oracleValue)
-    if (point.deepbookValue !== undefined) allValues.push(point.deepbookValue)
+    if (isVisible("oracle") && Number.isFinite(point.oracleValue))
+      allValues.push(point.oracleValue)
+    if (isVisible("deepbook") && point.deepbookValue !== undefined)
+      allValues.push(point.deepbookValue)
+    if (isVisible("inner")) {
+      if (point.innerBidValue !== undefined)
+        allValues.push(point.innerBidValue)
+      if (point.innerAskValue !== undefined)
+        allValues.push(point.innerAskValue)
+    }
+    if (isVisible("outer")) {
+      if (point.outerBidValue !== undefined)
+        allValues.push(point.outerBidValue)
+      if (point.outerAskValue !== undefined)
+        allValues.push(point.outerAskValue)
+    }
   }
 
   if (allValues.length < 2) {
@@ -177,6 +304,46 @@ const Sparkline = ({ points }: { points: SeriesPoint[] }) => {
     .reverse()
     .find((point) => point.deepbookValue !== undefined)
 
+  // Build a band polygon for each contiguous run of points that has both an
+  // ask (top) and bid (bottom) price defined. SVG polygons can't render gaps
+  // so segments break wherever a side is missing (e.g. single-sided refresh).
+  const buildBandPolygons = (
+    topAccessor: (p: SeriesPoint) => number | undefined,
+    bottomAccessor: (p: SeriesPoint) => number | undefined
+  ): string[] => {
+    const polygons: string[] = []
+    let topRun: string[] = []
+    let bottomRun: string[] = []
+    const flush = () => {
+      if (topRun.length === 0) return
+      polygons.push([...topRun, ...bottomRun.slice().reverse()].join(" "))
+      topRun = []
+      bottomRun = []
+    }
+    points.forEach((point, index) => {
+      const top = topAccessor(point)
+      const bottom = bottomAccessor(point)
+      if (top !== undefined && bottom !== undefined) {
+        const x = xFor(index).toFixed(2)
+        topRun.push(`${x},${yFor(top).toFixed(2)}`)
+        bottomRun.push(`${x},${yFor(bottom).toFixed(2)}`)
+      } else {
+        flush()
+      }
+    })
+    flush()
+    return polygons
+  }
+
+  const outerBandPolygons = buildBandPolygons(
+    (p) => p.outerAskValue,
+    (p) => p.outerBidValue
+  )
+  const innerBandPolygons = buildBandPolygons(
+    (p) => p.innerAskValue,
+    (p) => p.innerBidValue
+  )
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-4 text-[0.65rem] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
@@ -187,13 +354,26 @@ const Sparkline = ({ points }: { points: SeriesPoint[] }) => {
           />
           Oracle
         </span>
-        <span className="flex items-center gap-1.5">
-          <span
-            className="inline-block h-2 w-3 rounded"
-            style={{ backgroundColor: DEEPBOOK_COLOR }}
-          />
-          DeepBook
-        </span>
+        <LegendPill
+          label="DeepBook"
+          color={DEEPBOOK_COLOR}
+          visible={isVisible("deepbook")}
+          onClick={() => toggleSeries("deepbook")}
+        />
+        <LegendPill
+          label="Inner spread"
+          color={INNER_SPREAD_COLOR}
+          swatchOpacity={0.45}
+          visible={isVisible("inner")}
+          onClick={() => toggleSeries("inner")}
+        />
+        <LegendPill
+          label="Outer spread"
+          color={OUTER_SPREAD_COLOR}
+          swatchOpacity={0.3}
+          visible={isVisible("outer")}
+          onClick={() => toggleSeries("outer")}
+        />
       </div>
       <div className="relative h-[160px] w-full overflow-hidden rounded-lg border border-slate-200/60 bg-white/50 dark:border-slate-50/15 dark:bg-slate-950/40">
         <svg
@@ -207,36 +387,70 @@ const Sparkline = ({ points }: { points: SeriesPoint[] }) => {
               <stop offset="100%" stopColor={ORACLE_COLOR} stopOpacity="0" />
             </linearGradient>
           </defs>
-          <polygon points={oracleArea} fill="url(#sparkline-fill)" />
-          <polyline
-            points={oraclePolyline}
-            fill="none"
-            stroke={ORACLE_COLOR}
-            strokeWidth="2"
-            vectorEffect="non-scaling-stroke"
-            strokeLinejoin="round"
-          />
-          {deepbookSegments.map((segment, segmentIndex) => (
-            <polyline
-              key={segmentIndex}
-              points={segment}
-              fill="none"
-              stroke={DEEPBOOK_COLOR}
-              strokeWidth="2"
-              strokeDasharray="4 3"
-              vectorEffect="non-scaling-stroke"
-              strokeLinejoin="round"
-            />
-          ))}
+          {/* Outer spread first (rendered behind), then inner (sits inside), then mid line on top. */}
+          {isVisible("outer") &&
+            outerBandPolygons.map((polygon, index) => (
+              <polygon
+                key={`outer-band-${index}`}
+                points={polygon}
+                fill={OUTER_SPREAD_COLOR}
+                fillOpacity="0.18"
+                stroke={OUTER_SPREAD_COLOR}
+                strokeOpacity="0.55"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          {isVisible("inner") &&
+            innerBandPolygons.map((polygon, index) => (
+              <polygon
+                key={`inner-band-${index}`}
+                points={polygon}
+                fill={INNER_SPREAD_COLOR}
+                fillOpacity="0.22"
+                stroke={INNER_SPREAD_COLOR}
+                strokeOpacity="0.55"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          {isVisible("oracle") && (
+            <>
+              <polygon points={oracleArea} fill="url(#sparkline-fill)" />
+              <polyline
+                points={oraclePolyline}
+                fill="none"
+                stroke={ORACLE_COLOR}
+                strokeWidth="2"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            </>
+          )}
+          {isVisible("deepbook") &&
+            deepbookSegments.map((segment, segmentIndex) => (
+              <polyline
+                key={segmentIndex}
+                points={segment}
+                fill="none"
+                stroke={DEEPBOOK_COLOR}
+                strokeWidth="2"
+                strokeDasharray="4 3"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            ))}
         </svg>
         <div className="pointer-events-none absolute bottom-2 left-3 font-mono text-[0.65rem] text-slate-500 dark:text-slate-200/70">
           {points[0].oracleDisplay}
         </div>
         <div className="pointer-events-none absolute bottom-2 right-3 flex flex-col items-end gap-0.5 font-mono text-[0.7rem]">
-          <span className="font-semibold" style={{ color: ORACLE_COLOR }}>
-            {points[lastIndex].oracleDisplay}
-          </span>
-          {lastDeepbookPoint?.deepbookDisplay ? (
+          {isVisible("oracle") ? (
+            <span className="font-semibold" style={{ color: ORACLE_COLOR }}>
+              {points[lastIndex].oracleDisplay}
+            </span>
+          ) : undefined}
+          {isVisible("deepbook") && lastDeepbookPoint?.deepbookDisplay ? (
             <span className="font-semibold" style={{ color: DEEPBOOK_COLOR }}>
               {lastDeepbookPoint.deepbookDisplay}
             </span>
@@ -286,7 +500,7 @@ const PriceChartCard = () => {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300/70 px-6 py-4 dark:border-slate-50/25">
           <div className="flex flex-col gap-1">
             <h2 className="text-base font-semibold text-sds-dark dark:text-sds-light">
-              Mid price
+              Mid Price
             </h2>
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
               {baseSymbol && quoteSymbol
