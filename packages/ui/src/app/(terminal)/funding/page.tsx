@@ -87,13 +87,7 @@ const FundingCard = ({
 
   const isProcessing = transactionState.status === "processing"
 
-  // Withdraw needs the BalanceManager unlocked, which the contract enforces by
-  // requiring the executor to be paused. Block the button (and the auto-
-  // pause/unpause atomic wrapper) until the user has paused on /bot — that
-  // makes the gating explicit instead of doing it silently per-call.
-  const isWithdrawBlockedByActive =
-    mode === "withdraw" && traderAccount?.active === true
-  const submitDisabled = !canSubmit || isWithdrawBlockedByActive
+  const submitDisabled = !canSubmit
 
   const baseSymbol = traderAccount
     ? getStructLabel(traderAccount.baseCoinType)
