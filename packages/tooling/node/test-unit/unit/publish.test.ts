@@ -3,14 +3,17 @@ import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519"
 import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import path from "node:path"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { withCwd } from "../../../tests-integration/helpers/cwd.ts"
+import { withCwd } from "../../../test-helpers/helpers/cwd.ts"
 import {
-  readFixture,
   readTextFile,
   withTempDir,
   writeFileTree
-} from "../../../tests-integration/helpers/fs.ts"
-import { createSuiClientMock } from "../../../tests-integration/helpers/sui.ts"
+} from "../../../test-helpers/helpers/fs.ts"
+import { createSuiClientMock } from "../../../test-helpers/helpers/sui.ts"
+import {
+  MOVE_LOCK_PINNED,
+  MOVE_TOML
+} from "../../../test-helpers/fixtures.ts"
 import { getDeploymentArtifactPath } from "../../src/artifacts.ts"
 
 const moveMocks = vi.hoisted(() => ({
@@ -420,7 +423,7 @@ describe("publishPackageWithLog", () => {
     await withTempDir(async (dir) => {
       const packagePath = await createPackageFixture({
         rootDir: dir,
-        moveTomlContents: await readFixture("move", "Move.toml")
+        moveTomlContents: MOVE_TOML
       })
 
       const { client } = createSuiClientMock()
@@ -488,8 +491,8 @@ describe("publishPackageWithLog", () => {
     await withTempDir(async (dir) => {
       const packagePath = await createPackageFixture({
         rootDir: dir,
-        moveTomlContents: await readFixture("move", "Move.toml"),
-        moveLockContents: await readFixture("move", "Move.lock.pinned")
+        moveTomlContents: MOVE_TOML,
+        moveLockContents: MOVE_LOCK_PINNED
       })
 
       const config = buildResolvedConfig({
@@ -538,8 +541,8 @@ describe("publishPackageWithLog", () => {
     await withTempDir(async (dir) => {
       const packagePath = await createPackageFixture({
         rootDir: dir,
-        moveTomlContents: await readFixture("move", "Move.toml"),
-        moveLockContents: await readFixture("move", "Move.lock.pinned")
+        moveTomlContents: MOVE_TOML,
+        moveLockContents: MOVE_LOCK_PINNED
       })
 
       const config = buildResolvedConfig({

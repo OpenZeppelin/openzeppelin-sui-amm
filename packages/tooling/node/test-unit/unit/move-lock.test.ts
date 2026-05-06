@@ -4,32 +4,32 @@ import {
   extractSuiFrameworkPinnedEntriesFromMoveLock,
   extractSuiFrameworkRevisionsFromMoveLock
 } from "../../src/move-lock.ts"
-import { readFixture } from "../../../tests-integration/helpers/fs.ts"
+import {
+  MOVE_LOCK_LEGACY,
+  MOVE_LOCK_PINNED
+} from "../../../test-helpers/fixtures.ts"
 
 describe("extractSuiFrameworkRevisionsFromMoveLock", () => {
-  it("extracts revisions from pinned Move.lock", async () => {
-    const lockContents = await readFixture("move", "Move.lock.pinned")
+  it("extracts revisions from pinned Move.lock", () => {
     const revisions = extractSuiFrameworkRevisionsFromMoveLock({
-      lockContents
+      lockContents: MOVE_LOCK_PINNED
     })
 
     expect([...revisions].sort()).toEqual(["1111111", "2222222", "3333333"])
   })
 
-  it("filters pinned revisions by environment", async () => {
-    const lockContents = await readFixture("move", "Move.lock.pinned")
+  it("filters pinned revisions by environment", () => {
     const revisions = extractSuiFrameworkRevisionsFromMoveLock({
-      lockContents,
+      lockContents: MOVE_LOCK_PINNED,
       environmentName: "testnet"
     })
 
     expect([...revisions].sort()).toEqual(["2222222", "3333333"])
   })
 
-  it("extracts revisions from legacy Move.lock", async () => {
-    const lockContents = await readFixture("move", "Move.lock.legacy")
+  it("extracts revisions from legacy Move.lock", () => {
     const revisions = extractSuiFrameworkRevisionsFromMoveLock({
-      lockContents
+      lockContents: MOVE_LOCK_LEGACY
     })
 
     expect([...revisions].sort()).toEqual(["aaaa", "bbbb"])
@@ -45,10 +45,9 @@ describe("extractSuiFrameworkRevisionsFromMoveLock", () => {
 })
 
 describe("extractSuiFrameworkPinnedEntriesFromMoveLock", () => {
-  it("returns pinned entry metadata for environment", async () => {
-    const lockContents = await readFixture("move", "Move.lock.pinned")
+  it("returns pinned entry metadata for environment", () => {
     const entries = extractSuiFrameworkPinnedEntriesFromMoveLock({
-      lockContents,
+      lockContents: MOVE_LOCK_PINNED,
       environmentName: "testnet"
     })
 
@@ -70,10 +69,9 @@ describe("extractSuiFrameworkPinnedEntriesFromMoveLock", () => {
 })
 
 describe("extractSingleSuiFrameworkRevisionFromMoveLock", () => {
-  it("returns one revision from legacy locks", async () => {
-    const lockContents = await readFixture("move", "Move.lock.legacy")
+  it("returns one revision from legacy locks", () => {
     const revision = extractSingleSuiFrameworkRevisionFromMoveLock({
-      lockContents
+      lockContents: MOVE_LOCK_LEGACY
     })
 
     expect(["aaaa", "bbbb"]).toContain(revision)

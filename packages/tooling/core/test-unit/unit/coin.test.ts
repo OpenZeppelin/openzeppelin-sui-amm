@@ -8,7 +8,7 @@ import {
   selectRichestCoin
 } from "../../src/coin.ts"
 import { SUI_COIN_TYPE } from "../../src/constants.ts"
-import { createSuiClientMock } from "../../../tests-integration/helpers/sui.ts"
+import { createSuiClientMock } from "../../../test-helpers/helpers/sui.ts"
 
 describe("coin helpers", () => {
   it("normalizes coin types", () => {

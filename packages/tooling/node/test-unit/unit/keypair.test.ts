@@ -5,7 +5,7 @@ import { normalizeSuiAddress } from "@mysten/sui/utils"
 import {
   withTempDir,
   writeFileTree
-} from "../../../tests-integration/helpers/fs.ts"
+} from "../../../test-helpers/helpers/fs.ts"
 import { buildKeystoreEntry, loadKeypair } from "../../src/keypair.ts"
 
 const buildBase64Secret = (seed: number) => {

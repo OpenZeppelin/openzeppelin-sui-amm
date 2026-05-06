@@ -2,11 +2,14 @@ import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import {
-  readFixture,
   readTextFile,
   withTempDir,
   writeFileTree
-} from "../../../tests-integration/helpers/fs.ts"
+} from "../../../test-helpers/helpers/fs.ts"
+import {
+  MOVE_TOML,
+  PUBLISHED_TOML
+} from "../../../test-helpers/fixtures.ts"
 import {
   buildMoveEnvironmentFlags,
   buildMoveTestArguments,
@@ -98,7 +101,7 @@ describe("move helpers", () => {
 
 describe("syncMoveEnvironmentChainId", () => {
   it("inserts environments block when needed", async () => {
-    const moveToml = await readFixture("move", "Move.toml")
+    const moveToml = MOVE_TOML
 
     await withTempDir(async (dir) => {
       await writeFileTree(dir, { "Move.toml": moveToml })
@@ -243,7 +246,7 @@ describe("syncMoveTomlDependencyPublishedIds", () => {
   })
 
   it("updates an existing dependency replacement", async () => {
-    const moveToml = await readFixture("move", "Move.toml")
+    const moveToml = MOVE_TOML
 
     await withTempDir(async (dir) => {
       const moveTomlPath = path.join(dir, "Move.toml")
@@ -364,7 +367,7 @@ describe("readMoveTomlDependencyReplacement", () => {
   })
 
   it("returns undefined when the entry is missing", async () => {
-    const moveToml = await readFixture("move", "Move.toml")
+    const moveToml = MOVE_TOML
 
     await withTempDir(async (dir) => {
       await writeFileTree(dir, { "Move.toml": moveToml })
@@ -382,7 +385,7 @@ describe("readMoveTomlDependencyReplacement", () => {
 
 describe("clearPublishedEntryForNetwork", () => {
   it("removes the published section for a network", async () => {
-    const published = await readFixture("move", "Published.toml")
+    const published = PUBLISHED_TOML
 
     await withTempDir(async (dir) => {
       const publishedPath = path.join(dir, "Published.toml")
@@ -403,7 +406,7 @@ describe("clearPublishedEntryForNetwork", () => {
   })
 
   it("no-ops when network name is undefined", async () => {
-    const published = await readFixture("move", "Published.toml")
+    const published = PUBLISHED_TOML
 
     await withTempDir(async (dir) => {
       const publishedPath = path.join(dir, "Published.toml")
