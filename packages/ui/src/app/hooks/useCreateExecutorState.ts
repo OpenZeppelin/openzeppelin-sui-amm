@@ -358,7 +358,7 @@ export const useCreateExecutorState = () => {
         )
       }
       const poolShared = await getSuiSharedObject(
-        { objectId: matchingPool.poolId, mutable: true },
+        { objectId: matchingPool.poolId, mutable: false },
         { suiClient }
       )
 
