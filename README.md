@@ -13,110 +13,17 @@ This repo is a pnpm workspace containing:
 - a CLI/script layer for localnet + seeding + amm flows,
 - a Next.js UI
 
-## Architecture
+## Documentation
 
-The dApp's `/dashboard` page surfaces the live state of a connected executor —
-mid price (oracle line + DeepBook line + inner/outer spread bands), inventory
-balances, the four orders currently posted by the latest `QuoteUpdated`, and
-the on-chain event log:
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Smart-contract design:
+  oracle-driven mid, inner/outer ring orders, inventory-skewed reservation
+  mid, permissionless refresh model, Move module layout, and the PTB-flow
+  Mermaid diagram showing every UI action / bot script that lands on chain.
+- [docs/OVERVIEW.md](docs/OVERVIEW.md) — Page-by-page walkthrough of the
+  dApp (`/setup`, `/dashboard`, `/funding`, `/config`, `/bot`,
+  `/performance`) with screenshots showing what you can do on each.
 
-![Sui AMM dashboard — Mid Price card with oracle / DeepBook / inner / outer spread overlay, Balances distribution, Active Orders, Event Feed](docs/dashboard.png)
-
-Behind the scenes every UI action and every long-running bot script funnels
-through the same domain-level PTB builders in
-[`packages/domain/core/src/ptb/amm.ts`](packages/domain/core/src/ptb/amm.ts),
-which in turn produce a fixed set of on-chain Move calls:
-
-```mermaid
-flowchart LR
-  classDef ui fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
-  classDef script fill:#fef3c7,stroke:#b45309,color:#78350f
-  classDef builder fill:#dcfce7,stroke:#15803d,color:#14532d
-  classDef move fill:#fce7f3,stroke:#be185d,color:#831843
-  classDef obj fill:#e0e7ff,stroke:#4338ca,color:#312e81
-
-  subgraph Entry[Entry points]
-    direction TB
-    UISetup["UI /setup"]:::ui
-    UIFunding["UI /funding (Deposit / Withdraw)"]:::ui
-    UIBot["UI /bot · Refresh quotes"]:::ui
-    UIConfig["UI /config · Update config"]:::ui
-    BotMaint["script: bot:maintenance loop"]:::script
-    BotMA["script: bot:market-activity loop"]:::script
-  end
-
-  subgraph Builders[Domain PTB builders<br/>packages/domain/core/src/ptb/amm.ts]
-    direction TB
-    BCreate["buildCreateExecutorTransaction"]:::builder
-    BDeposit["buildDepositTransaction"]:::builder
-    BWithdraw["buildWithdrawWithPauseTransaction"]:::builder
-    BRefresh["buildLocalnetRefreshQuotesTransaction"]:::builder
-    BUpdateCfg["buildUpdateConfigTransaction"]:::builder
-  end
-
-  subgraph Move["On-chain Move calls"]
-    direction TB
-    Mmarket["market::new&lt;Base, Quote&gt;"]:::move
-    Mconfig["config::new"]:::move
-    Mexec_create["executor::create"]:::move
-    Mexec_pause["executor::pause"]:::move
-    Mexec_unpause["executor::unpause"]:::move
-    Mexec_deposit["executor::deposit&lt;T&gt;"]:::move
-    Mexec_withdraw["executor::withdraw / withdraw_all&lt;T&gt;"]:::move
-    Mexec_refresh["executor::refresh_quotes_permissionless&lt;Base, Quote&gt;"]:::move
-    Mexec_update_cfg["executor::update_config"]:::move
-    Mpyth_stamp["price_info::publish_price_feed<br/>(re-stamp ts, same magnitude/expo)"]:::move
-    Mtransfer["0x2::transfer::public_share_object<br/>+ transfer AdminCap to sender"]:::move
-  end
-
-  subgraph Shared["Shared objects touched"]
-    direction TB
-    OPool["DeepBook Pool"]:::obj
-    OExec["Executor (shared)"]:::obj
-    OAdmin["AdminCap (sender-owned)"]:::obj
-    OBM["BalanceManager"]:::obj
-    OPyth["Pyth State + 2× PriceInfoObject"]:::obj
-    OClock["0x6 Clock"]:::obj
-  end
-
-  UISetup --> BCreate
-  UIFunding -- "deposit" --> BDeposit
-  UIFunding -- "withdraw" --> BWithdraw
-  UIBot --> BRefresh
-  BotMaint --> BRefresh
-  BotMA -. "no AMM PTB; pyth update + DeepBook swaps" .-> Mpyth_stamp
-  UIConfig --> BUpdateCfg
-
-  BCreate --> Mmarket --> Mconfig --> Mexec_create --> Mtransfer
-  Mmarket --- OPool
-  Mexec_create --- OAdmin
-
-  BDeposit --> Mexec_deposit
-  Mexec_deposit --- OExec
-  Mexec_deposit --- OBM
-
-  BWithdraw -- "if currentActive" --> Mexec_pause
-  BWithdraw --> Mexec_withdraw
-  BWithdraw -- "if currentActive" --> Mexec_unpause
-  Mexec_pause --- OExec
-  Mexec_pause --- OPool
-  Mexec_withdraw --- OBM
-
-  BRefresh --> Mpyth_stamp --> Mexec_refresh
-  Mpyth_stamp --- OPyth
-  Mexec_refresh --- OExec
-  Mexec_refresh --- OPool
-  Mexec_refresh --- OPyth
-  Mexec_refresh --- OClock
-
-  BUpdateCfg --> Mconfig
-  BUpdateCfg --> Mexec_update_cfg
-  Mexec_update_cfg --- OExec
-  Mexec_update_cfg --- OAdmin
-```
-
-> Note: GitHub renders the diagram inline. In VS Code, install
-> `bierner.markdown-mermaid` to see it in the built-in preview.
+![Sui AMM dashboard — Mid Price card with oracle / DeepBook / inner / outer spread overlay, Balances distribution, Active Orders, Event Feed](docs/images/dashboard.png)
 
 ## DeepBook submodule
 
