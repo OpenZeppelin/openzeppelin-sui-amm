@@ -106,11 +106,16 @@ const requireMockField = <T>(value: T | undefined, label: string): T => {
   return value
 }
 
+// Returns a uniformly random bigint in [minInclusive, maxExclusive). Returns
+// `undefined` when the cap doesn't leave any room above the pool's min_size
+// floor — silently coercing up to `minInclusive` would violate the operator's
+// `--max-base` / `--max-quote` cap and defeat the "skip below min_size"
+// behavior the call sites rely on.
 const randomBigIntInRange = (
   minInclusive: bigint,
   maxExclusive: bigint
-): bigint => {
-  if (maxExclusive <= minInclusive) return minInclusive
+): bigint | undefined => {
+  if (maxExclusive <= minInclusive) return undefined
   const span = Number(maxExclusive - minInclusive)
   return minInclusive + BigInt(Math.floor(Math.random() * span))
 }
@@ -276,41 +281,53 @@ runSuiScript(
         let swapDescription: string | undefined
         if (isSellBase) {
           const baseAtoms = randomBigIntInRange(MIN_BASE_ATOMS, maxBaseAtoms)
-          addSellBase(transaction, {
-            ownerAddress,
-            deepbookPackageId,
-            poolSharedRef: poolShared.sharedRef,
-            baseCoinType,
-            quoteCoinType,
-            deepCoinType,
-            baseAtoms
-          })
-          swapDescription = `sell-base ${baseAtoms.toString()} base-atoms`
-        } else {
-          const quoteAtoms = randomBigIntInRange(MIN_QUOTE_ATOMS, maxQuoteAtoms)
-          const ownedQuoteCoins = await fetchCoinBalances(
-            { owner: ownerAddress, coinType: quoteCoinType },
-            { suiClient: tooling.suiClient }
-          )
-          const richestQuote = selectRichestCoin(ownedQuoteCoins)
-          if (!richestQuote || BigInt(richestQuote.balance) < quoteAtoms) {
+          if (baseAtoms === undefined) {
             logWarning(
-              `tick ${tick} buy-base skipped: not enough USDC (need ${quoteAtoms.toString()} atoms, have ${
-                richestQuote?.balance ?? "0"
-              })`
+              `tick ${tick} sell-base skipped: --max-base (${maxBaseAtoms.toString()} atoms) is at or below the pool's min_size (${MIN_BASE_ATOMS.toString()})`
             )
           } else {
-            addBuyBase(transaction, {
+            addSellBase(transaction, {
               ownerAddress,
               deepbookPackageId,
               poolSharedRef: poolShared.sharedRef,
               baseCoinType,
               quoteCoinType,
               deepCoinType,
-              quoteAtoms,
-              quoteCoinObjectId: richestQuote.coinObjectId
+              baseAtoms
             })
-            swapDescription = `buy-base ${quoteAtoms.toString()} quote-atoms`
+            swapDescription = `sell-base ${baseAtoms.toString()} base-atoms`
+          }
+        } else {
+          const quoteAtoms = randomBigIntInRange(MIN_QUOTE_ATOMS, maxQuoteAtoms)
+          if (quoteAtoms === undefined) {
+            logWarning(
+              `tick ${tick} buy-base skipped: --max-quote (${maxQuoteAtoms.toString()} atoms) is at or below the pool's min_size (${MIN_QUOTE_ATOMS.toString()})`
+            )
+          } else {
+            const ownedQuoteCoins = await fetchCoinBalances(
+              { owner: ownerAddress, coinType: quoteCoinType },
+              { suiClient: tooling.suiClient }
+            )
+            const richestQuote = selectRichestCoin(ownedQuoteCoins)
+            if (!richestQuote || BigInt(richestQuote.balance) < quoteAtoms) {
+              logWarning(
+                `tick ${tick} buy-base skipped: not enough USDC (need ${quoteAtoms.toString()} atoms, have ${
+                  richestQuote?.balance ?? "0"
+                })`
+              )
+            } else {
+              addBuyBase(transaction, {
+                ownerAddress,
+                deepbookPackageId,
+                poolSharedRef: poolShared.sharedRef,
+                baseCoinType,
+                quoteCoinType,
+                deepCoinType,
+                quoteAtoms,
+                quoteCoinObjectId: richestQuote.coinObjectId
+              })
+              swapDescription = `buy-base ${quoteAtoms.toString()} quote-atoms`
+            }
           }
         }
 
