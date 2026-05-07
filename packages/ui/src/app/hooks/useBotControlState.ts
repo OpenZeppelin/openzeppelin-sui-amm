@@ -70,6 +70,12 @@ export const useBotControlState = () => {
 
   const walletAddress = currentAccount?.address
   const executorId = resolution.traderAccountId
+  // Hoist adminCapId so `ready` can gate on it (otherwise the button enables
+  // before the admin cap resolves and the submit fails at runtime with
+  // "AdminCap not found"). Also lets the callback's dep array list it
+  // explicitly so a wallet switch that picks a different cap reactively
+  // re-binds the closure.
+  const adminCapId = resolution.adminCapId
   const traderAccount =
     overview.status === "success" ? overview.traderAccount : undefined
 
@@ -80,7 +86,11 @@ export const useBotControlState = () => {
 
   const ready =
     Boolean(
-      walletAddress && contractPackageId && executorId && traderAccount
+      walletAddress &&
+      contractPackageId &&
+      executorId &&
+      adminCapId &&
+      traderAccount
     ) &&
     !isProcessing &&
     isSubmissionPending !== true
@@ -173,7 +183,6 @@ export const useBotControlState = () => {
 
       try {
         failureStage = "resolve-admin-cap"
-        const adminCapId = resolution.adminCapId
         if (!adminCapId) {
           throw new Error("AdminCap not found for the connected wallet.")
         }
@@ -261,6 +270,7 @@ export const useBotControlState = () => {
       }
     },
     [
+      adminCapId,
       contractPackageId,
       currentAccount,
       currentWallet,
