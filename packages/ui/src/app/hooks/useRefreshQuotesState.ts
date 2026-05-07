@@ -332,6 +332,8 @@ export const useRefreshQuotesState = () => {
     explorerUrl,
     isLocalnet,
     localnetExecutor,
+    localnetPythMockPackageId,
+    localnetPythStateId,
     network,
     refreshTraderAccount,
     signAndExecuteTransaction,
