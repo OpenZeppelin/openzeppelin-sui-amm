@@ -138,6 +138,14 @@ const buildExecutorContext = async (
       }`.trim()
     )
   }
+  // Surface a mismatch loudly: passing --pool-id that doesn't match the
+  // executor's bound pool will route every refresh into the wrong market,
+  // and the most common cause is a stale flag the operator forgot to drop.
+  if (poolIdOverride && poolIdOverride !== overview.poolId) {
+    logWarning(
+      `--pool-id ${poolIdOverride} overrides executor ${executorId}'s bound pool ${overview.poolId}; refresh ticks will target the override.`
+    )
+  }
   return {
     executorId,
     poolId: poolIdOverride ?? overview.poolId,
@@ -343,7 +351,7 @@ runSuiScript(
       alias: ["pool-id", "pool"],
       type: "string",
       description:
-        "DeepBook pool object id; defaults to pools[0].poolId from mock.localnet.json."
+        "DeepBook pool object id. Only honored alongside --executor-id (override of the executor's bound pool); ignored in auto-discovery mode where each executor's pool comes from its own Market.pool_id."
     })
     .option("intervalMs", {
       alias: ["interval-ms", "interval"],
