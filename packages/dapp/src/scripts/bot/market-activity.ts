@@ -445,19 +445,21 @@ const topUpPublisherSuiViaFaucet = async ({
   let publisherAtoms = await sumSuiAtoms(tooling, publisherAddress)
   if (publisherAtoms >= requiredAtoms) return publisherAtoms
 
-  let requests = 0
+  // Count every attempt (success OR rate-limited retry) so a perpetually
+  // rate-limited faucet can't spin this loop forever.
+  let attempts = 0
   let lastError: unknown
-  while (publisherAtoms < requiredAtoms && requests < MAX_FAUCET_REQUESTS) {
+  while (publisherAtoms < requiredAtoms && attempts < MAX_FAUCET_REQUESTS) {
+    attempts += 1
     try {
       await requestSuiFromFaucetV2({
         host: faucetHost,
         recipient: publisherAddress
       })
-      requests += 1
     } catch (error) {
       lastError = error
       if (error instanceof FaucetRateLimitError) {
-        await sleep(500 * (requests + 1) + 250)
+        await sleep(500 * attempts + 250)
         continue
       }
       // Any other faucet error is unlikely to clear on its own; bail and let
@@ -469,7 +471,7 @@ const topUpPublisherSuiViaFaucet = async ({
   }
 
   logKeyValueGreen("bot-sui-faucet")(
-    `${requests} requests · publisher now holds ${publisherAtoms.toString()} atoms`
+    `${attempts} attempts · publisher now holds ${publisherAtoms.toString()} atoms`
   )
   if (publisherAtoms < requiredAtoms && lastError) {
     logWarning(
