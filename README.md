@@ -13,6 +13,111 @@ This repo is a pnpm workspace containing:
 - a CLI/script layer for localnet + seeding + amm flows,
 - a Next.js UI
 
+## Architecture
+
+The dApp's `/dashboard` page surfaces the live state of a connected executor —
+mid price (oracle line + DeepBook line + inner/outer spread bands), inventory
+balances, the four orders currently posted by the latest `QuoteUpdated`, and
+the on-chain event log:
+
+![Sui AMM dashboard — Mid Price card with oracle / DeepBook / inner / outer spread overlay, Balances distribution, Active Orders, Event Feed](docs/dashboard.png)
+
+Behind the scenes every UI action and every long-running bot script funnels
+through the same domain-level PTB builders in
+[`packages/domain/core/src/ptb/amm.ts`](packages/domain/core/src/ptb/amm.ts),
+which in turn produce a fixed set of on-chain Move calls:
+
+```mermaid
+flowchart LR
+  classDef ui fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef script fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef builder fill:#dcfce7,stroke:#15803d,color:#14532d
+  classDef move fill:#fce7f3,stroke:#be185d,color:#831843
+  classDef obj fill:#e0e7ff,stroke:#4338ca,color:#312e81
+
+  subgraph Entry[Entry points]
+    direction TB
+    UISetup["UI /setup"]:::ui
+    UIFunding["UI /funding (Deposit / Withdraw)"]:::ui
+    UIBot["UI /bot · Refresh quotes"]:::ui
+    UIConfig["UI /config · Update config"]:::ui
+    BotMaint["script: bot:maintenance loop"]:::script
+    BotMA["script: bot:market-activity loop"]:::script
+  end
+
+  subgraph Builders[Domain PTB builders<br/>packages/domain/core/src/ptb/amm.ts]
+    direction TB
+    BCreate["buildCreateExecutorTransaction"]:::builder
+    BDeposit["buildDepositTransaction"]:::builder
+    BWithdraw["buildWithdrawWithPauseTransaction"]:::builder
+    BRefresh["buildLocalnetRefreshQuotesTransaction"]:::builder
+    BUpdateCfg["buildUpdateConfigTransaction"]:::builder
+  end
+
+  subgraph Move["On-chain Move calls"]
+    direction TB
+    Mmarket["market::new&lt;Base, Quote&gt;"]:::move
+    Mconfig["config::new"]:::move
+    Mexec_create["executor::create"]:::move
+    Mexec_pause["executor::pause"]:::move
+    Mexec_unpause["executor::unpause"]:::move
+    Mexec_deposit["executor::deposit&lt;T&gt;"]:::move
+    Mexec_withdraw["executor::withdraw / withdraw_all&lt;T&gt;"]:::move
+    Mexec_refresh["executor::refresh_quotes_permissionless&lt;Base, Quote&gt;"]:::move
+    Mexec_update_cfg["executor::update_config"]:::move
+    Mpyth_stamp["price_info::publish_price_feed<br/>(re-stamp ts, same magnitude/expo)"]:::move
+    Mtransfer["0x2::transfer::public_share_object<br/>+ transfer AdminCap to sender"]:::move
+  end
+
+  subgraph Shared["Shared objects touched"]
+    direction TB
+    OPool["DeepBook Pool"]:::obj
+    OExec["Executor (shared)"]:::obj
+    OAdmin["AdminCap (sender-owned)"]:::obj
+    OBM["BalanceManager"]:::obj
+    OPyth["Pyth State + 2× PriceInfoObject"]:::obj
+    OClock["0x6 Clock"]:::obj
+  end
+
+  UISetup --> BCreate
+  UIFunding -- "deposit" --> BDeposit
+  UIFunding -- "withdraw" --> BWithdraw
+  UIBot --> BRefresh
+  BotMaint --> BRefresh
+  BotMA -. "no AMM PTB; pyth update + DeepBook swaps" .-> Mpyth_stamp
+  UIConfig --> BUpdateCfg
+
+  BCreate --> Mmarket --> Mconfig --> Mexec_create --> Mtransfer
+  Mmarket --- OPool
+  Mexec_create --- OAdmin
+
+  BDeposit --> Mexec_deposit
+  Mexec_deposit --- OExec
+  Mexec_deposit --- OBM
+
+  BWithdraw -- "if currentActive" --> Mexec_pause
+  BWithdraw --> Mexec_withdraw
+  BWithdraw -- "if currentActive" --> Mexec_unpause
+  Mexec_pause --- OExec
+  Mexec_pause --- OPool
+  Mexec_withdraw --- OBM
+
+  BRefresh --> Mpyth_stamp --> Mexec_refresh
+  Mpyth_stamp --- OPyth
+  Mexec_refresh --- OExec
+  Mexec_refresh --- OPool
+  Mexec_refresh --- OPyth
+  Mexec_refresh --- OClock
+
+  BUpdateCfg --> Mconfig
+  BUpdateCfg --> Mexec_update_cfg
+  Mexec_update_cfg --- OExec
+  Mexec_update_cfg --- OAdmin
+```
+
+> Note: GitHub renders the diagram inline. In VS Code, install
+> `bierner.markdown-mermaid` to see it in the built-in preview.
+
 ## DeepBook submodule
 
 Localnet scripts publish DeepBook from a pinned submodule so development is reproducible.
@@ -224,7 +329,7 @@ coin-mock isn't a dep of the AMM, so it stays a standalone publish.
 - **`Dry run failed: TypeMismatch in command 0`** when creating an executor:
   the AMM and the on-chain Pool came from different deepbook copies. Re-run
   steps 5–8 in order; verify with `curl … sui_getNormalizedMoveFunction
-  market new` that `result.parameters[0]` references `Pool` at the AMM
+market new` that `result.parameters[0]` references `Pool` at the AMM
   packageId.
 - **`Your package is already published`**: an ephemeral `Pub.<env>.toml`
   is left over. Delete it (the tooling does this for the packages it
@@ -235,98 +340,8 @@ coin-mock isn't a dep of the AMM, so it stays a standalone publish.
   `mock:setup` run, but `mock.localnet.json` was wiped and forgot about it.
   The fix is to re-publish the AMM (which mints a fresh empty `State`)
   before re-running `mock:setup`: `pnpm --filter dapp move:publish
-  --package-path prop-amm --re-publish`.
+--package-path prop-amm --re-publish`.
 - **`The package does not define an localnet environment`**: the active
   `sui client` env name (`localnet`) doesn't match any `[environments]` key
   in the package's `Move.toml`. The mock packages declare `test-publish`,
   so the tooling falls back to `sui client test-publish` automatically.
-
-
-```mermaid
-flowchart LR
-  classDef ui fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
-  classDef script fill:#fef3c7,stroke:#b45309,color:#78350f
-  classDef builder fill:#dcfce7,stroke:#15803d,color:#14532d
-  classDef move fill:#fce7f3,stroke:#be185d,color:#831843
-  classDef obj fill:#e0e7ff,stroke:#4338ca,color:#312e81
-
-  subgraph Entry[Entry points]
-    direction TB
-    UISetup["UI /setup"]:::ui
-    UIFunding["UI /funding (Deposit / Withdraw)"]:::ui
-    UIBot["UI /bot · Refresh quotes"]:::ui
-    UIConfig["UI /config · Update config"]:::ui
-    BotMaint["script: bot:maintenance loop"]:::script
-    BotMA["script: bot:market-activity loop"]:::script
-  end
-
-  subgraph Builders[Domain PTB builders<br/>packages/domain/core/src/ptb/amm.ts]
-    direction TB
-    BCreate["buildCreateExecutorTransaction"]:::builder
-    BDeposit["buildDepositTransaction"]:::builder
-    BWithdraw["buildWithdrawWithPauseTransaction"]:::builder
-    BRefresh["buildLocalnetRefreshQuotesTransaction"]:::builder
-    BUpdateCfg["buildUpdateConfigTransaction"]:::builder
-  end
-
-  subgraph Move["On-chain Move calls"]
-    direction TB
-    Mmarket["market::new&lt;Base, Quote&gt;"]:::move
-    Mconfig["config::new"]:::move
-    Mexec_create["executor::create"]:::move
-    Mexec_pause["executor::pause"]:::move
-    Mexec_unpause["executor::unpause"]:::move
-    Mexec_deposit["executor::deposit&lt;T&gt;"]:::move
-    Mexec_withdraw["executor::withdraw / withdraw_all&lt;T&gt;"]:::move
-    Mexec_refresh["executor::refresh_quotes_permissionless&lt;Base, Quote&gt;"]:::move
-    Mexec_update_cfg["executor::update_config"]:::move
-    Mpyth_stamp["price_info::publish_price_feed<br/>(re-stamp ts, same magnitude/expo)"]:::move
-    Mtransfer["0x2::transfer::public_share_object<br/>+ transfer AdminCap to sender"]:::move
-  end
-
-  subgraph Shared["Shared objects touched"]
-    direction TB
-    OPool["DeepBook Pool"]:::obj
-    OExec["Executor (shared)"]:::obj
-    OAdmin["AdminCap (sender-owned)"]:::obj
-    OBM["BalanceManager"]:::obj
-    OPyth["Pyth State + 2× PriceInfoObject"]:::obj
-    OClock["0x6 Clock"]:::obj
-  end
-
-  UISetup --> BCreate
-  UIFunding -- "deposit" --> BDeposit
-  UIFunding -- "withdraw" --> BWithdraw
-  UIBot --> BRefresh
-  BotMaint --> BRefresh
-  BotMA -. "no AMM PTB; pyth update + DeepBook swaps" .-> Mpyth_stamp
-  UIConfig --> BUpdateCfg
-
-  BCreate --> Mmarket --> Mconfig --> Mexec_create --> Mtransfer
-  Mmarket --- OPool
-  Mexec_create --- OAdmin
-
-  BDeposit --> Mexec_deposit
-  Mexec_deposit --- OExec
-  Mexec_deposit --- OBM
-
-  BWithdraw -- "if currentActive" --> Mexec_pause
-  BWithdraw --> Mexec_withdraw
-  BWithdraw -- "if currentActive" --> Mexec_unpause
-  Mexec_pause --- OExec
-  Mexec_pause --- OPool
-  Mexec_withdraw --- OBM
-
-  BRefresh --> Mpyth_stamp --> Mexec_refresh
-  Mpyth_stamp --- OPyth
-  Mexec_refresh --- OExec
-  Mexec_refresh --- OPool
-  Mexec_refresh --- OPyth
-  Mexec_refresh --- OClock
-
-  BUpdateCfg --> Mconfig
-  BUpdateCfg --> Mexec_update_cfg
-  Mexec_update_cfg --- OExec
-  Mexec_update_cfg --- OAdmin
-
-```
