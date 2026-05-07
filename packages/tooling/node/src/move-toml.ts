@@ -349,87 +349,6 @@ const updateMoveTomlDependencyReplacement = ({
   }
 }
 
-const updateDependenciesBlockEntry = ({
-  block,
-  dependencyName,
-  replacementEntry
-}: {
-  block: string
-  dependencyName: string
-  replacementEntry: string
-}): { updatedBlock: string; didUpdate: boolean } => {
-  const lineEnding = resolveLineEnding(block)
-  const lines = block.split(/\r?\n/)
-  const headerIndex = lines.findIndex((line) =>
-    /^\s*\[dependencies\]\s*(#.*)?$/.test(line)
-  )
-  if (headerIndex < 0) return { updatedBlock: block, didUpdate: false }
-
-  const escapedDependencyName = escapeRegExp(dependencyName)
-  const entryRegex = new RegExp(
-    `^(\\s*)${escapedDependencyName}\\s*=\\s*\\{[^}]*\\}(?:(\\s*#.*))?$`
-  )
-  const entryIndex = lines.findIndex((line) => entryRegex.test(line))
-
-  if (entryIndex >= 0) {
-    const match = lines[entryIndex]?.match(entryRegex)
-    const indent = match?.[1] ?? ""
-    const commentSuffix = match?.[2] ?? ""
-    const nextLine = `${indent}${replacementEntry}${commentSuffix}`
-    if (lines[entryIndex] === nextLine)
-      return { updatedBlock: block, didUpdate: false }
-    lines[entryIndex] = nextLine
-    return { updatedBlock: lines.join(lineEnding), didUpdate: true }
-  }
-
-  const indent = resolveSectionEntryIndent(lines, headerIndex)
-  const lastContentIndex = (() => {
-    for (let index = lines.length - 1; index > headerIndex; index -= 1) {
-      if (lines[index].trim().length > 0) return index
-    }
-    return headerIndex
-  })()
-  const insertIndex = lastContentIndex + 1
-  lines.splice(insertIndex, 0, `${indent}${replacementEntry}`)
-  return { updatedBlock: lines.join(lineEnding), didUpdate: true }
-}
-
-const updateMoveTomlDependencySource = ({
-  contents,
-  dependencyName,
-  replacementEntry
-}: {
-  contents: string
-  dependencyName: string
-  replacementEntry: string
-}): { updatedContents: string; didUpdate: boolean } => {
-  const lineEnding = resolveLineEnding(contents)
-  const sectionBlock = findSectionBlock(contents, "dependencies")
-  const newEntryBlock = `[dependencies]${lineEnding}${replacementEntry}`
-
-  if (!sectionBlock) {
-    return {
-      updatedContents: insertDepReplacementBlock(contents, newEntryBlock),
-      didUpdate: true
-    }
-  }
-
-  const { updatedBlock, didUpdate } = updateDependenciesBlockEntry({
-    block: sectionBlock.block,
-    dependencyName,
-    replacementEntry
-  })
-  if (!didUpdate) return { updatedContents: contents, didUpdate: false }
-
-  return {
-    updatedContents:
-      contents.slice(0, sectionBlock.start) +
-      updatedBlock +
-      contents.slice(sectionBlock.end),
-    didUpdate: true
-  }
-}
-
 const parseDependencyReplacementEntry = ({
   block,
   dependencyName
@@ -588,42 +507,6 @@ const updateMoveTomlEnvironmentChainId = ({
   }
 }
 
-const forceMoveTomlEnvironmentChainId = ({
-  contents,
-  environmentName,
-  chainId
-}: {
-  contents: string
-  environmentName: string
-  chainId: string
-}): { updatedContents: string; didUpdate: boolean } => {
-  const lineEnding = resolveLineEnding(contents)
-  const environmentBlock = findSectionBlock(contents, "environments")
-  const newEntryBlock = `[environments]${lineEnding}${environmentName} = "${chainId}"`
-
-  if (!environmentBlock) {
-    return {
-      updatedContents: insertEnvironmentBlock(contents, newEntryBlock),
-      didUpdate: true
-    }
-  }
-
-  const { updatedBlock, didUpdate } = updateEnvironmentBlock({
-    block: environmentBlock.block,
-    environmentName,
-    chainId
-  })
-  if (!didUpdate) return { updatedContents: contents, didUpdate: false }
-
-  return {
-    updatedContents:
-      contents.slice(0, environmentBlock.start) +
-      updatedBlock +
-      contents.slice(environmentBlock.end),
-    didUpdate: true
-  }
-}
-
 /**
  * Resolves the chain identifier from RPC, falling back to Sui CLI env config.
  */
@@ -748,77 +631,6 @@ export const syncMoveTomlDependencyPublishedIds = async ({
     replacementEntry,
     dryRun
   })
-}
-
-export const syncMoveTomlDependencyLocalPath = async ({
-  moveTomlPath,
-  dependencyName,
-  localPath,
-  dryRun = false
-}: {
-  moveTomlPath: string
-  dependencyName: string
-  localPath: string
-  dryRun?: boolean
-}): Promise<{ moveTomlPath: string; didUpdate: boolean }> => {
-  const replacementEntry = `${dependencyName} = { local = "${localPath}" }`
-  const contents = await fs.readFile(moveTomlPath, "utf8")
-  const { updatedContents, didUpdate } = updateMoveTomlDependencySource({
-    contents,
-    dependencyName,
-    replacementEntry
-  })
-
-  if (didUpdate && !dryRun) {
-    await fs.writeFile(moveTomlPath, updatedContents)
-  }
-
-  return { moveTomlPath, didUpdate }
-}
-
-export const ensureMoveTomlEnvironmentChainId = async ({
-  moveTomlPath,
-  environmentName,
-  chainId,
-  dryRun = false
-}: {
-  moveTomlPath: string
-  environmentName: string
-  chainId: string
-  dryRun?: boolean
-}): Promise<{ moveTomlPath: string; didUpdate: boolean }> => {
-  const contents = await fs.readFile(moveTomlPath, "utf8")
-  const { updatedContents, didUpdate } = forceMoveTomlEnvironmentChainId({
-    contents,
-    environmentName,
-    chainId
-  })
-
-  if (didUpdate && !dryRun) {
-    await fs.writeFile(moveTomlPath, updatedContents)
-  }
-
-  return { moveTomlPath, didUpdate }
-}
-
-export const removeMoveTomlAddressesSection = async ({
-  moveTomlPath,
-  dryRun = false
-}: {
-  moveTomlPath: string
-  dryRun?: boolean
-}): Promise<{ moveTomlPath: string; didUpdate: boolean }> => {
-  const contents = await fs.readFile(moveTomlPath, "utf8")
-  const { updatedContents, didUpdate } = removeMoveTomlSection(
-    contents,
-    "addresses"
-  )
-
-  if (didUpdate && !dryRun) {
-    await fs.writeFile(moveTomlPath, updatedContents)
-  }
-
-  return { moveTomlPath, didUpdate }
 }
 
 export const clearPublishedEntryForNetwork = async ({

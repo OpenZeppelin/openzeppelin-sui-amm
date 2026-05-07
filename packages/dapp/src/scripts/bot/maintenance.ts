@@ -4,7 +4,7 @@
  * Pyth price (whatever `bot:market-activity` — or any other publisher —
  * has walked it to).
  *
- * Each tick (single PTB, one signature):
+ * Each tick (one PTB per executor, one signature each):
  *   1. Re-read both `PriceInfoObject`s and re-stamp them with the SAME
  *      magnitude/expo/conf so only the `timestamp` advances. Without that
  *      bump, the executor's `assert_price_age_within_limit` aborts after
@@ -13,22 +13,26 @@
  *      cancels its previous orders and re-posts around the now-fresh price.
  *
  * Configuration:
- *   - `--executor-id` (required): the AMM `Executor` shared-object id.
- *   - `--pool-id` (optional): defaults to `pools[0].poolId` from
- *     `packages/dapp/deployments/mock.localnet.json`.
+ *   - `--executor-id` (optional): single executor to maintain. When omitted,
+ *     the loop discovers every executor ever created from the AMM package
+ *     by scanning `ExecutorCreated` events and refreshes each per tick.
+ *   - `--pool-id` (optional): only honored in single-executor mode; defaults
+ *     to the executor's bound `poolId`. In auto-discovery mode each
+ *     executor's pool comes from its own `Market.pool_id`.
  *   - `--interval-ms` (default 5000): tick cadence.
  *   - Signer is `MARKET_ACTIVITY_PRIVATE_KEY` from `packages/dapp/.env`.
  *
  * Code reuse: the PTB is built via the same
  * `buildLocalnetRefreshQuotesTransaction` helper the UI's Refresh Quotes
  * button uses, and the `magnitude/expo/conf` reader is the shared
- * `readPythPriceComponentsFromContent`. The executor's coin types and
- * Pyth feed ids come from `getTraderAccountOverview` instead of being
- * parsed locally — `Executor` has no generic parameters; both type tags
- * live in `Market.{base,quote}`.
+ * `readPythPriceComponentsFromContent`. The executor's coin types, Pyth
+ * feed ids, and pool id all come from `getTraderAccountOverview` —
+ * `Executor` has no generic parameters; both type tags live in
+ * `Market.{base,quote}`.
  */
 
 import { SuiPythClient } from "@pythnetwork/pyth-sui-js"
+import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import yargs from "yargs"
 
 import { readPythPriceComponentsFromContent } from "@sui-amm/domain-core/models/pyth"
@@ -43,8 +47,18 @@ import {
 import { loadKeypair } from "@sui-amm/tooling-node/keypair"
 import { logKeyValueGreen, logWarning } from "@sui-amm/tooling-node/log"
 import { runSuiScript } from "@sui-amm/tooling-node/process"
+import type { SuiClient } from "@mysten/sui/client"
 
 import { mockArtifactPath, type MockArtifact } from "../../utils/mocks.ts"
+
+type ExecutorContext = {
+  executorId: string
+  poolId: string
+  baseCoinType: string
+  quoteCoinType: string
+  basePriceInfoObjectId: string
+  quotePriceInfoObjectId: string
+}
 
 process.env.SUI_NETWORK = "localnet"
 
@@ -62,17 +76,84 @@ const requireMockField = <T>(value: T | undefined, label: string): T => {
   return value
 }
 
+// Pull every executor ever created from this AMM package by scanning
+// `ExecutorCreated` events. Returns ids in creation order so a tick
+// processes oldest-first (deterministic logs across runs).
+const discoverExecutorIds = async (
+  ammPackageId: string,
+  suiClient: SuiClient
+): Promise<string[]> => {
+  const ids = new Set<string>()
+  let cursor: { txDigest: string; eventSeq: string } | null | undefined =
+    undefined
+  while (true) {
+    const page = await suiClient.queryEvents({
+      query: {
+        MoveEventType: `${ammPackageId}::events::ExecutorCreated`
+      },
+      cursor,
+      order: "ascending",
+      limit: 200
+    })
+    for (const event of page.data) {
+      const data = event.parsedJson as { executor_id?: unknown } | undefined
+      if (typeof data?.executor_id !== "string") continue
+      ids.add(normalizeSuiObjectId(data.executor_id))
+    }
+    if (!page.hasNextPage || !page.nextCursor) break
+    cursor = page.nextCursor
+  }
+  return [...ids]
+}
+
+// Resolve a single executor's coin types, pool id, and PriceInfoObject ids.
+// Result is cached across ticks (the inputs are immutable for an executor's
+// lifetime), so each subsequent tick only needs the four `getSuiSharedObject`
+// reads inside the per-executor refresh path.
+const buildExecutorContext = async (
+  executorId: string,
+  ammPackageId: string,
+  pythStateId: string,
+  pythClient: SuiPythClient,
+  suiClient: SuiClient,
+  poolIdOverride?: string
+): Promise<ExecutorContext> => {
+  const overview = await getTraderAccountOverview(
+    executorId,
+    suiClient,
+    ammPackageId
+  )
+  const [basePriceInfoObjectId, quotePriceInfoObjectId] = await Promise.all([
+    pythClient.getPriceFeedObjectId(overview.basePythPriceFeedIdHex),
+    pythClient.getPriceFeedObjectId(overview.quotePythPriceFeedIdHex)
+  ])
+  if (!basePriceInfoObjectId || !quotePriceInfoObjectId) {
+    throw new Error(
+      `Pyth state ${pythStateId} has no PriceInfoObject for ${
+        !basePriceInfoObjectId ? `base ${overview.basePythPriceFeedIdHex}` : ""
+      } ${
+        !quotePriceInfoObjectId
+          ? `quote ${overview.quotePythPriceFeedIdHex}`
+          : ""
+      }`.trim()
+    )
+  }
+  return {
+    executorId,
+    poolId: poolIdOverride ?? overview.poolId,
+    baseCoinType: overview.baseCoinType,
+    quoteCoinType: overview.quoteCoinType,
+    basePriceInfoObjectId,
+    quotePriceInfoObjectId
+  }
+}
+
 runSuiScript(
   async (tooling, cliArguments) => {
     assertLocalnetNetwork(tooling.suiConfig.network.networkName)
 
     const intervalMs = cliArguments.intervalMs
-    const executorId = cliArguments.executorId
-    if (!executorId) {
-      throw new Error(
-        "--executor-id is required. Pass the shared-object id of the AMM Executor you want to maintain."
-      )
-    }
+    const explicitExecutorId = cliArguments.executorId
 
     const mockArtifact = await readArtifact<MockArtifact>(mockArtifactPath, {})
     const pythPackageId = requireMockField(
@@ -83,9 +164,6 @@ runSuiScript(
       mockArtifact.pythStateId,
       "pythStateId"
     )
-    const poolId =
-      cliArguments.poolId ??
-      requireMockField(mockArtifact.pools?.[0]?.poolId, "pools[0].poolId")
 
     // Look up the most recent `openzeppelin_market_maker` publish so the
     // overview's `expectedType` check matches the currently-bound executor.
@@ -113,108 +191,143 @@ runSuiScript(
     // Top up gas via the localnet faucet so the first refresh has SUI to spend.
     await tooling.ensureFoundedAddress({ signerAddress: ownerAddress, signer })
 
-    // Pull the executor's `<Base, Quote>` coin types and Pyth feed ids from the
-    // same `getTraderAccountOverview` helper the UI uses — the `Executor`
-    // struct has no generic params, so coin types come from `Market.{base,quote}`.
-    const overview = await getTraderAccountOverview(
-      executorId,
-      tooling.suiClient,
-      ammPackageId
-    )
-
     const pythClient = new SuiPythClient(
       tooling.suiClient,
       pythStateId,
       pythStateId
     )
-    const [basePriceInfoObjectId, quotePriceInfoObjectId] = await Promise.all([
-      pythClient.getPriceFeedObjectId(overview.basePythPriceFeedIdHex),
-      pythClient.getPriceFeedObjectId(overview.quotePythPriceFeedIdHex)
-    ])
-    if (!basePriceInfoObjectId || !quotePriceInfoObjectId) {
-      throw new Error(
-        `Pyth state ${pythStateId} has no PriceInfoObject for ${
-          !basePriceInfoObjectId
-            ? `base ${overview.basePythPriceFeedIdHex}`
-            : ""
-        } ${
-          !quotePriceInfoObjectId
-            ? `quote ${overview.quotePythPriceFeedIdHex}`
-            : ""
-        }`.trim()
+
+    // Cached per-executor context (coin types, pool, PriceInfoObject ids).
+    // Inputs are immutable for an executor's lifetime, so we resolve once and
+    // reuse — only the four shared-object reads run every tick per executor.
+    const contextByExecutorId = new Map<string, ExecutorContext>()
+
+    const ensureContext = async (
+      executorId: string
+    ): Promise<ExecutorContext> => {
+      const cached = contextByExecutorId.get(executorId)
+      if (cached) return cached
+      const context = await buildExecutorContext(
+        executorId,
+        ammPackageId,
+        pythStateId,
+        pythClient,
+        tooling.suiClient,
+        // --pool-id only overrides in single-executor mode; in auto-discovery
+        // each executor's bound pool comes from its own Market.pool_id.
+        explicitExecutorId ? cliArguments.poolId : undefined
+      )
+      contextByExecutorId.set(executorId, context)
+      return context
+    }
+
+    const refreshExecutor = async (tick: number, context: ExecutorContext) => {
+      // Re-fetch all four shared objects each tick so the price content is
+      // fresh (the market-activity bot may have walked it since the last
+      // refresh). Cheap on localnet — four `getObject` calls in parallel.
+      const [executorShared, poolShared, basePriceInfo, quotePriceInfo] =
+        await Promise.all([
+          getSuiSharedObject(
+            { objectId: context.executorId, mutable: true },
+            { suiClient: tooling.suiClient }
+          ),
+          getSuiSharedObject(
+            { objectId: context.poolId, mutable: true },
+            { suiClient: tooling.suiClient }
+          ),
+          getSuiSharedObject(
+            { objectId: context.basePriceInfoObjectId, mutable: true },
+            { suiClient: tooling.suiClient }
+          ),
+          getSuiSharedObject(
+            { objectId: context.quotePriceInfoObjectId, mutable: true },
+            { suiClient: tooling.suiClient }
+          )
+        ])
+      const basePriceComponents = readPythPriceComponentsFromContent(
+        basePriceInfo.object.content
+      )
+      const quotePriceComponents = readPythPriceComponentsFromContent(
+        quotePriceInfo.object.content
+      )
+
+      const transaction = buildLocalnetRefreshQuotesTransaction({
+        packageId: ammPackageId,
+        executor: executorShared,
+        pool: poolShared,
+        baseAssetTypeTag: context.baseCoinType,
+        quoteAssetTypeTag: context.quoteCoinType,
+        pythMockPackageId: pythPackageId,
+        basePriceInfoObject: basePriceInfo,
+        quotePriceInfoObject: quotePriceInfo,
+        basePriceComponents,
+        quotePriceComponents
+      })
+
+      const { transactionResult } = await tooling.signAndExecute({
+        transaction,
+        signer,
+        // Refresh quotes mutates the executor + Pyth feeds; nothing useful
+        // gets created. Skip the artifact write so two concurrent loops
+        // (e.g. this one + market-activity) can't corrupt the ledger.
+        persistCreatedObjects: false
+      })
+      logKeyValueGreen(`tick ${tick}`)(
+        `executor ${context.executorId} refreshed · digest=${transactionResult.digest}`
       )
     }
 
-    logKeyValueGreen("executor")(executorId)
-    logKeyValueGreen("pool")(poolId)
+    logKeyValueGreen("amm-package")(ammPackageId)
     logKeyValueGreen("signer")(ownerAddress)
-    logKeyValueGreen("base-feed")(overview.basePythPriceFeedIdHex)
-    logKeyValueGreen("quote-feed")(overview.quotePythPriceFeedIdHex)
     logKeyValueGreen("interval-ms")(String(intervalMs))
+    if (explicitExecutorId) {
+      logKeyValueGreen("mode")(`single (--executor-id ${explicitExecutorId})`)
+    } else {
+      logKeyValueGreen("mode")(
+        "auto-discovery (every tick: scan ExecutorCreated events + refresh each)"
+      )
+    }
 
     let tick = 0
     while (true) {
       tick += 1
+
+      let executorIds: string[]
       try {
-        // Re-fetch all four shared objects each tick so the price content is
-        // fresh (the market-activity bot may have walked it since the last
-        // refresh). Cheap on localnet — four `getObject` calls in parallel.
-        const [executorShared, poolShared, basePriceInfo, quotePriceInfo] =
-          await Promise.all([
-            getSuiSharedObject(
-              { objectId: executorId, mutable: true },
-              { suiClient: tooling.suiClient }
-            ),
-            getSuiSharedObject(
-              { objectId: poolId, mutable: true },
-              { suiClient: tooling.suiClient }
-            ),
-            getSuiSharedObject(
-              { objectId: basePriceInfoObjectId, mutable: true },
-              { suiClient: tooling.suiClient }
-            ),
-            getSuiSharedObject(
-              { objectId: quotePriceInfoObjectId, mutable: true },
-              { suiClient: tooling.suiClient }
-            )
-          ])
-        const basePriceComponents = readPythPriceComponentsFromContent(
-          basePriceInfo.object.content
-        )
-        const quotePriceComponents = readPythPriceComponentsFromContent(
-          quotePriceInfo.object.content
-        )
-
-        const transaction = buildLocalnetRefreshQuotesTransaction({
-          packageId: ammPackageId,
-          executor: executorShared,
-          pool: poolShared,
-          baseAssetTypeTag: overview.baseCoinType,
-          quoteAssetTypeTag: overview.quoteCoinType,
-          pythMockPackageId: pythPackageId,
-          basePriceInfoObject: basePriceInfo,
-          quotePriceInfoObject: quotePriceInfo,
-          basePriceComponents,
-          quotePriceComponents
-        })
-
-        const { transactionResult } = await tooling.signAndExecute({
-          transaction,
-          signer,
-          // Refresh quotes mutates the executor + Pyth feeds; nothing useful
-          // gets created. Skip the artifact write so two concurrent loops
-          // (e.g. this one + market-activity) can't corrupt the ledger.
-          persistCreatedObjects: false
-        })
-        logKeyValueGreen(`tick ${tick}`)(
-          `refreshed · digest=${transactionResult.digest}`
-        )
+        // Branch on `explicitExecutorId` directly so TS narrows it to `string`
+        // inside the truthy branch (no non-null assertion needed).
+        executorIds = explicitExecutorId
+          ? [explicitExecutorId]
+          : await discoverExecutorIds(ammPackageId, tooling.suiClient)
       } catch (error) {
         logWarning(
-          `tick ${tick} failed: ${
+          `tick ${tick} discovery failed: ${
             error instanceof Error ? error.message : String(error)
           }`
         )
+        await sleep(intervalMs)
+        continue
+      }
+
+      if (executorIds.length === 0) {
+        logWarning(
+          `tick ${tick}: no executors found yet (no ExecutorCreated events from ${ammPackageId}). Waiting…`
+        )
+        await sleep(intervalMs)
+        continue
+      }
+
+      for (const executorId of executorIds) {
+        try {
+          const context = await ensureContext(executorId)
+          await refreshExecutor(tick, context)
+        } catch (error) {
+          logWarning(
+            `tick ${tick} executor ${executorId} failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+        }
       }
       await sleep(intervalMs)
     }

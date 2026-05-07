@@ -205,7 +205,7 @@ const LegendPill = ({
     onClick={onClick}
     aria-pressed={visible}
     className={`flex items-center gap-1.5 rounded transition-opacity hover:opacity-100 ${
-      visible ? "opacity-100" : "opacity-40 line-through"
+      visible ? "opacity-100" : "line-through opacity-40"
     }`}
   >
     <span
@@ -242,16 +242,12 @@ const Sparkline = ({ points }: { points: SeriesPoint[] }) => {
     if (isVisible("deepbook") && point.deepbookValue !== undefined)
       allValues.push(point.deepbookValue)
     if (isVisible("inner")) {
-      if (point.innerBidValue !== undefined)
-        allValues.push(point.innerBidValue)
-      if (point.innerAskValue !== undefined)
-        allValues.push(point.innerAskValue)
+      if (point.innerBidValue !== undefined) allValues.push(point.innerBidValue)
+      if (point.innerAskValue !== undefined) allValues.push(point.innerAskValue)
     }
     if (isVisible("outer")) {
-      if (point.outerBidValue !== undefined)
-        allValues.push(point.outerBidValue)
-      if (point.outerAskValue !== undefined)
-        allValues.push(point.outerAskValue)
+      if (point.outerBidValue !== undefined) allValues.push(point.outerBidValue)
+      if (point.outerAskValue !== undefined) allValues.push(point.outerAskValue)
     }
   }
 

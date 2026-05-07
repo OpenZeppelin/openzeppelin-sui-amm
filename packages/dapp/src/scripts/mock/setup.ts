@@ -204,8 +204,7 @@ runSuiScript(
     // since the last mock:setup, the State id rotated and any cached
     // PriceInfoObjects point at a dead State — drop them so ensurePriceFeeds
     // creates fresh ones in the new State.
-    const cachedFeedsAreLive =
-      existingState.pythStateId === pythStateId
+    const cachedFeedsAreLive = existingState.pythStateId === pythStateId
     const desiredExistingPriceFeeds = cachedFeedsAreLive
       ? filterPriceFeedsToDefaults(existingState.priceFeeds || [])
       : []
@@ -324,10 +323,7 @@ const publishLocalnetPackages = async (
   // to mock:setup, and stale ids would silently route writes into ghost
   // objects.
   const { deepbookRegistryId, deepbookAdminCapId } =
-    await resolveDeepbookObjectsFromPublish(
-      ammPublishDigest,
-      tooling.suiClient
-    )
+    await resolveDeepbookObjectsFromPublish(ammPublishDigest, tooling.suiClient)
   const pythStateId = await resolvePythStateFromPublish(
     ammPublishDigest,
     tooling.suiClient

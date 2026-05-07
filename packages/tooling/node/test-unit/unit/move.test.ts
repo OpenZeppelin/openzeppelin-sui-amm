@@ -13,13 +13,10 @@ import {
   buildMoveTestPublishArguments,
   canonicalizePackagePath,
   clearPublishedEntryForNetwork,
-  ensureMoveTomlEnvironmentChainId,
   hasDeploymentForPackage,
-  removeMoveTomlAddressesSection,
   readMoveTomlDependencyReplacement,
   resolveFullPackagePath,
   syncMoveEnvironmentChainId,
-  syncMoveTomlDependencyLocalPath,
   syncMoveTomlDependencyReplacementEntry,
   syncMoveTomlDependencyPublishedIds
 } from "../../src/move.ts"
@@ -133,86 +130,6 @@ describe("syncMoveEnvironmentChainId", () => {
 
       const unchanged = await readTextFile(path.join(dir, "Move.toml"))
       expect(unchanged).toBe('[package]\nname = "noop"\nversion = "0.0.1"\n')
-    })
-  })
-})
-
-describe("ensureMoveTomlEnvironmentChainId", () => {
-  it("adds environments even when missing markers", async () => {
-    await withTempDir(async (dir) => {
-      await writeFileTree(dir, {
-        "Move.toml": '[package]\nname = "noop"\nversion = "0.0.1"\n'
-      })
-
-      const result = await ensureMoveTomlEnvironmentChainId({
-        moveTomlPath: path.join(dir, "Move.toml"),
-        environmentName: "localnet",
-        chainId: "0xabc"
-      })
-
-      expect(result.didUpdate).toBe(true)
-
-      const updated = await readTextFile(path.join(dir, "Move.toml"))
-      expect(updated).toContain("[environments]")
-      expect(updated).toContain('localnet = "0xabc"')
-    })
-  })
-})
-
-describe("removeMoveTomlAddressesSection", () => {
-  it("removes addresses section from Move.toml", async () => {
-    await withTempDir(async (dir) => {
-      await writeFileTree(dir, {
-        "Move.toml": [
-          "[package]",
-          'name = "noop"',
-          'version = "0.0.1"',
-          "",
-          "[addresses]",
-          'noop = "0x0"',
-          "",
-          "[dependencies]",
-          'Sui = { local = "../sui" }'
-        ].join("\n")
-      })
-
-      const result = await removeMoveTomlAddressesSection({
-        moveTomlPath: path.join(dir, "Move.toml")
-      })
-
-      expect(result.didUpdate).toBe(true)
-
-      const updated = await readTextFile(path.join(dir, "Move.toml"))
-      expect(updated).not.toContain("[addresses]")
-      expect(updated).toContain("[dependencies]")
-    })
-  })
-})
-
-describe("syncMoveTomlDependencyLocalPath", () => {
-  it("updates dependencies to use a local path", async () => {
-    await withTempDir(async (dir) => {
-      await writeFileTree(dir, {
-        "Move.toml": [
-          "[package]",
-          'name = "noop"',
-          'version = "0.0.1"',
-          "",
-          "[dependencies]",
-          'token = { git = "https://example.com/token.git", rev = "main" }'
-        ].join("\n")
-      })
-
-      const result = await syncMoveTomlDependencyLocalPath({
-        moveTomlPath: path.join(dir, "Move.toml"),
-        dependencyName: "token",
-        localPath: "../token"
-      })
-
-      expect(result.didUpdate).toBe(true)
-
-      const updated = await readTextFile(path.join(dir, "Move.toml"))
-      expect(updated).toContain('token = { local = "../token" }')
     })
   })
 })

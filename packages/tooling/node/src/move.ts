@@ -5,13 +5,10 @@ import { runSuiCli } from "./suiCli.ts"
 export { buildMovePackage, runMoveBuild } from "./move-build.ts"
 export {
   clearPublishedEntryForNetwork,
-  ensureMoveTomlEnvironmentChainId,
-  removeMoveTomlAddressesSection,
   readMoveTomlDependencyReplacement,
   resolveChainIdentifier,
   syncLocalnetMoveEnvironmentChainId,
   syncMoveEnvironmentChainId,
-  syncMoveTomlDependencyLocalPath,
   syncMoveTomlDependencyReplacementEntry,
   syncMoveTomlDependencyPublishedIds,
   type MoveEnvironmentChainIdSyncResult

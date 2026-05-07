@@ -18,6 +18,7 @@ This repo is a pnpm workspace containing:
 Localnet scripts publish DeepBook from a pinned submodule so development is reproducible.
 
 Setup (once per clone):
+
 ```bash
 git submodule update --init --recursive
 ```
@@ -25,6 +26,7 @@ git submodule update --init --recursive
 If you keep DeepBook elsewhere, you can also pass `--deepbook-contract-path`
 
 Update to a newer DeepBook commit:
+
 ```bash
 cd vendor/deepbookv3
 git fetch
@@ -52,11 +54,13 @@ git submodule update --init --recursive
 #    import the same address in your browser wallet later.
 sui client new-address ed25519 publisher
 
-# 3. Point the scripts at this address. Either set the active client env to
-#    `localnet` (`sui client switch --env localnet`) or export the trio below.
-export TRADER_ADDRESS=<0x...>
-export TRADER_PRIVATE_KEY=<bech32 or base64>
-export SUI_NETWORK=localnet
+# 3. Point the scripts at this address. The dapp scripts read from
+#    `packages/dapp/.env` (loaded automatically), so persist the publisher's
+#    address + key there:
+echo "TRADER_ADDRESS=<0x...>" >> packages/dapp/.env
+echo "TRADER_PRIVATE_KEY=<bech32 or base64>" >> packages/dapp/.env
+echo "SUI_NETWORK=localnet" >> packages/dapp/.env
+# (or `sui client switch --env localnet` if you prefer the active CLI env)
 
 # 4. Start localnet in a separate terminal. `--force-regenesis` wipes any
 #    previous chain state. Keep this process running.
@@ -95,6 +99,103 @@ In the dApp:
 - `/setup` → create the executor against the SUI/USDC pool id from step 8, using the real Pyth feed-id hexes (`0x50c67b3f…ea266` for SUI/USD, `0x41f36259…e722` for USDC/USD).
 - `/funding` → deposit base + quote into the BalanceManager.
 - `/bot` → trigger Refresh quotes.
+
+## Market activity testing (localnet)
+
+Two long-running scripts simulate a live market against your localnet AMM
+without touching the UI:
+
+- **`bot:market-activity`** — random-walks the mock SUI/USD Pyth price and
+  spams the DeepBook pool with random market orders so the order book has
+  flow.
+- **`bot:maintenance`** — periodically calls
+  `executor::refresh_quotes_permissionless` so the AMM keeps its quotes in
+  sync with the walked Pyth price.
+
+Bring up the chain through step 8 of the Quickstart, plus seed gas for the
+bot signer. **The bot must be a different keypair from `TRADER_*`** —
+sharing the same address means the bot and the UI will fight over the
+same gas coin objects (and the same USDC `Coin<>` objects in the wallet),
+producing nondeterministic `ObjectVersionUnavailable` failures whenever
+both are running.
+
+```bash
+# 1. Generate a fresh, dedicated bot keypair (separate from `publisher`).
+sui client new-address ed25519 market-bot
+sui keytool export --key-identity <bot-address>
+# (Take the `0x...` address and the `suiprivkey1...` value from the export.)
+
+# 2. Persist them to packages/dapp/.env so both bots pick them up:
+echo "MARKET_ACTIVITY_ADDRESS=<0x...>" >> packages/dapp/.env
+echo "MARKET_ACTIVITY_PRIVATE_KEY=<bech32-from-step-1>" >> packages/dapp/.env
+
+# 3. Deposit base + quote into at least one executor's BalanceManager via
+#    the UI's /funding page. Without it, refresh_quotes has nothing to post
+#    and the maintenance loop will warn each tick.
+```
+
+The bots auto-fund the new address via the localnet faucet on first run, so
+you don't need to manually transfer SUI to it.
+
+### Run the market-activity bot
+
+```bash
+# Defaults: 2 s tick, ±$0.10 price walk per tick around $1.50, ≤ 1 SUI per
+# sell, ≤ 2 USDC per buy. Override any of them via CLI flags.
+pnpm --filter dapp bot:market-activity \
+  --interval-ms 2000 \
+  --max-price-delta 0.10 \
+  --max-base 1 \
+  --max-quote 2
+```
+
+Pass `--max-price-delta 0` to freeze the price (only random orders flow);
+pass `--start-price 1.50` to seed the walk from a specific value when the
+Pyth state is fresh. The bot logs each tick's digest, the chosen side, and
+the new mock price.
+
+### Run the maintenance bot
+
+```bash
+# Auto-discovery: scans `<AMM>::events::ExecutorCreated` and refreshes every
+# executor ever created from the current AMM package. New executors get
+# picked up automatically on the next tick.
+pnpm --filter dapp bot:maintenance --interval-ms 5000
+
+# Single-executor: explicit id (and optional pool override).
+pnpm --filter dapp bot:maintenance \
+  --executor-id 0x<executor> \
+  --pool-id 0x<pool> \
+  --interval-ms 5000
+```
+
+Each tick re-stamps both `PriceInfoObject`s' timestamps (without changing
+magnitude/expo) so `assert_price_age_within_limit` doesn't abort, then runs
+`refresh_quotes_permissionless<Base, Quote>` per executor. Failures are
+isolated per-executor — one paused or under-funded executor doesn't stop
+the loop.
+
+### Typical end-to-end test
+
+```bash
+# Terminal 1: localnet
+pnpm --filter dapp chain:localnet:start --force-regenesis --with-faucet
+
+# Terminal 2: bring up + open UI, then create an executor on /setup,
+# fund it on /funding.
+
+# Terminal 3: walk the price + spam orders
+pnpm --filter dapp bot:market-activity
+
+# Terminal 4: keep AMM quotes fresh against the walked price
+pnpm --filter dapp bot:maintenance
+```
+
+The dashboard's Mid Price card (oracle line + DeepBook line + inner/outer
+spread bands), Active Orders card, and Event Feed all update from the
+combined activity. Toggling an executor pause from `/bot` is a clean way to
+verify the maintenance loop's per-executor isolation — the paused one
+will warn each tick while the others keep refreshing.
 
 ## Why move:publish runs before mock:setup
 
@@ -139,3 +240,93 @@ coin-mock isn't a dep of the AMM, so it stays a standalone publish.
   `sui client` env name (`localnet`) doesn't match any `[environments]` key
   in the package's `Move.toml`. The mock packages declare `test-publish`,
   so the tooling falls back to `sui client test-publish` automatically.
+
+
+```mermaid
+flowchart LR
+  classDef ui fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef script fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef builder fill:#dcfce7,stroke:#15803d,color:#14532d
+  classDef move fill:#fce7f3,stroke:#be185d,color:#831843
+  classDef obj fill:#e0e7ff,stroke:#4338ca,color:#312e81
+
+  subgraph Entry[Entry points]
+    direction TB
+    UISetup["UI /setup"]:::ui
+    UIFunding["UI /funding (Deposit / Withdraw)"]:::ui
+    UIBot["UI /bot · Refresh quotes"]:::ui
+    UIConfig["UI /config · Update config"]:::ui
+    BotMaint["script: bot:maintenance loop"]:::script
+    BotMA["script: bot:market-activity loop"]:::script
+  end
+
+  subgraph Builders[Domain PTB builders<br/>packages/domain/core/src/ptb/amm.ts]
+    direction TB
+    BCreate["buildCreateExecutorTransaction"]:::builder
+    BDeposit["buildDepositTransaction"]:::builder
+    BWithdraw["buildWithdrawWithPauseTransaction"]:::builder
+    BRefresh["buildLocalnetRefreshQuotesTransaction"]:::builder
+    BUpdateCfg["buildUpdateConfigTransaction"]:::builder
+  end
+
+  subgraph Move["On-chain Move calls"]
+    direction TB
+    Mmarket["market::new&lt;Base, Quote&gt;"]:::move
+    Mconfig["config::new"]:::move
+    Mexec_create["executor::create"]:::move
+    Mexec_pause["executor::pause"]:::move
+    Mexec_unpause["executor::unpause"]:::move
+    Mexec_deposit["executor::deposit&lt;T&gt;"]:::move
+    Mexec_withdraw["executor::withdraw / withdraw_all&lt;T&gt;"]:::move
+    Mexec_refresh["executor::refresh_quotes_permissionless&lt;Base, Quote&gt;"]:::move
+    Mexec_update_cfg["executor::update_config"]:::move
+    Mpyth_stamp["price_info::publish_price_feed<br/>(re-stamp ts, same magnitude/expo)"]:::move
+    Mtransfer["0x2::transfer::public_share_object<br/>+ transfer AdminCap to sender"]:::move
+  end
+
+  subgraph Shared["Shared objects touched"]
+    direction TB
+    OPool["DeepBook Pool"]:::obj
+    OExec["Executor (shared)"]:::obj
+    OAdmin["AdminCap (sender-owned)"]:::obj
+    OBM["BalanceManager"]:::obj
+    OPyth["Pyth State + 2× PriceInfoObject"]:::obj
+    OClock["0x6 Clock"]:::obj
+  end
+
+  UISetup --> BCreate
+  UIFunding -- "deposit" --> BDeposit
+  UIFunding -- "withdraw" --> BWithdraw
+  UIBot --> BRefresh
+  BotMaint --> BRefresh
+  BotMA -. "no AMM PTB; pyth update + DeepBook swaps" .-> Mpyth_stamp
+  UIConfig --> BUpdateCfg
+
+  BCreate --> Mmarket --> Mconfig --> Mexec_create --> Mtransfer
+  Mmarket --- OPool
+  Mexec_create --- OAdmin
+
+  BDeposit --> Mexec_deposit
+  Mexec_deposit --- OExec
+  Mexec_deposit --- OBM
+
+  BWithdraw -- "if currentActive" --> Mexec_pause
+  BWithdraw --> Mexec_withdraw
+  BWithdraw -- "if currentActive" --> Mexec_unpause
+  Mexec_pause --- OExec
+  Mexec_pause --- OPool
+  Mexec_withdraw --- OBM
+
+  BRefresh --> Mpyth_stamp --> Mexec_refresh
+  Mpyth_stamp --- OPyth
+  Mexec_refresh --- OExec
+  Mexec_refresh --- OPool
+  Mexec_refresh --- OPyth
+  Mexec_refresh --- OClock
+
+  BUpdateCfg --> Mconfig
+  BUpdateCfg --> Mexec_update_cfg
+  Mexec_update_cfg --- OExec
+  Mexec_update_cfg --- OAdmin
+
+```
