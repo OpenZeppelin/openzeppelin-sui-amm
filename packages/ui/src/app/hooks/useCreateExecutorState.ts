@@ -165,7 +165,7 @@ export const useCreateExecutorState = () => {
     buildAmmConfigFormState()
   )
   const [marketFormState, setMarketFormState] = useState<MarketConfigFormState>(
-    () => buildMarketConfigFormState()
+    () => buildMarketConfigFormState(artifacts)
   )
   // The localnet USDC mock's package id is generated per-deployment, so the
   // quote-asset default has to come from the artifact. Backfill once the
@@ -216,11 +216,11 @@ export const useCreateExecutorState = () => {
 
   const resetForm = useCallback(() => {
     setAmmFormState(buildAmmConfigFormState())
-    setMarketFormState(buildMarketConfigFormState())
+    setMarketFormState(buildMarketConfigFormState(artifacts))
     setTransactionState({ status: "idle" })
     setHasAttemptedSubmit(false)
     resetFieldState()
-  }, [resetFieldState])
+  }, [artifacts, resetFieldState])
 
   const handleAmmInputChange = useCallback(
     <K extends AmmConfigFieldKey>(key: K, value: AmmConfigFormState[K]) => {
