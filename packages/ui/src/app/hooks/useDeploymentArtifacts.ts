@@ -84,10 +84,19 @@ const loadArtifacts = async (): Promise<DeploymentArtifacts> => {
   ])
   // Pick the most recent AMM publish — the file accumulates an entry per
   // re-publish, and only the latest one matches the deps the AMM bytecode
-  // is currently bound to.
-  const ammRecord = deployment?.findLast(
-    (entry) => entry.packageName === AMM_PACKAGE_NAME
-  )
+  // is currently bound to. Iterate from the tail manually to stay ES2020-
+  // compatible (Array.prototype.findLast is ES2023; not all Next.js build
+  // targets ship a polyfill).
+  let ammRecord: DeploymentRecord | undefined
+  if (deployment) {
+    for (let index = deployment.length - 1; index >= 0; index -= 1) {
+      const entry = deployment[index]
+      if (entry?.packageName === AMM_PACKAGE_NAME) {
+        ammRecord = entry
+        break
+      }
+    }
+  }
   const coins =
     mock?.coins?.flatMap((entry) =>
       entry.label && entry.coinType
