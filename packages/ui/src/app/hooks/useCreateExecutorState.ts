@@ -401,7 +401,8 @@ export const useCreateExecutorState = () => {
         maxPriceAgeSecs: ammFormState.maxPriceAgeSecs.trim(),
         maxConfRatioBps: ammFormState.maxConfRatioBps.trim(),
         outerBalanceBps: ammFormState.outerBalanceBps.trim(),
-        inventorySkewBps: ammFormState.inventorySkewBps.trim()
+        inventorySkewBps: ammFormState.inventorySkewBps.trim(),
+        postOnly: ammFormState.postOnly.trim()
       })
 
       const createTransaction = buildCreateExecutorTransaction({
@@ -420,7 +421,8 @@ export const useCreateExecutorState = () => {
         maxPriceAgeSecs: inputs.maxPriceAgeSecs,
         maxConfRatioBps: inputs.maxConfRatioBps,
         outerBalanceBps: inputs.outerBalanceBps,
-        inventorySkewBps: inputs.inventorySkewBps
+        inventorySkewBps: inputs.inventorySkewBps,
+        postOnly: inputs.postOnly
       })
       createTransaction.setSender(walletAddress)
 

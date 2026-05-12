@@ -104,6 +104,7 @@ fun create_executor_for_pool(
         1000,
         5000,
         0,
+        true,
     );
     // Restore the native tx sender after `tx_context::dummy()` inside the `create_*_currency`
     // helpers replaced it with @0x0.
@@ -236,8 +237,8 @@ fun create_executor_creates_distinct_accounts_and_caps() {
         build_pyth_price_feed_id(4),
         build_pyth_price_feed_id(4),
     );
-    let amm_config_a = config::new(100, 200, 30_000, 30, 1000, 5000, 0);
-    let amm_config_b = config::new(125, 250, 30_000, 30, 1000, 5000, 0);
+    let amm_config_a = config::new(100, 200, 30_000, 30, 1000, 5000, 0, true);
+    let amm_config_b = config::new(125, 250, 30_000, 30, 1000, 5000, 0, true);
 
     // Restore the native tx sender after `create_sui_currency`/`create_usdc_currency` used
     // `tx_context::dummy()` and reset it to @0x0.
@@ -293,7 +294,7 @@ fun create_returns_paused_executor() {
         build_pyth_price_feed_id(20),
         build_pyth_price_feed_id(20),
     );
-    let amm_config = config::new(100, 200, 30_000, 30, 1000, 5000, 0);
+    let amm_config = config::new(100, 200, 30_000, 30, 1000, 5000, 0, true);
     scenario.next_tx(sender);
 
     let (executor_object, executor_cap) = executor::create(
@@ -610,6 +611,7 @@ fun update_config_replaces_config_before_refreshing_quotes() {
         1000,
         5000,
         0,
+        true,
     );
     executor_object.update_config(&executor_cap, updated_config);
     assert_emitted!(executor_config_updated(executor_object.id()));
@@ -794,7 +796,7 @@ fun update_config_preserves_paused_state() {
     executor_object.pause(&executor_cap, &mut pool, &clock, scenario.ctx());
     assert_emitted!(executor_paused(executor_object.id()));
 
-    let updated_config = config::new(120, 240, 30_000, 30, 1000, 5000, 0);
+    let updated_config = config::new(120, 240, 30_000, 30, 1000, 5000, 0, true);
     executor_object.update_config(&executor_cap, updated_config);
 
     assert_emitted!(executor_config_updated(executor_object.id()));
@@ -846,6 +848,7 @@ fun update_config_rejects_when_unchanged() {
         1000,
         5000,
         0,
+        true,
     );
     executor_object.update_config(&executor_cap, identical_config);
 

@@ -12,6 +12,7 @@ import {
   DEFAULT_MAX_PRICE_AGE_SECS,
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
   DEFAULT_OUTER_BALANCE_BPS,
+  DEFAULT_POST_ONLY,
   DEFAULT_VOLATILITY_MULTIPLIER_BPS,
   getAmmConfigOverview,
   resolveAmmConfigInputs
@@ -45,6 +46,7 @@ type CreateAmmArguments = {
   maxConfRatioBps?: string
   outerBalanceBps?: string
   inventorySkewBps?: string
+  postOnly?: string
   ammPackageId?: string
   devInspect?: boolean
   dryRun?: boolean
@@ -101,7 +103,8 @@ runSuiScript(
       maxPriceAgeSecs: cliArguments.maxPriceAgeSecs,
       maxConfRatioBps: cliArguments.maxConfRatioBps,
       outerBalanceBps: cliArguments.outerBalanceBps,
-      inventorySkewBps: cliArguments.inventorySkewBps
+      inventorySkewBps: cliArguments.inventorySkewBps,
+      postOnly: cliArguments.postOnly
     })
 
     const pool = await tooling.getImmutableSharedObject({ objectId: poolId })
@@ -148,7 +151,8 @@ runSuiScript(
       maxPriceAgeSecs: ammConfigInputs.maxPriceAgeSecs,
       maxConfRatioBps: ammConfigInputs.maxConfRatioBps,
       outerBalanceBps: ammConfigInputs.outerBalanceBps,
-      inventorySkewBps: ammConfigInputs.inventorySkewBps
+      inventorySkewBps: ammConfigInputs.inventorySkewBps,
+      postOnly: ammConfigInputs.postOnly
     })
 
     const { execution, summary } = await tooling.executeTransactionWithSummary({
@@ -302,6 +306,14 @@ runSuiScript(
       description:
         "Inventory-driven mid-shift coefficient in basis points; 0 disables skewing (u64).",
       default: DEFAULT_INVENTORY_SKEW_BPS,
+      demandOption: false
+    })
+    .option("postOnly", {
+      alias: ["post-only"],
+      type: "string",
+      description:
+        "When \"true\", refresh_quotes places orders as post-only: any order that would cross the resting book aborts the whole refresh, preserving the previous quotes. When \"false\", the crossing portion executes as a taker (legacy behavior).",
+      default: DEFAULT_POST_ONLY,
       demandOption: false
     })
     .option("ammPackageId", {

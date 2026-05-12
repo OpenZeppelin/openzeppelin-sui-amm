@@ -284,7 +284,8 @@ export const createAmmConfigSnapshot = async ({
     maxPriceAgeSecs: ammConfigInputs.maxPriceAgeSecs,
     maxConfRatioBps: ammConfigInputs.maxConfRatioBps,
     outerBalanceBps: ammConfigInputs.outerBalanceBps,
-    inventorySkewBps: ammConfigInputs.inventorySkewBps
+    inventorySkewBps: ammConfigInputs.inventorySkewBps,
+    postOnly: ammConfigInputs.postOnly
   })
 
   const { execution, summary } = await tooling.executeTransactionWithSummary({
@@ -331,7 +332,8 @@ export const createAmmConfigSnapshotFromArgs = async ({
   maxPriceAgeSecs,
   maxConfRatioBps,
   outerBalanceBps,
-  inventorySkewBps
+  inventorySkewBps,
+  postOnly
 }: {
   tooling: Tooling
   ammPackageId: string
@@ -345,6 +347,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
   maxConfRatioBps?: string
   outerBalanceBps?: string
   inventorySkewBps?: string
+  postOnly?: string
 }): Promise<{
   ammConfigSnapshot: AmmConfigSnapshot
   adminCapId: string
@@ -361,7 +364,8 @@ export const createAmmConfigSnapshotFromArgs = async ({
     maxPriceAgeSecs,
     maxConfRatioBps,
     outerBalanceBps,
-    inventorySkewBps
+    inventorySkewBps,
+    postOnly
   })
 
   const createdAmmConfig = await createAmmConfigSnapshot({

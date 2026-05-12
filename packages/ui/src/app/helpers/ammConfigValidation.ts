@@ -6,6 +6,7 @@ import {
   DEFAULT_MAX_PRICE_AGE_SECS,
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
   DEFAULT_OUTER_BALANCE_BPS,
+  DEFAULT_POST_ONLY,
   DEFAULT_VOLATILITY_MULTIPLIER_BPS
 } from "@sui-amm/domain-core/models/amm"
 import {
@@ -29,7 +30,7 @@ type FieldValidator = {
   maxExclusiveBps?: boolean
 }
 
-const FIELD_VALIDATORS: Record<AmmConfigFieldKey, FieldValidator> = {
+const FIELD_VALIDATORS: Partial<Record<AmmConfigFieldKey, FieldValidator>> = {
   baseSpreadBps: {
     required: "Base spread is required.",
     fallbackMessage: "Base spread must be a valid u64.",
@@ -91,15 +92,20 @@ export const buildAmmConfigFormState = (
   maxPriceAgeSecs: ammConfig?.maxPriceAgeSecs ?? DEFAULT_MAX_PRICE_AGE_SECS,
   maxConfRatioBps: ammConfig?.maxConfRatioBps ?? DEFAULT_MAX_CONF_RATIO_BPS,
   outerBalanceBps: ammConfig?.outerBalanceBps ?? DEFAULT_OUTER_BALANCE_BPS,
-  inventorySkewBps: ammConfig?.inventorySkewBps ?? DEFAULT_INVENTORY_SKEW_BPS
+  inventorySkewBps: ammConfig?.inventorySkewBps ?? DEFAULT_INVENTORY_SKEW_BPS,
+  postOnly:
+    ammConfig?.postOnly !== undefined
+      ? String(ammConfig.postOnly)
+      : DEFAULT_POST_ONLY
 })
 
 const validateField = (
   key: AmmConfigFieldKey,
   rawValue: string
 ): string | undefined => {
-  const trimmed = rawValue.trim()
   const validator = FIELD_VALIDATORS[key]
+  if (!validator) return undefined
+  const trimmed = rawValue.trim()
   if (!trimmed) return validator.required
   try {
     const parsed = validator.parse(trimmed, validator.label)

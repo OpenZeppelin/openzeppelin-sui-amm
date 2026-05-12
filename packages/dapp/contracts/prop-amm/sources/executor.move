@@ -601,7 +601,14 @@ fun try_place_limit_orders<BaseAsset, QuoteAsset>(
     let self_matching_option = constants::cancel_taker();
     let expire_timestamp = clock.timestamp_ms() + self.config.order_expiration_time_ms();
     let pay_with_deep = false;
-    let order_type = constants::no_restriction();
+    let order_type = if (self.config.post_only()) {
+        // `post_only` aborts the whole refresh if any order would cross the resting book.
+        constants::post_only()
+    } else {
+        // `no_restriction` lets the crossing portion execute
+        // as a taker against external liquidity.
+        constants::no_restriction()
+    };
 
     let mut placed = vector[];
     let mut index = 0;
