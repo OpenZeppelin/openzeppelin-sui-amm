@@ -26,6 +26,8 @@ const EPythPriceConfidenceTooWide: vector<u8> = "pyth price confidence interval 
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 7)]
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
+#[error(code = 8)]
+const EPoolNotWhitelisted: vector<u8> = "deepbook pool must be whitelisted";
 
 // === Constants ===
 
@@ -68,6 +70,9 @@ public struct MarketCurrency has drop, store {
 /// generically typed; the returned struct carries only the derived `pool_id`, the cached
 /// decimals, and the Pyth feed identifiers, so downstream executor state stays non-generic.
 ///
+/// `pool` must be a whitelisted DeepBook pool (`pool.whitelisted() == true`). On
+/// non-whitelisted pools, DeepBook charges a maker fee in the input asset when
+/// `pay_with_deep = false`.
 /// Pass the returned value into `executor::create` when creating a new market maker executor.
 public fun new<BaseAsset, QuoteAsset>(
     pool: &Pool<BaseAsset, QuoteAsset>,
@@ -76,6 +81,7 @@ public fun new<BaseAsset, QuoteAsset>(
     base_pyth_price_feed_id: vector<u8>,
     quote_pyth_price_feed_id: vector<u8>,
 ): Market {
+    assert!(pool.whitelisted(), EPoolNotWhitelisted);
     assert!(
         base_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
