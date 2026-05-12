@@ -24,6 +24,6 @@ override = true
 addr_substitutions = { pyth = "0x2" }
 
 [environments]
-test-publish = "1e949fe3"
+test-publish = "3f558656"
 [dep-replacements.test-publish]
 deepbook = { local = "../../../../vendor/deepbookv3/packages/deepbook", override = true }

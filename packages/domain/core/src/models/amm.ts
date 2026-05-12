@@ -198,7 +198,7 @@ const parseBooleanFlag = (rawValue: string, label: string): boolean => {
   const normalized = rawValue.trim().toLowerCase()
   if (normalized === "true") return true
   if (normalized === "false") return false
-  throw new Error(`${label} must be \"true\" or \"false\" (got \"${rawValue}\").`)
+  throw new Error(`${label} must be "true" or "false" (got "${rawValue}").`)
 }
 
 export const resolveAmmConfigInputs = ({

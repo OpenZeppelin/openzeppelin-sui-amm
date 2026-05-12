@@ -116,8 +116,7 @@ const resolveAmmUpdateInputs = ({
       cliArguments.outerBalanceBps ?? currentOverview.outerBalanceBps,
     inventorySkewBps:
       cliArguments.inventorySkewBps ?? currentOverview.inventorySkewBps,
-    postOnly:
-      cliArguments.postOnly ?? String(currentOverview.postOnly)
+    postOnly: cliArguments.postOnly ?? String(currentOverview.postOnly)
   })
 
   return {
@@ -287,7 +286,7 @@ runSuiScript(
       alias: ["post-only"],
       type: "string",
       description:
-        "When \"true\", refresh_quotes places orders as post-only: any order that would cross the resting book aborts the whole refresh, preserving the previous quotes. When \"false\", the crossing portion executes as a taker (legacy behavior). Defaults to the current config value.",
+        'When "true", refresh_quotes places orders as post-only: any order that would cross the resting book aborts the whole refresh, preserving the previous quotes. When "false", the crossing portion executes as a taker (legacy behavior). Defaults to the current config value.',
       demandOption: false
     })
     .option("devInspect", {

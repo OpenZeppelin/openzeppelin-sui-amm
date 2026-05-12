@@ -312,7 +312,7 @@ runSuiScript(
       alias: ["post-only"],
       type: "string",
       description:
-        "When \"true\", refresh_quotes places orders as post-only: any order that would cross the resting book aborts the whole refresh, preserving the previous quotes. When \"false\", the crossing portion executes as a taker (legacy behavior).",
+        'When "true", refresh_quotes places orders as post-only: any order that would cross the resting book aborts the whole refresh, preserving the previous quotes. When "false", the crossing portion executes as a taker (legacy behavior).',
       default: DEFAULT_POST_ONLY,
       demandOption: false
     })
