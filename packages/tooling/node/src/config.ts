@@ -111,10 +111,10 @@ const withDefault = (
         networkName,
         account: {
           keystorePath: process.env.SUI_KEYSTORE_PATH || DEFAULT_KEYSTORE_PATH,
-          accountIndex: Number(process.env.SUI_ACCOUNT_INDEX ?? 0),
-          accountAddress: process.env.SUI_ACCOUNT_ADDRESS,
-          accountPrivateKey: process.env.SUI_ACCOUNT_PRIVATE_KEY,
-          accountMnemonic: process.env.SUI_ACCOUNT_MNEMONIC
+          accountIndex: Number(process.env.TRADER_INDEX ?? 0),
+          accountAddress: process.env.TRADER_ADDRESS,
+          accountPrivateKey: process.env.TRADER_PRIVATE_KEY,
+          accountMnemonic: process.env.TRADER_MNEMONIC
         }
       },
       networkConfig || {}

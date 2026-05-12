@@ -161,7 +161,7 @@ const EventFeedCard = () => {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300/70 px-6 py-4 dark:border-slate-50/25">
           <div className="flex flex-col gap-1">
             <h2 className="text-base font-semibold text-sds-dark dark:text-sds-light">
-              Event feed
+              Event Feed
             </h2>
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
               On-chain events from{" "}

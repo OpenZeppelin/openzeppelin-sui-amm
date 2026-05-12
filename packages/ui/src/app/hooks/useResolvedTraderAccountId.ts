@@ -1,30 +1,13 @@
 "use client"
 
 import { useCurrentAccount, useSuiClient } from "@mysten/dapp-kit"
-import type { SuiClient } from "@mysten/sui/client"
-import { normalizeSuiObjectId } from "@mysten/sui/utils"
 import { useEffect, useState } from "react"
-import { resolveAmmAdminCapId } from "../helpers/ammAdminCap"
+import { resolveAmmAdminCap } from "../helpers/ammAdminCap"
+import {
+  readSelectedAdminCapId,
+  subscribeToSelectedAdminCapIdChanges
+} from "../helpers/selectedAdminCap"
 import useResolvedPackageId from "./useResolvedPackageId"
-
-const readExecutorIdFromAdminCap = async ({
-  adminCapId,
-  suiClient
-}: {
-  adminCapId: string
-  suiClient: SuiClient
-}): Promise<string | undefined> => {
-  const response = await suiClient.getObject({
-    id: adminCapId,
-    options: { showContent: true }
-  })
-  const content = response.data?.content
-  if (!content || content.dataType !== "moveObject") return undefined
-  const fields = (content as { fields?: { executor_id?: unknown } }).fields
-  const raw = fields?.executor_id
-  if (typeof raw === "string") return normalizeSuiObjectId(raw)
-  return undefined
-}
 
 export type TraderAccountIdResolutionStatus =
   | "idle"
@@ -38,6 +21,7 @@ export type TraderAccountIdResolutionStatus =
 type TraderAccountIdResolutionState = {
   status: TraderAccountIdResolutionStatus
   traderAccountId?: string
+  adminCapId?: string
   error?: string
 }
 
@@ -57,6 +41,15 @@ const useResolvedTraderAccountId = (
   const [state, setState] = useState<TraderAccountIdResolutionState>(
     emptyResolutionState()
   )
+  // Bumped whenever the user picks a different executor on /setup so the
+  // resolver re-runs and the rest of the terminal swaps over without a reload.
+  const [selectionToken, setSelectionToken] = useState(0)
+
+  useEffect(() => {
+    return subscribeToSelectedAdminCapIdChanges(() => {
+      setSelectionToken((value) => value + 1)
+    })
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -75,38 +68,34 @@ const useResolvedTraderAccountId = (
       }
     }
 
-    setState({ status: "loading" })
+    // Only show the `loading` state on the FIRST resolve — once we have a
+    // ready snapshot, keep showing it while subsequent refreshes (driven by
+    // QuoteUpdated etc.) re-fetch in the background. Otherwise the terminal
+    // layout's `status !== "ready" -> return null` guard unmounts the whole
+    // page tree on every event and the dashboard scrolls back to the top.
+    setState((previous) =>
+      previous.status === "ready" ? previous : { status: "loading" }
+    )
 
     const load = async () => {
       try {
-        const adminCapId = await resolveAmmAdminCapId({
+        const preferredAdminCapId = readSelectedAdminCapId()
+        const owned = await resolveAmmAdminCap({
           ownerAddress: currentAccount.address,
           packageId: contractPackageId,
+          preferredAdminCapId,
           suiClient
         })
         if (!active) return
-        if (!adminCapId) {
+        if (!owned) {
           setState({ status: "not-found" })
-          return
-        }
-
-        const traderAccountId = await readExecutorIdFromAdminCap({
-          adminCapId,
-          suiClient
-        })
-        if (!active) return
-        if (!traderAccountId) {
-          setState({
-            status: "error",
-            error:
-              "Found an AdminCap but could not read its executor_id. Try refreshing."
-          })
           return
         }
 
         setState({
           status: "ready",
-          traderAccountId
+          traderAccountId: owned.executorId,
+          adminCapId: owned.adminCapId
         })
       } catch (error) {
         if (!active) return
@@ -123,7 +112,13 @@ const useResolvedTraderAccountId = (
     return () => {
       active = false
     }
-  }, [contractPackageId, currentAccount?.address, refreshToken, suiClient])
+  }, [
+    contractPackageId,
+    currentAccount?.address,
+    refreshToken,
+    selectionToken,
+    suiClient
+  ])
 
   return state
 }

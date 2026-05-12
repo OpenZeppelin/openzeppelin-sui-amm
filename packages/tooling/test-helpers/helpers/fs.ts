@@ -8,9 +8,6 @@ import {
 } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
-
-const testRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)))
 
 export const createTempDir = async (prefix = "tooling-test-") =>
   mkdtemp(path.join(os.tmpdir(), prefix))
@@ -44,9 +41,3 @@ export const writeFileTree = async (
 export const readTextFile = (filePath: string) => readFile(filePath, "utf8")
 
 export const resolveRealPath = (value: string) => realpath(value)
-
-export const fixturePath = (...segments: string[]) =>
-  path.join(testRoot, "fixtures", ...segments)
-
-export const readFixture = (...segments: string[]) =>
-  readTextFile(fixturePath(...segments))

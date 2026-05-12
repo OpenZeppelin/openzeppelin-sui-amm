@@ -1,8 +1,8 @@
 "use client"
 
-import { useSuiClient } from "@mysten/dapp-kit"
 import { normalizeSuiObjectId } from "@mysten/sui/utils"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
+import useMoveModuleEvents from "./useMoveModuleEvents"
 
 const safeNormalize = (value?: string) => {
   if (!value) return undefined
@@ -14,18 +14,14 @@ const safeNormalize = (value?: string) => {
 }
 
 /**
- * Subscribes to all events emitted by `packageId` and invokes `onEvent` when
- * an event's `executor_id` field matches `executorId`. Returns nothing; the
- * subscription is started on mount and torn down on unmount or when the
- * inputs change.
+ * Fires `onEvent` whenever a fresh event in `<package>::events::*` matches
+ * `executor_id == executorId` — used as a "data changed" signal that drives
+ * the trader-account refetch. Backed by the shared `useMoveModuleEvents`
+ * poller, so adding a consumer is free (no extra `queryEvents` calls).
  *
- * Useful for keeping the local copy of the Executor's `Info` struct fresh —
- * any state-changing call (deposit, withdraw, refresh_quotes_permissionless, pause/unpause,
- * config update) emits an event that we can use as a signal to re-fetch.
- *
- * Errors during subscription setup (e.g. when the RPC endpoint doesn't
- * support WebSocket subscriptions) are logged and swallowed; callers still
- * have manual `refreshTraderAccount()` as a fallback.
+ * "Fresh" means an event id (`<txDigest>:<eventSeq>`) that wasn't already in
+ * the previous snapshot — so an `onEvent` only fires once per real change,
+ * not on every poll tick.
  */
 export const useExecutorEventSubscription = ({
   packageId,
@@ -36,51 +32,36 @@ export const useExecutorEventSubscription = ({
   executorId?: string
   onEvent: () => void
 }) => {
-  const suiClient = useSuiClient()
+  const events = useMoveModuleEvents({ packageId, module: "events" })
+  const seenRef = useRef<Set<string>>(new Set())
+  // Latest callback is captured in a ref so a parent that reidentifies
+  // `onEvent` between renders doesn't reset the seen-event cache.
+  const onEventRef = useRef(onEvent)
+  onEventRef.current = onEvent
 
   useEffect(() => {
     if (!packageId || !executorId) return
-
     const normalizedExecutorId = safeNormalize(executorId)
     if (!normalizedExecutorId) return
 
-    let cancelled = false
-    let unsubscribeFn: (() => Promise<boolean>) | undefined
-
-    const start = async () => {
-      try {
-        const fn = await suiClient.subscribeEvent({
-          filter: { MoveEventModule: { package: packageId, module: "events" } },
-          onMessage: (event) => {
-            const parsed = event.parsedJson as
-              | { executor_id?: string }
-              | undefined
-            const eventExecutorId = safeNormalize(parsed?.executor_id)
-            if (eventExecutorId && eventExecutorId === normalizedExecutorId) {
-              onEvent()
-            }
-          }
-        })
-        if (cancelled) {
-          await fn()
-          return
-        }
-        unsubscribeFn = fn
-      } catch (error) {
-        console.warn(
-          "Executor event subscription failed; manual refresh remains available.",
-          error
-        )
+    let firedThisPass = false
+    for (const event of events) {
+      const id = `${event.id.txDigest}:${event.id.eventSeq}`
+      if (seenRef.current.has(id)) continue
+      const data = event.parsedJson as { executor_id?: unknown } | undefined
+      const eventExecutorId =
+        typeof data?.executor_id === "string"
+          ? safeNormalize(data.executor_id)
+          : undefined
+      seenRef.current.add(id)
+      if (eventExecutorId === normalizedExecutorId && !firedThisPass) {
+        // Coalesce — multiple new matching events in a single batch only
+        // trigger one refetch.
+        firedThisPass = true
+        onEventRef.current()
       }
     }
-
-    void start()
-
-    return () => {
-      cancelled = true
-      if (unsubscribeFn) void unsubscribeFn()
-    }
-  }, [executorId, onEvent, packageId, suiClient])
+  }, [events, executorId, packageId])
 }
 
 export default useExecutorEventSubscription

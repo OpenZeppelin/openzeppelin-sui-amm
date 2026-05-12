@@ -7,7 +7,8 @@ coverage
 .DS_Store
 .vscode
 
-deployments/
+**/deployments/*
+!**/deployments/.gitkeep
 
 **/build/
 **/.trace

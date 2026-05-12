@@ -18,6 +18,112 @@ type DeepbookMidEntry = bigint | "error"
 const PROBE_SENDER =
   "0x0000000000000000000000000000000000000000000000000000000000000001"
 
+// localStorage namespace so the per-event mid map survives a browser reload
+// or a navigation away from /dashboard. Without persistence the chart's
+// DeepBook line would collapse to "only points fetched since this mount",
+// which on a freshly-opened page is just the latest QuoteUpdated event.
+const STORAGE_KEY_PREFIX = "sui-amm:deepbook-mid:"
+
+const isBrowser = (): boolean =>
+  typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+
+// Persisted shape: `bigint` values are written as `{ kind: "bigint", value }`
+// since BigInt isn't natively JSON-serializable. The "error" sentinel rides
+// along as a plain string.
+type SerializedMidEntry = { kind: "bigint"; value: string } | { kind: "error" }
+
+const serializeEntry = (entry: DeepbookMidEntry): SerializedMidEntry =>
+  entry === "error"
+    ? { kind: "error" }
+    : { kind: "bigint", value: entry.toString() }
+
+const deserializeEntry = (entry: SerializedMidEntry): DeepbookMidEntry =>
+  entry.kind === "error" ? "error" : BigInt(entry.value)
+
+const readPersisted = (key: string): Map<string, DeepbookMidEntry> => {
+  const map = new Map<string, DeepbookMidEntry>()
+  if (!isBrowser()) return map
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_PREFIX + key)
+    if (!raw) return map
+    const parsed = JSON.parse(raw) as Record<string, SerializedMidEntry>
+    for (const [id, entry] of Object.entries(parsed)) {
+      try {
+        map.set(id, deserializeEntry(entry))
+      } catch {
+        // Drop malformed entries silently.
+      }
+    }
+  } catch {
+    // Ignore corrupt storage payloads.
+  }
+  return map
+}
+
+const writePersisted = (key: string, map: Map<string, DeepbookMidEntry>) => {
+  if (!isBrowser()) return
+  try {
+    const payload: Record<string, SerializedMidEntry> = {}
+    for (const [id, entry] of map.entries()) {
+      payload[id] = serializeEntry(entry)
+    }
+    window.localStorage.setItem(
+      STORAGE_KEY_PREFIX + key,
+      JSON.stringify(payload)
+    )
+  } catch {
+    // Quota / privacy errors are recoverable — in-memory map still works.
+  }
+}
+
+type StoreEntry = {
+  byEventId: Map<string, DeepbookMidEntry>
+  subscribers: Set<(map: Map<string, DeepbookMidEntry>) => void>
+  inFlight: Set<string>
+}
+
+// Module-scoped store keyed by `(pool, base, quote)` so the mid map outlives
+// page-navigation unmounts. Hydrated from localStorage on first access.
+const store = new Map<string, StoreEntry>()
+
+const buildKey = (
+  poolId: string,
+  baseCoinType: string,
+  quoteCoinType: string
+) => `${poolId}|${baseCoinType}|${quoteCoinType}`
+
+const getOrCreateEntry = (key: string): StoreEntry => {
+  let entry = store.get(key)
+  if (!entry) {
+    entry = {
+      byEventId: readPersisted(key),
+      subscribers: new Set(),
+      inFlight: new Set()
+    }
+    store.set(key, entry)
+  }
+  return entry
+}
+
+const ingestEntries = (
+  key: string,
+  entries: ReadonlyArray<readonly [string, DeepbookMidEntry]>
+) => {
+  if (entries.length === 0) return
+  const entry = getOrCreateEntry(key)
+  let changed = false
+  for (const [id, value] of entries) {
+    if (entry.byEventId.has(id)) continue
+    entry.byEventId.set(id, value)
+    changed = true
+  }
+  if (!changed) return
+  writePersisted(key, entry.byEventId)
+  // Snapshot is a fresh Map ref so React re-renders.
+  const snapshot = new Map(entry.byEventId)
+  for (const subscriber of entry.subscribers) subscriber(snapshot)
+}
+
 const fetchDeepbookMidPrice = async ({
   suiClient,
   deepbookPackageId,
@@ -63,9 +169,13 @@ const fetchDeepbookMidPrice = async ({
 
 /**
  * For each QuoteUpdated event observed, fetch the DeepBook book mid via a
- * one-call dev-inspect. Results are cached by event id so we only fetch once
- * per event. Aborts (one-sided book) are recorded as `"error"` so the chart
- * can skip the point.
+ * one-call dev-inspect. Results are cached per `(pool, base, quote)` event
+ * id in a module-scoped store and mirrored to localStorage so a page
+ * reload — or navigating between terminal pages — keeps the previously-
+ * sampled mids on the chart.
+ *
+ * Aborts (one-sided book) are recorded as `"error"` so the chart can skip
+ * the point with a gap instead of a zero spike.
  */
 export const useDeepbookMidPrices = ({
   events,
@@ -81,22 +191,63 @@ export const useDeepbookMidPrices = ({
   quoteCoinType?: string
 }): Map<string, DeepbookMidEntry> => {
   const suiClient = useSuiClient()
-  const [byEventId, setByEventId] = useState<Map<string, DeepbookMidEntry>>(
-    () => new Map()
-  )
-  const inFlightRef = useRef<Set<string>>(new Set())
+  const ready =
+    Boolean(deepbookPackageId) &&
+    Boolean(poolId) &&
+    Boolean(baseCoinType) &&
+    Boolean(quoteCoinType)
+  const key =
+    ready && deepbookPackageId && poolId && baseCoinType && quoteCoinType
+      ? buildKey(poolId, baseCoinType, quoteCoinType)
+      : undefined
+
+  const initial = key
+    ? new Map(getOrCreateEntry(key).byEventId)
+    : new Map<string, DeepbookMidEntry>()
+  const [byEventId, setByEventId] =
+    useState<Map<string, DeepbookMidEntry>>(initial)
+  // Tracks the latest store key the hook is wired to so the subscription
+  // effect's cleanup unsubscribes from the right entry even if the key
+  // changes mid-mount (executor / pool switch).
+  const subscribedKeyRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
-    if (!deepbookPackageId || !poolId || !baseCoinType || !quoteCoinType) return
+    if (!key) {
+      setByEventId(new Map())
+      subscribedKeyRef.current = undefined
+      return
+    }
+    const entry = getOrCreateEntry(key)
+    setByEventId(new Map(entry.byEventId))
+    const subscriber = (next: Map<string, DeepbookMidEntry>) =>
+      setByEventId(next)
+    entry.subscribers.add(subscriber)
+    subscribedKeyRef.current = key
+    return () => {
+      entry.subscribers.delete(subscriber)
+    }
+  }, [key])
+
+  useEffect(() => {
+    if (
+      !key ||
+      !deepbookPackageId ||
+      !poolId ||
+      !baseCoinType ||
+      !quoteCoinType
+    ) {
+      return
+    }
+    const entry = getOrCreateEntry(key)
     const pending = events.filter(
       (event) =>
         event.type === "QuoteUpdated" &&
-        !byEventId.has(event.id) &&
-        !inFlightRef.current.has(event.id)
+        !entry.byEventId.has(event.id) &&
+        !entry.inFlight.has(event.id)
     )
     if (pending.length === 0) return
 
-    pending.forEach((event) => inFlightRef.current.add(event.id))
+    pending.forEach((event) => entry.inFlight.add(event.id))
 
     let cancelled = false
     void Promise.all(
@@ -115,19 +266,15 @@ export const useDeepbookMidPrices = ({
         }
       })
     )
-      .then((entries) => {
+      .then((results) => {
         if (cancelled) return
-        setByEventId((current) => {
-          const next = new Map(current)
-          for (const [id, value] of entries) next.set(id, value)
-          return next
-        })
+        ingestEntries(key, results)
       })
       .finally(() => {
-        // Always release the in-flight slots — on success, on cancellation,
-        // and on rejection — otherwise those event ids would be filtered out
-        // by the dedupe guard forever.
-        pending.forEach((event) => inFlightRef.current.delete(event.id))
+        // Always release in-flight slots — on success, cancellation, and
+        // rejection — otherwise those event ids would be filtered out by the
+        // dedupe guard forever.
+        pending.forEach((event) => entry.inFlight.delete(event.id))
       })
 
     return () => {
@@ -140,7 +287,7 @@ export const useDeepbookMidPrices = ({
     poolId,
     baseCoinType,
     quoteCoinType,
-    byEventId
+    key
   ])
 
   return byEventId

@@ -12,13 +12,14 @@ This UI is a Next.js 16 app that talks directly to Sui via Mysten dapp-kit.
 pnpm ui dev
 ```
 
-## 3. Configure networks (.env.local)
-Create `packages/ui/.env.local` and set package + AMM config IDs:
+## 3. Configure networks (.env)
+Localnet IDs are read at runtime from `packages/dapp/deployments/` via the
+symlink at `packages/ui/public/deployments`, so re-running `mock:setup` or
+`move:publish` is picked up on the next page reload — no manual editing.
+
+For testnet/mainnet/devnet, set the contract package id in `packages/ui/.env`:
 ```bash
-NEXT_PUBLIC_LOCALNET_CONTRACT_PACKAGE_ID=0x...
 NEXT_PUBLIC_TESTNET_CONTRACT_PACKAGE_ID=0x...
-NEXT_PUBLIC_LOCALNET_AMM_CONFIG_ID=0x...
-NEXT_PUBLIC_TESTNET_AMM_CONFIG_ID=0x...
 ```
 
 Optional UI labels:

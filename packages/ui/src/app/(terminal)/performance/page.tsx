@@ -6,6 +6,7 @@ import {
 } from "@sui-amm/tooling-core/utils/formatters"
 import { useMemo } from "react"
 import Loading from "../../components/Loading"
+import TradeHistoryCard from "../../components/TradeHistoryCard"
 import { useExecutorEventLog } from "../../hooks/useExecutorEventLog"
 import useResolvedPackageId from "../../hooks/useResolvedPackageId"
 import { useTraderAccountContext } from "../../providers/TraderAccountProvider"
@@ -120,19 +121,11 @@ const SideSection = ({
           ({symbol})
         </span>
       </h2>
-      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Tile
           label="Current balance"
           value={formatCoinBalance({ balance: current, decimals })}
           hint="In BalanceManager"
-        />
-        <Tile
-          label="Cumulative deposited"
-          value={formatCoinBalance({ balance: deposited, decimals })}
-        />
-        <Tile
-          label="Cumulative withdrawn"
-          value={formatCoinBalance({ balance: withdrawn, decimals })}
         />
         <Tile
           label="Trading PnL"
@@ -291,33 +284,26 @@ export default function PerformancePage() {
         />
       </div>
 
-      <SideSection
-        label="Base"
-        symbol={baseSymbol}
-        decimals={traderAccount.baseDecimals}
-        current={traderAccount.baseBalance}
-        deposited={traderAccount.baseDeposited}
-        withdrawn={traderAccount.baseWithdrawn}
-      />
-
-      <SideSection
-        label="Quote"
-        symbol={quoteSymbol}
-        decimals={traderAccount.quoteDecimals}
-        current={traderAccount.quoteBalance}
-        deposited={traderAccount.quoteDeposited}
-        withdrawn={traderAccount.quoteWithdrawn}
-      />
-
-      <div className="rounded-xl border border-slate-200/70 bg-white/60 px-4 py-3 text-[0.7rem] text-slate-600 dark:border-slate-50/15 dark:bg-slate-950/40 dark:text-slate-200/70">
-        <div className="font-semibold">Coming with the Event Feed</div>
-        <div className="mt-1">
-          Win rate, average fill price, and a fill-by-fill trade history derived
-          from <code className="font-mono">QuoteUpdated</code> events and
-          DeepBook fills. Cross-side PnL needs a live mid-price reference, which
-          the same event stream provides.
-        </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SideSection
+          label="Base"
+          symbol={baseSymbol}
+          decimals={traderAccount.baseDecimals}
+          current={traderAccount.baseBalance}
+          deposited={traderAccount.baseDeposited}
+          withdrawn={traderAccount.baseWithdrawn}
+        />
+        <SideSection
+          label="Quote"
+          symbol={quoteSymbol}
+          decimals={traderAccount.quoteDecimals}
+          current={traderAccount.quoteBalance}
+          deposited={traderAccount.quoteDeposited}
+          withdrawn={traderAccount.quoteWithdrawn}
+        />
       </div>
+
+      <TradeHistoryCard />
     </>
   )
 }

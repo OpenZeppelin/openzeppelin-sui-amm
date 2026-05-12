@@ -3,7 +3,6 @@ import {
   CONTRACT_MODULE_NAME,
   CONTRACT_PACKAGE_ID_UNDEFINED,
   DEVNET_CONTRACT_PACKAGE_ID,
-  LOCALNET_CONTRACT_PACKAGE_ID,
   MAINNET_CONTRACT_PACKAGE_ID,
   TESTNET_CONTRACT_PACKAGE_ID
 } from "~~/config/network"
@@ -61,10 +60,12 @@ export const resolveConfiguredId = (
   return value
 }
 
-export const supportedNetworks = () => {
+export const supportedNetworks = (
+  localnetContractPackageId: string | undefined
+) => {
   const networkConfig = {
     [ENetwork.LOCALNET]: {
-      packageId: LOCALNET_CONTRACT_PACKAGE_ID
+      packageId: localnetContractPackageId
     },
     [ENetwork.DEVNET]: {
       packageId: DEVNET_CONTRACT_PACKAGE_ID
@@ -89,8 +90,14 @@ export const supportedNetworks = () => {
     .map(([key]) => key as ENetwork)
 }
 
-export const isNetworkSupported = (network: ENetwork | undefined) => {
-  return network !== undefined && supportedNetworks().includes(network)
+export const isNetworkSupported = (
+  network: ENetwork | undefined,
+  localnetContractPackageId: string | undefined
+) => {
+  return (
+    network !== undefined &&
+    supportedNetworks(localnetContractPackageId).includes(network)
+  )
 }
 
 export const fullFunctionName = (

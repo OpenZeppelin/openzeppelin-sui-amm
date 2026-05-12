@@ -20,8 +20,7 @@ import type { Tooling } from "@sui-amm/tooling-node/factory"
 import { logKeyValueGreen, logWarning } from "@sui-amm/tooling-node/log"
 import {
   resolveFullPackagePath,
-  syncMoveTomlDependencyPublishedIds,
-  syncMoveTomlDependencyReplacementEntry
+  syncMoveTomlDependencyPublishedIds
 } from "@sui-amm/tooling-node/move"
 import type { MockArtifact } from "./mocks.ts"
 import { mockArtifactPath } from "./mocks.ts"
@@ -53,33 +52,6 @@ export const syncAmmDeepbookDependencyPublishedIds = async ({
     dependencyName: AMM_DEEPBOOK_DEPENDENCY_NAME,
     publishedAt: deepbookPublishedAt,
     originalId: deepbookOriginalId
-  })
-}
-
-export const syncAmmDeepbookDependencyLocalReplacement = async ({
-  tooling,
-  environmentName,
-  deepbookContractPath
-}: {
-  tooling: Pick<Tooling, "suiConfig">
-  environmentName: string
-  deepbookContractPath: string
-}) => {
-  const ammPackagePath = resolveAmmPackagePath(tooling)
-  const moveTomlPath = path.join(ammPackagePath, "Move.toml")
-  const relativeDeepbookPath = path.relative(
-    ammPackagePath,
-    deepbookContractPath
-  )
-  const normalizedDeepbookPath = relativeDeepbookPath.startsWith(".")
-    ? relativeDeepbookPath
-    : `./${relativeDeepbookPath}`
-
-  return await syncMoveTomlDependencyReplacementEntry({
-    moveTomlPath,
-    environmentName,
-    dependencyName: AMM_DEEPBOOK_DEPENDENCY_NAME,
-    replacementEntry: `${AMM_DEEPBOOK_DEPENDENCY_NAME} = { local = "${normalizedDeepbookPath}", override = true }`
   })
 }
 

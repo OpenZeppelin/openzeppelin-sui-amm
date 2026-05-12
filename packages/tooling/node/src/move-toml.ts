@@ -87,6 +87,74 @@ const removePublishedSectionForNetwork = (
   return removeMoveTomlSection(contents, `published.${networkName}`)
 }
 
+/**
+ * Strips `[[published]]` blocks whose `source.local = "<packagePath>"` from a
+ * `Pub.<network>.toml` file, leaving entries for other (dep) packages intact.
+ * Used to wipe a stale "AMM is already published" entry before a retry without
+ * destroying the hand-crafted dep entries the README workaround depends on.
+ */
+const removePublishedArrayEntriesForPackagePath = (
+  contents: string,
+  packagePath: string
+): { updatedContents: string; didUpdate: boolean } => {
+  const lineEnding = resolveLineEnding(contents)
+  const shouldPreserveTrailingNewline = contents.endsWith("\n")
+  const lines = contents.split(/\r?\n/)
+  const lineOffsets = getLineStartOffsets(contents)
+  const headerRegex = /^\s*\[\[published\]\]\s*(#.*)?$/
+  const anyHeaderRegex = /^\s*\[(?:\[[^\]]+\]|[^\]]+)\]\s*(#.*)?$/
+  // Match `source = { local = "/abs/path" }` regardless of inner whitespace.
+  const sourceLocalRegex =
+    /^\s*source\s*=\s*\{\s*local\s*=\s*"([^"]*)"\s*\}\s*(#.*)?$/
+
+  const ranges: Array<{ start: number; end: number }> = []
+  let didUpdate = false
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!headerRegex.test(lines[index] ?? "")) continue
+    const blockStart = lineOffsets[index] ?? 0
+    let blockEnd = contents.length
+    let matchesPath = false
+    for (let inner = index + 1; inner < lines.length; inner += 1) {
+      const line = lines[inner] ?? ""
+      if (anyHeaderRegex.test(line)) {
+        blockEnd = lineOffsets[inner] ?? contents.length
+        break
+      }
+      const sourceMatch = line.match(sourceLocalRegex)
+      if (sourceMatch && sourceMatch[1] === packagePath) matchesPath = true
+    }
+    if (matchesPath) {
+      ranges.push({ start: blockStart, end: blockEnd })
+      didUpdate = true
+    }
+  }
+
+  if (!didUpdate) return { updatedContents: contents, didUpdate: false }
+
+  // Remove ranges back-to-front so earlier offsets stay valid.
+  let updated = contents
+  for (let index = ranges.length - 1; index >= 0; index -= 1) {
+    const range = ranges[index]
+    if (!range) continue
+    updated = updated.slice(0, range.start) + updated.slice(range.end)
+  }
+
+  // Collapse triple+ newlines that the splice may have introduced.
+  updated = updated.replace(/(\r?\n){3,}/g, `${lineEnding}${lineEnding}`)
+  updated = ensureTrailingNewline(
+    trimTrailingEmptyLines(updated) +
+      (shouldPreserveTrailingNewline ? lineEnding : ""),
+    lineEnding,
+    shouldPreserveTrailingNewline
+  )
+
+  return { updatedContents: updated, didUpdate: true }
+}
+
+const hasPublishedArrayEntries = (contents: string): boolean =>
+  /^\s*\[\[published\]\]/m.test(contents)
+
 const removeMoveTomlSection = (
   contents: string,
   sectionName: string
@@ -281,87 +349,6 @@ const updateMoveTomlDependencyReplacement = ({
   }
 }
 
-const updateDependenciesBlockEntry = ({
-  block,
-  dependencyName,
-  replacementEntry
-}: {
-  block: string
-  dependencyName: string
-  replacementEntry: string
-}): { updatedBlock: string; didUpdate: boolean } => {
-  const lineEnding = resolveLineEnding(block)
-  const lines = block.split(/\r?\n/)
-  const headerIndex = lines.findIndex((line) =>
-    /^\s*\[dependencies\]\s*(#.*)?$/.test(line)
-  )
-  if (headerIndex < 0) return { updatedBlock: block, didUpdate: false }
-
-  const escapedDependencyName = escapeRegExp(dependencyName)
-  const entryRegex = new RegExp(
-    `^(\\s*)${escapedDependencyName}\\s*=\\s*\\{[^}]*\\}(?:(\\s*#.*))?$`
-  )
-  const entryIndex = lines.findIndex((line) => entryRegex.test(line))
-
-  if (entryIndex >= 0) {
-    const match = lines[entryIndex]?.match(entryRegex)
-    const indent = match?.[1] ?? ""
-    const commentSuffix = match?.[2] ?? ""
-    const nextLine = `${indent}${replacementEntry}${commentSuffix}`
-    if (lines[entryIndex] === nextLine)
-      return { updatedBlock: block, didUpdate: false }
-    lines[entryIndex] = nextLine
-    return { updatedBlock: lines.join(lineEnding), didUpdate: true }
-  }
-
-  const indent = resolveSectionEntryIndent(lines, headerIndex)
-  const lastContentIndex = (() => {
-    for (let index = lines.length - 1; index > headerIndex; index -= 1) {
-      if (lines[index].trim().length > 0) return index
-    }
-    return headerIndex
-  })()
-  const insertIndex = lastContentIndex + 1
-  lines.splice(insertIndex, 0, `${indent}${replacementEntry}`)
-  return { updatedBlock: lines.join(lineEnding), didUpdate: true }
-}
-
-const updateMoveTomlDependencySource = ({
-  contents,
-  dependencyName,
-  replacementEntry
-}: {
-  contents: string
-  dependencyName: string
-  replacementEntry: string
-}): { updatedContents: string; didUpdate: boolean } => {
-  const lineEnding = resolveLineEnding(contents)
-  const sectionBlock = findSectionBlock(contents, "dependencies")
-  const newEntryBlock = `[dependencies]${lineEnding}${replacementEntry}`
-
-  if (!sectionBlock) {
-    return {
-      updatedContents: insertDepReplacementBlock(contents, newEntryBlock),
-      didUpdate: true
-    }
-  }
-
-  const { updatedBlock, didUpdate } = updateDependenciesBlockEntry({
-    block: sectionBlock.block,
-    dependencyName,
-    replacementEntry
-  })
-  if (!didUpdate) return { updatedContents: contents, didUpdate: false }
-
-  return {
-    updatedContents:
-      contents.slice(0, sectionBlock.start) +
-      updatedBlock +
-      contents.slice(sectionBlock.end),
-    didUpdate: true
-  }
-}
-
 const parseDependencyReplacementEntry = ({
   block,
   dependencyName
@@ -520,42 +507,6 @@ const updateMoveTomlEnvironmentChainId = ({
   }
 }
 
-const forceMoveTomlEnvironmentChainId = ({
-  contents,
-  environmentName,
-  chainId
-}: {
-  contents: string
-  environmentName: string
-  chainId: string
-}): { updatedContents: string; didUpdate: boolean } => {
-  const lineEnding = resolveLineEnding(contents)
-  const environmentBlock = findSectionBlock(contents, "environments")
-  const newEntryBlock = `[environments]${lineEnding}${environmentName} = "${chainId}"`
-
-  if (!environmentBlock) {
-    return {
-      updatedContents: insertEnvironmentBlock(contents, newEntryBlock),
-      didUpdate: true
-    }
-  }
-
-  const { updatedBlock, didUpdate } = updateEnvironmentBlock({
-    block: environmentBlock.block,
-    environmentName,
-    chainId
-  })
-  if (!didUpdate) return { updatedContents: contents, didUpdate: false }
-
-  return {
-    updatedContents:
-      contents.slice(0, environmentBlock.start) +
-      updatedBlock +
-      contents.slice(environmentBlock.end),
-    didUpdate: true
-  }
-}
-
 /**
  * Resolves the chain identifier from RPC, falling back to Sui CLI env config.
  */
@@ -682,77 +633,6 @@ export const syncMoveTomlDependencyPublishedIds = async ({
   })
 }
 
-export const syncMoveTomlDependencyLocalPath = async ({
-  moveTomlPath,
-  dependencyName,
-  localPath,
-  dryRun = false
-}: {
-  moveTomlPath: string
-  dependencyName: string
-  localPath: string
-  dryRun?: boolean
-}): Promise<{ moveTomlPath: string; didUpdate: boolean }> => {
-  const replacementEntry = `${dependencyName} = { local = "${localPath}" }`
-  const contents = await fs.readFile(moveTomlPath, "utf8")
-  const { updatedContents, didUpdate } = updateMoveTomlDependencySource({
-    contents,
-    dependencyName,
-    replacementEntry
-  })
-
-  if (didUpdate && !dryRun) {
-    await fs.writeFile(moveTomlPath, updatedContents)
-  }
-
-  return { moveTomlPath, didUpdate }
-}
-
-export const ensureMoveTomlEnvironmentChainId = async ({
-  moveTomlPath,
-  environmentName,
-  chainId,
-  dryRun = false
-}: {
-  moveTomlPath: string
-  environmentName: string
-  chainId: string
-  dryRun?: boolean
-}): Promise<{ moveTomlPath: string; didUpdate: boolean }> => {
-  const contents = await fs.readFile(moveTomlPath, "utf8")
-  const { updatedContents, didUpdate } = forceMoveTomlEnvironmentChainId({
-    contents,
-    environmentName,
-    chainId
-  })
-
-  if (didUpdate && !dryRun) {
-    await fs.writeFile(moveTomlPath, updatedContents)
-  }
-
-  return { moveTomlPath, didUpdate }
-}
-
-export const removeMoveTomlAddressesSection = async ({
-  moveTomlPath,
-  dryRun = false
-}: {
-  moveTomlPath: string
-  dryRun?: boolean
-}): Promise<{ moveTomlPath: string; didUpdate: boolean }> => {
-  const contents = await fs.readFile(moveTomlPath, "utf8")
-  const { updatedContents, didUpdate } = removeMoveTomlSection(
-    contents,
-    "addresses"
-  )
-
-  if (didUpdate && !dryRun) {
-    await fs.writeFile(moveTomlPath, updatedContents)
-  }
-
-  return { moveTomlPath, didUpdate }
-}
-
 export const clearPublishedEntryForNetwork = async ({
   packagePath,
   networkName
@@ -764,13 +644,27 @@ export const clearPublishedEntryForNetwork = async ({
   if (!networkName) return { publishedTomlPath, didUpdate: false }
 
   // Sui CLI ≥ 1.70 writes ephemeral publish state to `Pub.<networkName>.toml`
-  // alongside `Published.toml`. Both must be cleared so a re-publish doesn't
-  // hit "Your package is already published".
+  // alongside `Published.toml`. Strip only the `[[published]]` block whose
+  // `source.local` matches this package — entries for other (hand-crafted dep)
+  // packages must survive so the AMM workaround keeps binding the right
+  // addresses on retry. If no `[[published]]` blocks remain, unlink the file.
   const ephemeralPubPath = path.join(packagePath, `Pub.${networkName}.toml`)
   let didUpdate = false
   try {
-    await fs.unlink(ephemeralPubPath)
-    didUpdate = true
+    const ephemeralContents = await fs.readFile(ephemeralPubPath, "utf8")
+    const result = removePublishedArrayEntriesForPackagePath(
+      ephemeralContents,
+      packagePath
+    )
+    didUpdate = result.didUpdate
+    if (hasPublishedArrayEntries(result.updatedContents)) {
+      if (result.didUpdate) {
+        await fs.writeFile(ephemeralPubPath, result.updatedContents)
+      }
+    } else {
+      await fs.unlink(ephemeralPubPath)
+      didUpdate = true
+    }
   } catch (error) {
     if (!isErrnoWithCode(error, "ENOENT")) throw error
   }

@@ -3,12 +3,12 @@ import type { ObjectArtifact } from "@sui-amm/tooling-core/object"
 import type { PublishArtifact } from "@sui-amm/tooling-core/types"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
-import { withCwd } from "../../../tests-integration/helpers/cwd.ts"
+import { withCwd } from "../../../test-helpers/helpers/cwd.ts"
 import {
   readTextFile,
   withTempDir,
   writeFileTree
-} from "../../../tests-integration/helpers/fs.ts"
+} from "../../../test-helpers/helpers/fs.ts"
 import {
   findLatestArtifactThat,
   getDeploymentArtifactPath,

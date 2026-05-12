@@ -10,19 +10,11 @@ import {
 } from "@mysten/dapp-kit"
 import type { IdentifierString } from "@mysten/wallet-standard"
 import { SuiPythClient } from "@pythnetwork/pyth-sui-js"
-import {
-  DEFAULT_MOCK_PRICE_FEED,
-  deriveMockPriceComponents,
-  findMockPriceFeedConfig
-} from "@sui-amm/domain-core/models/pyth"
+import { readPythPriceComponentsFromContent } from "@sui-amm/domain-core/models/pyth"
 import { buildLocalnetRefreshQuotesTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
 import { useCallback, useMemo, useState } from "react"
-import {
-  LOCALNET_PYTH_MOCK_PACKAGE_ID,
-  LOCALNET_PYTH_STATE_ID
-} from "../config/network"
 import {
   getLocalnetClient,
   makeLocalnetExecutor,
@@ -38,6 +30,7 @@ import {
 } from "../helpers/transactionErrors"
 import { waitForTransactionBlock } from "../helpers/transactionWait"
 import { useTraderAccountContext } from "../providers/TraderAccountProvider"
+import useDeploymentArtifacts from "./useDeploymentArtifacts"
 import useExplorerUrl from "./useExplorerUrl"
 import useResolvedPackageId from "./useResolvedPackageId"
 
@@ -58,6 +51,10 @@ export const useRefreshQuotesState = () => {
   const explorerUrl = useExplorerUrl()
   const { overview, resolution, refreshTraderAccount } =
     useTraderAccountContext()
+  const {
+    pythMockPackageId: localnetPythMockPackageId,
+    pythStateId: localnetPythStateId
+  } = useDeploymentArtifacts()
   const localnetClient = useMemo(() => getLocalnetClient(), [])
   const isLocalnet = network === ENetwork.LOCALNET
   const localnetExecutor = useMemo(
@@ -84,7 +81,7 @@ export const useRefreshQuotesState = () => {
     : signAndExecuteTransaction.isPending
 
   const localnetArtifactsMissing =
-    isLocalnet && (!LOCALNET_PYTH_MOCK_PACKAGE_ID || !LOCALNET_PYTH_STATE_ID)
+    isLocalnet && (!localnetPythMockPackageId || !localnetPythStateId)
 
   const supportsNetwork = isLocalnet
   const canSubmit =
@@ -103,7 +100,7 @@ export const useRefreshQuotesState = () => {
     if (!supportsNetwork)
       return "Manual refresh is implemented for localnet only. Real Pyth updates require Hermes VAA integration."
     if (localnetArtifactsMissing)
-      return "Mock Pyth package/price info IDs missing from .env.local."
+      return "Mock Pyth package/state IDs missing — run `pnpm mock:setup` and reload."
     if (!traderAccount) return "Market maker overview still loading."
     if (traderAccount.active === false)
       return "Executor is paused — unpause first."
@@ -140,11 +137,11 @@ export const useRefreshQuotesState = () => {
       })
       return
     }
-    if (!LOCALNET_PYTH_MOCK_PACKAGE_ID || !LOCALNET_PYTH_STATE_ID) {
+    if (!localnetPythMockPackageId || !localnetPythStateId) {
       setTransactionState({
         status: "error",
         error:
-          "Mock Pyth artifacts are not configured. Check NEXT_PUBLIC_LOCALNET_PYTH_MOCK_PACKAGE_ID and NEXT_PUBLIC_LOCALNET_PYTH_STATE_ID in .env.local."
+          "Mock Pyth artifacts are not configured. Re-run `pnpm mock:setup` and reload the page."
       })
       return
     }
@@ -210,8 +207,8 @@ export const useRefreshQuotesState = () => {
       // state id as a stand-in is safe on localnet.
       const pythClient = new SuiPythClient(
         suiClient,
-        LOCALNET_PYTH_STATE_ID,
-        LOCALNET_PYTH_STATE_ID
+        localnetPythStateId,
+        localnetPythStateId
       )
       const [basePriceInfoObjectId, quotePriceInfoObjectId] = await Promise.all(
         [
@@ -221,7 +218,7 @@ export const useRefreshQuotesState = () => {
       )
       if (!basePriceInfoObjectId || !quotePriceInfoObjectId) {
         throw new Error(
-          `Pyth state ${LOCALNET_PYTH_STATE_ID} has no PriceInfoObject for feed(s) ${[
+          `Pyth state ${localnetPythStateId} has no PriceInfoObject for feed(s) ${[
             !basePriceInfoObjectId
               ? `base ${traderAccount.basePythPriceFeedIdHex}`
               : undefined,
@@ -252,22 +249,17 @@ export const useRefreshQuotesState = () => {
               )
             ])
 
-      const baseFeedConfig =
-        findMockPriceFeedConfig({
-          feedIdHex: traderAccount.basePythPriceFeedIdHex
-        }) ?? DEFAULT_MOCK_PRICE_FEED
-      const quoteFeedConfig =
-        findMockPriceFeedConfig({
-          feedIdHex: traderAccount.quotePythPriceFeedIdHex
-        }) ?? DEFAULT_MOCK_PRICE_FEED
-      const basePriceComponents = {
-        ...deriveMockPriceComponents(baseFeedConfig),
-        confidence: baseFeedConfig.confidence
-      }
-      const quotePriceComponents = {
-        ...deriveMockPriceComponents(quoteFeedConfig),
-        confidence: quoteFeedConfig.confidence
-      }
+      // Stamp each PriceInfoObject with the value it ALREADY holds — we just
+      // need to bump its `timestamp` so the executor's
+      // `assert_price_age_within_limit` check passes. Reading the on-chain
+      // magnitude/expo first preserves whatever the market-activity bot has
+      // walked the price to instead of clobbering it with a hardcoded default.
+      const basePriceComponents = readPythPriceComponentsFromContent(
+        basePriceInfo.object.content
+      )
+      const quotePriceComponents = readPythPriceComponentsFromContent(
+        quotePriceInfo.object.content
+      )
 
       const transaction = buildLocalnetRefreshQuotesTransaction({
         packageId: contractPackageId,
@@ -275,7 +267,7 @@ export const useRefreshQuotesState = () => {
         pool: poolShared,
         baseAssetTypeTag: traderAccount.baseCoinType,
         quoteAssetTypeTag: traderAccount.quoteCoinType,
-        pythMockPackageId: LOCALNET_PYTH_MOCK_PACKAGE_ID,
+        pythMockPackageId: localnetPythMockPackageId,
         basePriceInfoObject: basePriceInfo,
         quotePriceInfoObject: quotePriceInfo,
         basePriceComponents,
@@ -340,6 +332,8 @@ export const useRefreshQuotesState = () => {
     explorerUrl,
     isLocalnet,
     localnetExecutor,
+    localnetPythMockPackageId,
+    localnetPythStateId,
     network,
     refreshTraderAccount,
     signAndExecuteTransaction,

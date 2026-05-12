@@ -5,7 +5,7 @@ import {
   getStructLabel
 } from "@sui-amm/tooling-core/utils/formatters"
 import { useMemo } from "react"
-import { useDeepbookFillsForPool } from "../hooks/useDeepbookFillsForPool"
+import { useDeepbookFullyFilledOrders } from "../hooks/useDeepbookFullyFilledOrders"
 import { useExecutorEventLog } from "../hooks/useExecutorEventLog"
 import useResolvedPackageId from "../hooks/useResolvedPackageId"
 import { useTraderAccountContext } from "../providers/TraderAccountProvider"
@@ -116,7 +116,7 @@ const ActiveOrdersCard = () => {
   })
   const traderAccount = overview.traderAccount
 
-  const filledOrderIds = useDeepbookFillsForPool({
+  const filledOrderIds = useDeepbookFullyFilledOrders({
     poolId: traderAccount?.poolId,
     balanceManagerId: traderAccount?.balanceManagerId
   })
@@ -144,7 +144,7 @@ const ActiveOrdersCard = () => {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300/70 px-6 py-4 dark:border-slate-50/25">
           <div className="flex flex-col gap-1">
             <h2 className="text-base font-semibold text-sds-dark dark:text-sds-light">
-              Active orders
+              Active Orders
             </h2>
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
               From the most recent QuoteUpdated · cancelled on next refresh

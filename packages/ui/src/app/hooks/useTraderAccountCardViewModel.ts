@@ -13,14 +13,14 @@ import useExplorerUrl from "./useExplorerUrl"
 import type useResolvedTraderAccountId from "./useResolvedTraderAccountId"
 import { type TraderAccountStatus } from "./useTraderAccountOverview"
 
-const headerTitle = "Market maker"
+const headerTitle = "AMM Executor"
 const headerDescription =
-  "Snapshot of the on-chain market maker for the connected wallet."
-const missingWalletMessage = "Connect a wallet to load a market maker."
+  "Snapshot of the on-chain AMM executor for the connected wallet."
+const missingWalletMessage = "Connect a wallet to load an AMM executor."
 const missingConfigMessage =
   "Contract package id is not configured for this network."
-const notFoundMessage = "No market maker found for the connected wallet."
-const defaultLoadErrorMessage = "Unable to load market maker."
+const notFoundMessage = "No AMM executor found for the connected wallet."
+const defaultLoadErrorMessage = "Unable to load AMM executor."
 
 const buildTraderAccountDetails = (
   traderAccount: TraderAccountOverview

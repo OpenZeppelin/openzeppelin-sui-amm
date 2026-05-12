@@ -1,12 +1,12 @@
 import path from "node:path"
 import { describe, expect, it } from "vitest"
-import { withCwd } from "../../../tests-integration/helpers/cwd.ts"
-import { withEnv } from "../../../tests-integration/helpers/env.ts"
+import { withCwd } from "../../../test-helpers/helpers/cwd.ts"
+import { withEnv } from "../../../test-helpers/helpers/env.ts"
 import {
   resolveRealPath,
   withTempDir,
   writeFileTree
-} from "../../../tests-integration/helpers/fs.ts"
+} from "../../../test-helpers/helpers/fs.ts"
 import {
   getAccountConfig,
   getNetworkConfig,
@@ -16,10 +16,10 @@ import {
 const clearConfigEnv = {
   SUI_NETWORK: undefined,
   SUI_KEYSTORE_PATH: undefined,
-  SUI_ACCOUNT_INDEX: undefined,
-  SUI_ACCOUNT_ADDRESS: undefined,
-  SUI_ACCOUNT_PRIVATE_KEY: undefined,
-  SUI_ACCOUNT_MNEMONIC: undefined
+  TRADER_INDEX: undefined,
+  TRADER_ADDRESS: undefined,
+  TRADER_PRIVATE_KEY: undefined,
+  TRADER_MNEMONIC: undefined
 }
 
 describe("loadSuiConfig", () => {

@@ -17,6 +17,8 @@
     "mock:register": "TS_NODE_SKIP_IGNORE=1 NODE_OPTIONS=\"--no-warnings\" ../../node_modules/.bin/ts-node-esm --transpile-only src/scripts/mock/register.ts",
     "mock:pool:create": "TS_NODE_SKIP_IGNORE=1 NODE_OPTIONS=\"--no-warnings\" ../../node_modules/.bin/ts-node-esm --transpile-only src/scripts/mock/pool-create.ts",
     "mock:sui:migrate": "TS_NODE_SKIP_IGNORE=1 NODE_OPTIONS=\"--no-warnings\" ../../node_modules/.bin/ts-node-esm --transpile-only src/scripts/mock/sui-migrate.ts",
+    "bot:market-activity": "TS_NODE_SKIP_IGNORE=1 NODE_OPTIONS=\"--no-warnings\" ../../node_modules/.bin/ts-node-esm --transpile-only src/scripts/bot/market-activity.ts",
+    "bot:maintenance": "TS_NODE_SKIP_IGNORE=1 NODE_OPTIONS=\"--no-warnings\" ../../node_modules/.bin/ts-node-esm --transpile-only src/scripts/bot/maintenance.ts",
     "owner:amm:register": "TS_NODE_SKIP_IGNORE=1 NODE_OPTIONS=\"--no-warnings\" ../../node_modules/.bin/ts-node-esm --transpile-only src/scripts/owner/amm-register.ts",
     "owner:amm:create": "TS_NODE_SKIP_IGNORE=1 NODE_OPTIONS=\"--no-warnings\" ../../node_modules/.bin/ts-node-esm --transpile-only src/scripts/owner/amm-create.ts",
     "owner:amm:update": "TS_NODE_SKIP_IGNORE=1 NODE_OPTIONS=\"--no-warnings\" ../../node_modules/.bin/ts-node-esm --transpile-only src/scripts/owner/amm-update.ts",

@@ -1,7 +1,7 @@
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519"
 import { newTransaction } from "@sui-amm/tooling-core/transactions"
 import { describe, expect, it, vi } from "vitest"
-import { createSuiClientMock } from "../../../tests-integration/helpers/sui.ts"
+import { createSuiClientMock } from "../../../test-helpers/helpers/sui.ts"
 import type { SuiResolvedConfig } from "../../src/config.ts"
 import {
   findCreatedArtifactIdBySuffix,

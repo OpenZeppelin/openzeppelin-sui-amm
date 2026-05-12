@@ -1,9 +1,12 @@
 "use client"
 
-import AmmConfigForm from "../../components/AmmConfigForm"
+import AmmConfigForm, {
+  type AmmConfigFieldKey
+} from "../../components/AmmConfigForm"
 import Button from "../../components/Button"
 import Loading from "../../components/Loading"
 import NetworkSupportChecker from "../../components/NetworkSupportChecker"
+import { buildAmmConfigFormState } from "../../helpers/ammConfigValidation"
 import useAmmConfigOverview from "../../hooks/useAmmConfigOverview"
 import { useUpdateAmmConfigModalState } from "../../hooks/useUpdateAmmConfigModalState"
 import { useTraderAccountContext } from "../../providers/TraderAccountProvider"
@@ -102,7 +105,21 @@ export default function ConfigPage() {
           </div>
         ) : undefined}
 
-        <div className="mt-4 flex items-center justify-end">
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <Button
+            onClick={() => {
+              // Replay each hardcoded default through the same per-field
+              // setter the form already uses, so dirty-tracking and validation
+              // re-run exactly as if the user typed the values themselves.
+              const defaults = buildAmmConfigFormState()
+              for (const key of Object.keys(defaults) as AmmConfigFieldKey[]) {
+                handleInputChange(key, defaults[key])
+              }
+            }}
+            disabled={isProcessing}
+          >
+            Reset defaults
+          </Button>
           <Button onClick={handleUpdateAmmConfig} disabled={!canSubmit}>
             {submitLabel}
           </Button>
