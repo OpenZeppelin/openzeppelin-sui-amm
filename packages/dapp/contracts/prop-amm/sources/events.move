@@ -78,8 +78,8 @@ public struct Withdrawn has copy, drop {
 
 // === Package Functions ===
 
-/// Construct an `Order` payload.
-public(package) fun order(order_id: u128, price: u64, quantity: u64, is_bid: bool): LimitOrder {
+/// Construct a `LimitOrder` payload.
+public(package) fun new_order(order_id: u128, price: u64, quantity: u64, is_bid: bool): LimitOrder {
     LimitOrder { order_id, price, quantity, is_bid }
 }
 

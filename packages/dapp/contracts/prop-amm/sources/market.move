@@ -178,6 +178,8 @@ public fun quote_price_publish_time(self: &Market): Option<u64> {
     self.quote.price_publish_time
 }
 
+// === Package Functions ===
+
 /// Attempts to advance the cached base and quote publish times to the incoming price
 /// timestamps.
 /// Returns `true` when at least one feed advanced.
@@ -210,8 +212,6 @@ public(package) fun try_update_publish_time(
 
     update_base_price_ts || update_quote_price_ts
 }
-
-// === Package Functions ===
 
 /// Returns the required Pyth price feed identifier length.
 public(package) fun pyth_price_identifier_length(): u64 {
