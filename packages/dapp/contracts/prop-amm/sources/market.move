@@ -26,6 +26,8 @@ const EPythPriceConfidenceTooWide: vector<u8> = "pyth price confidence interval 
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 7)]
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
+#[error(code = 8)]
+const EIdenticalPythPriceFeedIds: vector<u8> = "base and quote pyth price feed ids must differ";
 
 // === Constants ===
 
@@ -84,6 +86,7 @@ public fun new<BaseAsset, QuoteAsset>(
         quote_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
     );
+    assert!(base_pyth_price_feed_id != quote_pyth_price_feed_id, EIdenticalPythPriceFeedIds);
 
     let base_decimals = base_currency.decimals();
     let quote_decimals = quote_currency.decimals();
