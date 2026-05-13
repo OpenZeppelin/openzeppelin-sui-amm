@@ -4,10 +4,6 @@ const nextConfig: NextConfig = {
   output: "export",
   distDir: "dist",
   reactStrictMode: true,
-  // Allow the LAN IP to load Next.js dev resources (HMR websocket lives at
-  // `/_next/webpack-hmr`). Without this, opening the dev UI via the LAN IP
-  // instead of localhost prints `Blocked cross-origin request` and breaks HMR.
-  allowedDevOrigins: ["192.168.88.43"],
   images: {
     unoptimized: true
   },
