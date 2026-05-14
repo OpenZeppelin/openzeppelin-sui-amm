@@ -213,29 +213,6 @@ public(package) fun try_update_publish_time(
 
 // === Package Functions ===
 
-/// Returns the required Pyth price feed identifier length.
-public(package) fun pyth_price_identifier_length(): u64 {
-    PYTH_PRICE_IDENTIFIER_LENGTH
-}
-
-/// Returns the maximum supported decimal power for cached asset decimals.
-public(package) fun max_decimal_power(): u8 {
-    MAX_DECIMAL_POWER
-}
-
-/// Sets new base `publish_time` and returns the previous base price publish time, if any.
-public(package) fun set_base_price_publish_time(self: &mut Market, publish_time: u64): Option<u64> {
-    self.base.price_publish_time.swap_or_fill(publish_time)
-}
-
-/// Sets new quote `publish_time` and returns the previous quote price publish time, if any.
-public(package) fun set_quote_price_publish_time(
-    self: &mut Market,
-    publish_time: u64,
-): Option<u64> {
-    self.quote.price_publish_time.swap_or_fill(publish_time)
-}
-
 /// Clears cached base and quote price publish timestamps so the next oracle read is not
 /// treated as stale/replayed.
 public(package) fun reset_price_publish_times(self: &mut Market) {
@@ -314,4 +291,12 @@ fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u64, u8, u64) {
     assert!(exponent <= MAX_DECIMAL_POWER, EExponentTooLarge);
 
     (mantissa, exponent, conf_ratio_bps)
+}
+
+// === Test-Only Helpers ===
+
+/// Returns the required Pyth price feed identifier length.
+#[test_only]
+public(package) fun pyth_price_identifier_length(): u64 {
+    PYTH_PRICE_IDENTIFIER_LENGTH
 }
