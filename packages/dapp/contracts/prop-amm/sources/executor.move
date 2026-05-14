@@ -51,13 +51,13 @@ const EUnsupportedAsset: vector<u8> = "coin type does not match the configured b
 public struct AdminCap has key, store {
     /// Unique ID for the market maker executor capability object.
     id: UID,
-    /// ID of the associated market maker self.
+    /// ID of the associated executor.
     executor_id: ID,
 }
 
 /// Market maker executor state.
 public struct Executor has key, store {
-    /// Unique ID for the account object.
+    /// Unique ID for the executor object.
     id: UID,
     /// Whether trading is active.
     active: bool,
@@ -67,7 +67,7 @@ public struct Executor has key, store {
     balance_manager: BalanceManager,
     /// Traded market metadata (pool, feed IDs).
     market: Market,
-    /// Pool onchain configuration.
+    /// AMM configuration.
     config: AMMConfig,
     /// Accounting info (cumulative volume and cached balances).
     info: Info,
@@ -206,7 +206,7 @@ public fun unpause(self: &mut Executor, cap: &AdminCap) {
 
 /// Deposit funds into a balance manager.
 /// Aborts unless `T` matches the configured base or quote asset.
-/// Emits `DepositRecorded` in addition to Deepbook's `BalanceEvent`.
+/// Emits `Deposited` in addition to Deepbook's `BalanceEvent`.
 public fun deposit<T>(self: &mut Executor, cap: &AdminCap, coin: Coin<T>, ctx: &mut TxContext) {
     assert!(self.id() == cap.executor_id, EInvalidCap);
 
@@ -228,7 +228,7 @@ public fun deposit<T>(self: &mut Executor, cap: &AdminCap, coin: Coin<T>, ctx: &
 /// Withdraw funds from a balance manager.
 /// Aborts unless `T` matches the configured base or quote asset.
 /// Fails if the market maker executor is not paused.
-/// Emits `WithdrawRecorded` in addition to Deepbook's `BalanceEvent`.
+/// Emits `Withdrawn` in addition to Deepbook's `BalanceEvent`.
 ///
 /// NOTE: Pause step let us settle all the balances before making withdrawal.
 /// Otherwise there is a high chance there is nothing to withdraw.
@@ -258,7 +258,7 @@ public fun withdraw<T>(
 /// Withdraw all funds from a balance manager.
 /// Aborts unless `T` matches the configured base or quote asset.
 /// Fails if the market maker executor is not paused.
-/// Emits `WithdrawRecorded` in addition to Deepbook's `BalanceEvent`.
+/// Emits `Withdrawn` in addition to Deepbook's `BalanceEvent`.
 ///
 /// NOTE: Pause step let us settle all the balances before making withdrawal.
 /// Otherwise there is a high chance there is nothing to withdraw.
@@ -558,7 +558,7 @@ fun compute_bid_price(mid_price: u64, spread: u64, tick: u64): u64 {
     bid
 }
 
-/// Compute ask size based on `mid_price`, `spread`
+/// Compute ask price based on `mid_price`, `spread`
 /// to match deepbook's allowed `tick` size
 /// (rounding outside `mid_price`).
 /// Aborts if more than a max price.
