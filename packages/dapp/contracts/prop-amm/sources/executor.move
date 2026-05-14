@@ -629,7 +629,7 @@ fun try_place_limit_orders<BaseAsset, QuoteAsset>(
         );
 
         // Add order info to placed output.
-        placed.push_back(events::order(order_info.order_id(), price, quantity, is_bid));
+        placed.push_back(events::new_order(order_info.order_id(), price, quantity, is_bid));
     };
 
     placed

@@ -187,6 +187,8 @@ public fun quote_price_publish_time(self: &Market): Option<u64> {
     self.quote.price_publish_time
 }
 
+// === Package Functions ===
+
 /// Attempts to advance the cached base and quote publish times to the incoming price
 /// timestamps.
 /// Returns `true` when at least one feed advanced.
@@ -219,8 +221,6 @@ public(package) fun try_update_publish_time(
 
     update_base_price_ts || update_quote_price_ts
 }
-
-// === Package Functions ===
 
 /// Clears cached base and quote price publish timestamps so the next oracle read is not
 /// treated as stale/replayed.
