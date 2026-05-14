@@ -74,6 +74,23 @@ fun create_amm_config_rejects_zero_max_price_age() {
 }
 
 #[test]
+fun create_amm_config_accepts_order_expiration_equal_to_max_price_age() {
+    // 30_000 ms == 30 s * 1000: boundary is inclusive.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 0, true);
+
+    assert_eq!(amm_config.order_expiration_time_ms(), 30_000);
+    assert_eq!(amm_config.max_price_age_secs(), 30);
+}
+
+#[test, expected_failure(abort_code = config::EOrderExpirationExceedsPriceAge)]
+fun create_amm_config_rejects_order_expiration_above_max_price_age() {
+    // 30_001 ms > 30 s * 1000: even by 1 ms must fail.
+    let _amm_config = config::new(100, 10_000, 30_001, 30, 1000, 5000, 0, true);
+
+    abort
+}
+
+#[test]
 fun create_amm_config_accepts_zero_outer_balance_bps() {
     let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 0, 0, true);
 

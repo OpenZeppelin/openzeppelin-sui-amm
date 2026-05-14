@@ -23,6 +23,9 @@ const EInvalidInventorySkewBps: vector<u8> = "inventory skew bps must be less th
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 7)]
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
+#[error(code = 8)]
+const EOrderExpirationExceedsPriceAge: vector<u8> =
+    "order expiration time must not exceed the max Pyth price age";
 
 // === Constants ===
 
@@ -34,6 +37,9 @@ const HUNDRED_PERCENT_BPS: u64 = 10_000;
 /// AMM configuration for market maker executor.
 public struct AMMConfig has drop, store {
     /// Duration in milliseconds after which a placed limit order expires.
+    /// Must not exceed `max_price_age_secs * 1000` so that any stranded orders left behind by a
+    /// staleness-induced refresh abort are guaranteed to expire by the time Pyth itself would be
+    /// considered stale.
     order_expiration_time_ms: u64,
     /// Maximum acceptable age in seconds for a Pyth price feed update.
     max_price_age_secs: u64,
@@ -104,6 +110,7 @@ public fun new(
     assert!(inventory_skew_bps < HUNDRED_PERCENT_BPS, EInvalidInventorySkewBps);
     assert!(order_expiration_time_ms > 0, EInvalidOrderExpirationTime);
     assert!(max_price_age_secs > 0, EInvalidMaxPriceAge);
+    assert!(order_expiration_time_ms <= max_price_age_secs * 1000, EOrderExpirationExceedsPriceAge);
 
     AMMConfig {
         base_spread_bps,
