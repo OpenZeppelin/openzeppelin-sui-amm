@@ -7,10 +7,10 @@ use deepbook::constants;
 
 #[error(code = 0)]
 const EInvalidBaseSpreadBps: vector<u8> =
-    "base spread bps must be greater than zero and at most 10000";
+    "base spread bps must be greater than zero and less than 10000";
 #[error(code = 1)]
 const EInvalidMaxConfRatioBps: vector<u8> =
-    "max conf ratio bps must be greater than zero and at most 10000";
+    "max conf ratio bps must be greater than zero and less than 10000";
 #[error(code = 2)]
 const EInvalidOrderExpirationTime: vector<u8> = "order expiration time must be greater than zero";
 #[error(code = 3)]
@@ -80,7 +80,7 @@ public struct AMMConfig has drop, store {
 
 // === Public Functions ===
 
-/// Creates a new AMM configuration object.
+/// Creates a new AMM configuration.
 ///
 /// Pass the returned value into `executor::create` when creating a new executor or into
 /// `executor::update_config` when replacing an existing market maker executor configuration.

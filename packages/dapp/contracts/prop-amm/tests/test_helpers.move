@@ -91,7 +91,7 @@ public(package) fun create_sui_currency(): Currency<SUI> {
     currency
 }
 
-/// Creates a DeepBook `Pool<SUI, USDC>` in the test scenario.
+/// Creates a whitelisted DeepBook `Pool<SUI, USDC>` in the test scenario.
 /// Assumes a DeepBook registry already exists as a shared object.
 public(package) fun create_pool(scenario: &mut test_scenario::Scenario, sender: address): ID {
     scenario.next_tx(sender);
@@ -104,6 +104,33 @@ public(package) fun create_pool(scenario: &mut test_scenario::Scenario, sender: 
         constants::lot_size(),
         constants::min_size(),
         true,
+        false,
+        &deepbook_admin_cap,
+        scenario.ctx(),
+    );
+
+    test_scenario::return_shared(deepbook_registry);
+    std::unit_test::destroy(deepbook_admin_cap);
+
+    pool_id
+}
+
+/// Creates a non-whitelisted DeepBook `Pool<SUI, USDC>` in the test scenario, used to
+/// verify that `market::new` rejects pools with non-zero maker/taker fees.
+public(package) fun create_non_whitelisted_pool(
+    scenario: &mut test_scenario::Scenario,
+    sender: address,
+): ID {
+    scenario.next_tx(sender);
+
+    let deepbook_admin_cap = registry::get_admin_cap_for_testing(scenario.ctx());
+    let mut deepbook_registry: deepbook::registry::Registry = scenario.take_shared();
+    let pool_id = pool::create_pool_admin<SUI, USDC>(
+        &mut deepbook_registry,
+        constants::tick_size(),
+        constants::lot_size(),
+        constants::min_size(),
+        false,
         false,
         &deepbook_admin_cap,
         scenario.ctx(),

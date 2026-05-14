@@ -26,6 +26,10 @@ const EPythPriceConfidenceTooWide: vector<u8> = "pyth price confidence interval 
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 7)]
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
+#[error(code = 8)]
+const EPoolNotWhitelisted: vector<u8> = "deepbook pool must be whitelisted";
+#[error(code = 9)]
+const EIdenticalPythPriceFeedIds: vector<u8> = "base and quote pyth price feed ids must differ";
 
 // === Constants ===
 
@@ -68,6 +72,9 @@ public struct MarketCurrency has drop, store {
 /// generically typed; the returned struct carries only the derived `pool_id`, the cached
 /// decimals, and the Pyth feed identifiers, so downstream executor state stays non-generic.
 ///
+/// `pool` must be a whitelisted DeepBook pool (`pool.whitelisted() == true`). On
+/// non-whitelisted pools, DeepBook charges a maker fee in the input asset when
+/// `pay_with_deep = false`.
 /// Pass the returned value into `executor::create` when creating a new market maker executor.
 public fun new<BaseAsset, QuoteAsset>(
     pool: &Pool<BaseAsset, QuoteAsset>,
@@ -76,6 +83,7 @@ public fun new<BaseAsset, QuoteAsset>(
     base_pyth_price_feed_id: vector<u8>,
     quote_pyth_price_feed_id: vector<u8>,
 ): Market {
+    assert!(pool.whitelisted(), EPoolNotWhitelisted);
     assert!(
         base_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
@@ -84,6 +92,7 @@ public fun new<BaseAsset, QuoteAsset>(
         quote_pyth_price_feed_id.length() == PYTH_PRICE_IDENTIFIER_LENGTH,
         EInvalidPythPriceFeedIdLength,
     );
+    assert!(base_pyth_price_feed_id != quote_pyth_price_feed_id, EIdenticalPythPriceFeedIds);
 
     let base_decimals = base_currency.decimals();
     let quote_decimals = quote_currency.decimals();
@@ -178,6 +187,8 @@ public fun quote_price_publish_time(self: &Market): Option<u64> {
     self.quote.price_publish_time
 }
 
+// === Package Functions ===
+
 /// Attempts to advance the cached base and quote publish times to the incoming price
 /// timestamps.
 /// Returns `true` when at least one feed advanced.
@@ -209,31 +220,6 @@ public(package) fun try_update_publish_time(
     };
 
     update_base_price_ts || update_quote_price_ts
-}
-
-// === Package Functions ===
-
-/// Returns the required Pyth price feed identifier length.
-public(package) fun pyth_price_identifier_length(): u64 {
-    PYTH_PRICE_IDENTIFIER_LENGTH
-}
-
-/// Returns the maximum supported decimal power for cached asset decimals.
-public(package) fun max_decimal_power(): u8 {
-    MAX_DECIMAL_POWER
-}
-
-/// Sets new base `publish_time` and returns the previous base price publish time, if any.
-public(package) fun set_base_price_publish_time(self: &mut Market, publish_time: u64): Option<u64> {
-    self.base.price_publish_time.swap_or_fill(publish_time)
-}
-
-/// Sets new quote `publish_time` and returns the previous quote price publish time, if any.
-public(package) fun set_quote_price_publish_time(
-    self: &mut Market,
-    publish_time: u64,
-): Option<u64> {
-    self.quote.price_publish_time.swap_or_fill(publish_time)
 }
 
 /// Clears cached base and quote price publish timestamps so the next oracle read is not
@@ -314,4 +300,12 @@ fun deepbook_usd_price(price: Price, max_conf_ratio_bps: u64): (u64, u8, u64) {
     assert!(exponent <= MAX_DECIMAL_POWER, EExponentTooLarge);
 
     (mantissa, exponent, conf_ratio_bps)
+}
+
+// === Test-Only Helpers ===
+
+/// Returns the required Pyth price feed identifier length.
+#[test_only]
+public(package) fun pyth_price_identifier_length(): u64 {
+    PYTH_PRICE_IDENTIFIER_LENGTH
 }
