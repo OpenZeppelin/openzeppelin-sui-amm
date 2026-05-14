@@ -313,7 +313,7 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
     // and there are open orders.
     // Protects from calling permissionless quote refresh with old pricing,
     // that would force the market maker to resubmit orders and lose priority.
-    let has_open_orders = self.has_open_orders(pool);
+    let has_open_orders = self.has_open_orders(pool, clock);
     let is_price_updated = self.market.try_update_publish_time(base_pyth_price, quote_pyth_price);
     if (has_open_orders && !is_price_updated) {
         return
@@ -525,12 +525,21 @@ public fun cap_id(amm_cap: &AdminCap): ID {
 
 // === Private Functions ===
 
-/// Returns whether there are open orders for the executor in the pool.
+/// Returns whether there are open unexpired orders for the executor in the pool.
 fun has_open_orders<BaseAsset, QuoteAsset>(
     self: &Executor,
     pool: &Pool<BaseAsset, QuoteAsset>,
+    clock: &Clock,
 ): bool {
-    pool.account_exists(&self.balance_manager) && !pool.account(&self.balance_manager).open_orders().is_empty()
+    if (!pool.account_exists(&self.balance_manager)) return false;
+
+    // Checking each placed order's expiration timestamp,
+    // since `pool.account(..).open_orders()` does not consider stale orders.
+    let timestamp_ms = clock.timestamp_ms();
+    let open_orders = pool.account(&self.balance_manager).open_orders().into_keys();
+    pool.get_orders(open_orders).any!(|order| {
+        order.expire_timestamp() >= timestamp_ms
+    })
 }
 
 /// Returns the current epoch's base-asset volume from DeepBook,
