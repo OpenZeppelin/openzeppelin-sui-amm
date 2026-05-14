@@ -68,6 +68,14 @@ public struct AMMConfig has drop, store {
     ///     `0` disables skewing (reservation_mid == mid).
     ///     `5_000` shifts the mid by half the `base_spread` at fully one-sided inventory.
     inventory_skew_bps: u64,
+    /// Restricts every refresh-quotes order to the passive (post-only) book side.
+    /// `true` places each order with DeepBook's `post_only` flag: any order that would
+    /// cross the resting book aborts the whole `refresh_quotes` transaction, leaving the
+    /// previous quotes in place until the next oracle reading.
+    /// `false` places each order with `no_restriction`: the crossing portion executes
+    /// immediately as a taker (and the remainder rests). Use only when taker fills against
+    /// adversarial liquidity placed inside the anticipated quote are acceptable.
+    post_only: bool,
 }
 
 // === Public Functions ===
@@ -76,6 +84,7 @@ public struct AMMConfig has drop, store {
 ///
 /// Pass the returned value into `executor::create` when creating a new executor or into
 /// `executor::update_config` when replacing an existing market maker executor configuration.
+/// `post_only` is a safety parameter that should be set to `true` unless crossing the book with the quotes and taking market orders is an acceptable risk.
 public fun new(
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
@@ -84,6 +93,7 @@ public fun new(
     max_conf_ratio_bps: u64,
     outer_balance_bps: u64,
     inventory_skew_bps: u64,
+    post_only: bool,
 ): AMMConfig {
     assert!(base_spread_bps > 0 && base_spread_bps < HUNDRED_PERCENT_BPS, EInvalidBaseSpreadBps);
     assert!(
@@ -103,6 +113,7 @@ public fun new(
         max_conf_ratio_bps,
         outer_balance_bps,
         inventory_skew_bps,
+        post_only,
     }
 }
 
@@ -162,6 +173,13 @@ public fun outer_balance_bps(self: &AMMConfig): u64 {
 ///     `5_000` shifts the mid by half the `base_spread` at fully one-sided inventory.
 public fun inventory_skew_bps(self: &AMMConfig): u64 {
     self.inventory_skew_bps
+}
+
+/// Returns whether `refresh_quotes` should place orders as post-only.
+/// `true` aborts the whole refresh if any order would cross the resting book, preserving
+/// the previous quotes. `false` allows the crossing portion to execute as a taker.
+public fun post_only(self: &AMMConfig): bool {
+    self.post_only
 }
 
 // === Package Functions ===

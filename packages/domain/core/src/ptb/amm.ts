@@ -50,7 +50,8 @@ export const buildCreateExecutorTransaction = ({
   maxPriceAgeSecs,
   maxConfRatioBps,
   outerBalanceBps,
-  inventorySkewBps
+  inventorySkewBps,
+  postOnly
 }: {
   packageId: string
   pool: WrappedSuiSharedObject
@@ -68,6 +69,13 @@ export const buildCreateExecutorTransaction = ({
   maxConfRatioBps: bigint | number
   outerBalanceBps: bigint | number
   inventorySkewBps: bigint | number
+  /**
+   * When true, `refresh_quotes` places each order with DeepBook's `post_only` flag —
+   * any order that would cross the resting book aborts the whole refresh and the
+   * previous quotes survive until the next oracle reading. When false, the crossing
+   * portion executes immediately as a taker (legacy `no_restriction` behavior).
+   */
+  postOnly: boolean
 }) => {
   const validatedBasePythPriceFeedIdBytes = assertByteArrayLength(
     basePythPriceFeedIdBytes,
@@ -102,7 +110,8 @@ export const buildCreateExecutorTransaction = ({
       transaction.pure.u64(maxPriceAgeSecs),
       transaction.pure.u64(maxConfRatioBps),
       transaction.pure.u64(outerBalanceBps),
-      transaction.pure.u64(inventorySkewBps)
+      transaction.pure.u64(inventorySkewBps),
+      transaction.pure.bool(postOnly)
     ]
   })
 
@@ -135,7 +144,8 @@ export const buildUpdateConfigTransaction = ({
   maxPriceAgeSecs,
   maxConfRatioBps,
   outerBalanceBps,
-  inventorySkewBps
+  inventorySkewBps,
+  postOnly
 }: {
   packageId: string
   executor: WrappedSuiSharedObject
@@ -147,6 +157,13 @@ export const buildUpdateConfigTransaction = ({
   maxConfRatioBps: bigint | number
   outerBalanceBps: bigint | number
   inventorySkewBps: bigint | number
+  /**
+   * When true, `refresh_quotes` places each order with DeepBook's `post_only` flag —
+   * any order that would cross the resting book aborts the whole refresh and the
+   * previous quotes survive until the next oracle reading. When false, the crossing
+   * portion executes immediately as a taker (legacy `no_restriction` behavior).
+   */
+  postOnly: boolean
 }) => {
   const transaction = newTransaction()
 
@@ -159,7 +176,8 @@ export const buildUpdateConfigTransaction = ({
       transaction.pure.u64(maxPriceAgeSecs),
       transaction.pure.u64(maxConfRatioBps),
       transaction.pure.u64(outerBalanceBps),
-      transaction.pure.u64(inventorySkewBps)
+      transaction.pure.u64(inventorySkewBps),
+      transaction.pure.bool(postOnly)
     ]
   })
 

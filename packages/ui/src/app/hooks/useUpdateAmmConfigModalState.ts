@@ -81,7 +81,8 @@ const buildOptimisticOverview = ({
   maxPriceAgeSecs: formState.maxPriceAgeSecs.trim(),
   maxConfRatioBps: formState.maxConfRatioBps.trim(),
   outerBalanceBps: formState.outerBalanceBps.trim(),
-  inventorySkewBps: formState.inventorySkewBps.trim()
+  inventorySkewBps: formState.inventorySkewBps.trim(),
+  postOnly: formState.postOnly.trim().toLowerCase() === "true"
 })
 
 const ammConfigMatches = (
@@ -95,6 +96,7 @@ const ammConfigMatches = (
   first.maxConfRatioBps === second.maxConfRatioBps &&
   first.outerBalanceBps === second.outerBalanceBps &&
   first.inventorySkewBps === second.inventorySkewBps &&
+  first.postOnly === second.postOnly &&
   first.active === second.active
 
 export const useUpdateAmmConfigModalState = ({
@@ -283,7 +285,8 @@ export const useUpdateAmmConfigModalState = ({
         maxPriceAgeSecs: formState.maxPriceAgeSecs.trim(),
         maxConfRatioBps: formState.maxConfRatioBps.trim(),
         outerBalanceBps: formState.outerBalanceBps.trim(),
-        inventorySkewBps: formState.inventorySkewBps.trim()
+        inventorySkewBps: formState.inventorySkewBps.trim(),
+        postOnly: formState.postOnly.trim()
       })
 
       const configShared = await getSuiSharedObject(
@@ -314,7 +317,8 @@ export const useUpdateAmmConfigModalState = ({
         maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
         maxConfRatioBps: updateInputs.maxConfRatioBps,
         outerBalanceBps: updateInputs.outerBalanceBps,
-        inventorySkewBps: updateInputs.inventorySkewBps
+        inventorySkewBps: updateInputs.inventorySkewBps,
+        postOnly: updateInputs.postOnly
       })
       updateTransaction.setSender(walletAddress)
 

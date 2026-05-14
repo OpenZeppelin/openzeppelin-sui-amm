@@ -24,6 +24,7 @@ export const DEFAULT_MAX_PRICE_AGE_SECS = "60"
 export const DEFAULT_MAX_CONF_RATIO_BPS = "1000"
 export const DEFAULT_OUTER_BALANCE_BPS = "5000"
 export const DEFAULT_INVENTORY_SKEW_BPS = "0"
+export const DEFAULT_POST_ONLY = "true"
 
 export type AmmConfigOverview = {
   configId: string
@@ -38,6 +39,7 @@ export type AmmConfigOverview = {
   maxConfRatioBps: string
   outerBalanceBps: string
   inventorySkewBps: string
+  postOnly: boolean
 }
 
 type AmmConfigFields = {
@@ -48,6 +50,7 @@ type AmmConfigFields = {
   max_conf_ratio_bps?: unknown
   outer_balance_bps?: unknown
   inventory_skew_bps?: unknown
+  post_only?: unknown
 }
 
 type MarketFields = {
@@ -152,7 +155,8 @@ const buildAmmConfigOverviewFromObject = ({
     inventorySkewBps: requireNumericField(
       config.inventory_skew_bps,
       "Inventory skew bps"
-    )
+    ),
+    postOnly: requireBooleanField(config.post_only, "Post only")
   }
 }
 
@@ -190,6 +194,13 @@ const resolveVolatilityMultiplierBps = (rawValue?: string): bigint =>
     "Volatility multiplier bps"
   )
 
+const parseBooleanFlag = (rawValue: string, label: string): boolean => {
+  const normalized = rawValue.trim().toLowerCase()
+  if (normalized === "true") return true
+  if (normalized === "false") return false
+  throw new Error(`${label} must be "true" or "false" (got "${rawValue}").`)
+}
+
 export const resolveAmmConfigInputs = ({
   volatilityMultiplierBps,
   baseSpreadBps,
@@ -199,7 +210,8 @@ export const resolveAmmConfigInputs = ({
   maxPriceAgeSecs,
   maxConfRatioBps,
   outerBalanceBps,
-  inventorySkewBps
+  inventorySkewBps,
+  postOnly
 }: {
   volatilityMultiplierBps?: string
   baseSpreadBps?: string
@@ -210,6 +222,7 @@ export const resolveAmmConfigInputs = ({
   maxConfRatioBps?: string
   outerBalanceBps?: string
   inventorySkewBps?: string
+  postOnly?: string
 }): {
   baseSpreadBps: bigint
   volatilityMultiplierBps: bigint
@@ -222,6 +235,7 @@ export const resolveAmmConfigInputs = ({
   maxConfRatioBps: bigint
   outerBalanceBps: bigint
   inventorySkewBps: bigint
+  postOnly: boolean
 } => ({
   baseSpreadBps: resolveBaseSpreadBps(baseSpreadBps),
   volatilityMultiplierBps: resolveVolatilityMultiplierBps(
@@ -250,5 +264,6 @@ export const resolveAmmConfigInputs = ({
   inventorySkewBps: parseNonNegativeU64(
     inventorySkewBps ?? DEFAULT_INVENTORY_SKEW_BPS,
     "Inventory skew bps"
-  )
+  ),
+  postOnly: parseBooleanFlag(postOnly ?? DEFAULT_POST_ONLY, "Post only")
 })

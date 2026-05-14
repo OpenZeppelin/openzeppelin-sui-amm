@@ -42,6 +42,7 @@ type UpdateAmmArguments = {
   maxConfRatioBps?: string
   outerBalanceBps?: string
   inventorySkewBps?: string
+  postOnly?: string
   devInspect?: boolean
   dryRun?: boolean
   json?: boolean
@@ -55,6 +56,7 @@ type ResolvedAmmUpdateInputs = {
   maxConfRatioBps: bigint
   outerBalanceBps: bigint
   inventorySkewBps: bigint
+  postOnly: boolean
 }
 
 const resolveExplicitAdminCapId = (adminCapId?: string): string | undefined => {
@@ -113,7 +115,8 @@ const resolveAmmUpdateInputs = ({
     outerBalanceBps:
       cliArguments.outerBalanceBps ?? currentOverview.outerBalanceBps,
     inventorySkewBps:
-      cliArguments.inventorySkewBps ?? currentOverview.inventorySkewBps
+      cliArguments.inventorySkewBps ?? currentOverview.inventorySkewBps,
+    postOnly: cliArguments.postOnly ?? String(currentOverview.postOnly)
   })
 
   return {
@@ -123,7 +126,8 @@ const resolveAmmUpdateInputs = ({
     maxPriceAgeSecs: inputs.maxPriceAgeSecs,
     maxConfRatioBps: inputs.maxConfRatioBps,
     outerBalanceBps: inputs.outerBalanceBps,
-    inventorySkewBps: inputs.inventorySkewBps
+    inventorySkewBps: inputs.inventorySkewBps,
+    postOnly: inputs.postOnly
   }
 }
 
@@ -163,7 +167,8 @@ runSuiScript(
       maxPriceAgeSecs: updateInputs.maxPriceAgeSecs,
       maxConfRatioBps: updateInputs.maxConfRatioBps,
       outerBalanceBps: updateInputs.outerBalanceBps,
-      inventorySkewBps: updateInputs.inventorySkewBps
+      inventorySkewBps: updateInputs.inventorySkewBps,
+      postOnly: updateInputs.postOnly
     })
 
     const { execution, summary } = await tooling.executeTransactionWithSummary({
@@ -275,6 +280,13 @@ runSuiScript(
       description:
         "Inventory-driven mid-shift coefficient in basis points (u64); defaults to the current config value.",
       default: DEFAULT_INVENTORY_SKEW_BPS,
+      demandOption: false
+    })
+    .option("postOnly", {
+      alias: ["post-only"],
+      type: "string",
+      description:
+        'When "true", refresh_quotes places orders as post-only: any order that would cross the resting book aborts the whole refresh, preserving the previous quotes. When "false", the crossing portion executes as a taker (legacy behavior). Defaults to the current config value.',
       demandOption: false
     })
     .option("devInspect", {

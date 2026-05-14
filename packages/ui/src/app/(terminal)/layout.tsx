@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, type ReactNode } from "react"
 import Sidebar from "../components/layout/Sidebar"
+import { useReconnectOnFocus } from "../hooks/useReconnectOnFocus"
 import { useTraderAccountContext } from "../providers/TraderAccountProvider"
 
 // Only `not-found` is a stable "go to setup" signal. `wallet-required` and
@@ -44,6 +45,11 @@ const StatusCard = ({
 export default function TerminalLayout({ children }: { children: ReactNode }) {
   const router = useRouter()
   const { resolution } = useTraderAccountContext()
+
+  // Scoped to the terminal routes only: the setup page handles the first wallet
+  // connect and shouldn't have a background visibility-change reconnect racing
+  // with the user's initial click.
+  useReconnectOnFocus()
 
   useEffect(() => {
     if (REDIRECT_STATUSES.has(resolution.status)) {

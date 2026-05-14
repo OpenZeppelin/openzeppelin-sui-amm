@@ -103,6 +103,8 @@ pnpm --filter dapp mock:pool:create
 #    via the symlink at `packages/ui/public/deployments`, so re-running
 #    move:publish or mock:setup is picked up on the next page reload — no
 #    manual `.env` editing.
+#    Slush wallet can be connected with `testnet` network selection in wallet
+#    configuration.
 pnpm --filter ui dev
 ```
 

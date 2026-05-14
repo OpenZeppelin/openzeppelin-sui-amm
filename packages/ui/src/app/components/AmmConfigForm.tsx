@@ -17,6 +17,7 @@ export type AmmConfigFormState = {
   maxConfRatioBps: string
   outerBalanceBps: string
   inventorySkewBps: string
+  postOnly: string
 }
 
 export type AmmConfigFieldErrors = Partial<
@@ -43,7 +44,16 @@ type NumericFieldSpec = {
   placeholder: string
 }
 
-type FieldSpec = BpsFieldSpec | NumericFieldSpec
+type ToggleFieldSpec = {
+  kind: "toggle"
+  key: AmmConfigFieldKey
+  title: string
+  description: string
+  /** Label shown next to the checkbox. */
+  toggleLabel: string
+}
+
+type FieldSpec = BpsFieldSpec | NumericFieldSpec | ToggleFieldSpec
 
 type GroupSpec = {
   title: string
@@ -138,6 +148,21 @@ const GROUPS: GroupSpec[] = [
         title: "Max Pyth price age (s)",
         description: "Reject oracle reads older than this many seconds.",
         placeholder: "60"
+      }
+    ]
+  },
+  {
+    title: "Safety",
+    description:
+      "How refresh_quotes places its orders relative to the resting book.",
+    fields: [
+      {
+        kind: "toggle",
+        key: "postOnly",
+        title: "Post-only quotes",
+        description:
+          "When enabled, an order that would cross the book aborts the whole refresh and the previous quotes stay live until the next oracle reading. When disabled, the crossing portion executes as a taker.",
+        toggleLabel: "Abort refresh on cross (post-only)"
       }
     ]
   }
@@ -272,6 +297,41 @@ const NumericField = ({
   </label>
 )
 
+const ToggleField = ({
+  spec,
+  value,
+  disabled,
+  onChange,
+  onBlur
+}: {
+  spec: ToggleFieldSpec
+  value: string
+  disabled?: boolean
+  onChange: (next: string) => void
+  onBlur: () => void
+}) => {
+  const checked = value.trim().toLowerCase() === "true"
+  return (
+    <label key={spec.key} className={modalFieldLabelClassName}>
+      <span className={modalFieldTitleClassName}>{spec.title}</span>
+      <span className={modalFieldDescriptionClassName}>{spec.description}</span>
+      <span className="mt-1 inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) =>
+            onChange(event.target.checked ? "true" : "false")
+          }
+          onBlur={onBlur}
+          disabled={disabled}
+          className="h-4 w-4 accent-sds-blue"
+        />
+        {spec.toggleLabel}
+      </span>
+    </label>
+  )
+}
+
 export const AmmConfigForm = ({
   formState,
   fieldErrors,
@@ -325,6 +385,18 @@ export const AmmConfigForm = ({
                       value={formState[spec.key]}
                       errorMessage={error}
                       showError={showError}
+                      disabled={disabled}
+                      onChange={(next) => handleInputChange(spec.key, next)}
+                      onBlur={() => markFieldBlur(spec.key)}
+                    />
+                  )
+                }
+                if (spec.kind === "toggle") {
+                  return (
+                    <ToggleField
+                      key={spec.key}
+                      spec={spec}
+                      value={formState[spec.key]}
                       disabled={disabled}
                       onChange={(next) => handleInputChange(spec.key, next)}
                       onBlur={() => markFieldBlur(spec.key)}
