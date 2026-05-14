@@ -9,6 +9,7 @@ use openzeppelin_market_maker::test_helpers::{
     USDC,
     build_invalid_pyth_price_feed_id,
     build_pyth_price_feed_id,
+    create_non_whitelisted_pool,
     create_pool,
     create_sui_currency,
     create_usdc_currency
@@ -102,6 +103,31 @@ fun create_market_rejects_invalid_base_feed_id_length() {
         &sui_currency,
         &usdc_currency,
         build_invalid_pyth_price_feed_id(),
+        build_pyth_price_feed_id(1),
+    );
+
+    abort
+}
+
+#[test, expected_failure(abort_code = market::EPoolNotWhitelisted)]
+fun create_market_rejects_non_whitelisted_pool() {
+    let sender = @0xE;
+    let mut scenario = test_scenario::begin(sender);
+    scenario.next_tx(sender);
+    registry::test_registry(scenario.ctx());
+    let pool_id = create_non_whitelisted_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+
+    let _market = market::new(
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
     );
 
