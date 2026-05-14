@@ -32,10 +32,16 @@ use std::type_name;
 use std::unit_test::{assert_eq, destroy};
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, mint_for_testing};
-use sui::coin_registry::Currency;
 use sui::event;
 use sui::sui::SUI;
 use sui::test_scenario;
+
+// === Test-Only Constants ===
+
+/// Stand-in feed identifier byte for the base asset (SUI) in tests.
+const SUI_PYTH_FEED_ID_BYTE: u8 = 1;
+/// Stand-in feed identifier byte for the quote asset (USDC) in tests.
+const USDC_PYTH_FEED_ID_BYTE: u8 = 2;
 
 // === Test-Only Helpers ===
 
@@ -53,13 +59,12 @@ fun create_registry(scenario: &mut test_scenario::Scenario, sender: address) {
     destroy(admin_cap);
 }
 
-fun publish_price_feed(scenario: &mut test_scenario::Scenario, sender: address, feed_id_byte: u8) {
+fun publish_one_pyth_price_feed(
+    scenario: &mut test_scenario::Scenario,
+    sender: address,
+    feed_id_byte: u8,
+): ID {
     scenario.next_tx(sender);
-    pyth::pyth_state::init_for_testing(scenario.ctx());
-    clock::create_for_testing(scenario.ctx()).share_for_testing();
-
-    scenario.next_tx(sender);
-
     let mut pyth_state: pyth::pyth_state::State = scenario.take_shared();
     let clock_for_price_feed: Clock = scenario.take_shared();
     // confidence = 250 → conf_ratio_bps = 250 per feed, 500 combined; keeps outer order
@@ -77,25 +82,42 @@ fun publish_price_feed(scenario: &mut test_scenario::Scenario, sender: address, 
     );
     test_scenario::return_shared(pyth_state);
     test_scenario::return_shared(clock_for_price_feed);
+
+    scenario.next_tx(sender);
+    test_scenario::most_recent_id_shared<pyth::price_info::PriceInfoObject>().destroy_some()
+}
+
+/// Initializes the mock Pyth state and shared clock and publishes the SUI and USDC feeds.
+/// Returns the `(base, quote)` `PriceInfoObject` ids; tests that only need the shared clock
+/// can ignore them with `let (_, _) = ...`.
+fun publish_price_feeds(scenario: &mut test_scenario::Scenario, sender: address): (ID, ID) {
+    scenario.next_tx(sender);
+    pyth::pyth_state::init_for_testing(scenario.ctx());
+    clock::create_for_testing(scenario.ctx()).share_for_testing();
+
+    let base_pio_id = publish_one_pyth_price_feed(scenario, sender, SUI_PYTH_FEED_ID_BYTE);
+    let quote_pio_id = publish_one_pyth_price_feed(scenario, sender, USDC_PYTH_FEED_ID_BYTE);
+    (base_pio_id, quote_pio_id)
 }
 
 fun create_executor_for_pool(
     scenario: &mut test_scenario::Scenario,
     sender: address,
     pool: &Pool<SUI, USDC>,
-    base_currency: &Currency<SUI>,
-    quote_currency: &Currency<USDC>,
     base_spread_bps: u64,
     volatility_multiplier_bps: u64,
-    feed_id_byte: u8,
 ): (Executor, AdminCap) {
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
     let market = market::new(
         pool,
-        base_currency,
-        quote_currency,
-        build_pyth_price_feed_id(feed_id_byte),
-        build_pyth_price_feed_id(feed_id_byte),
+        &sui_currency,
+        &usdc_currency,
+        build_pyth_price_feed_id(SUI_PYTH_FEED_ID_BYTE),
+        build_pyth_price_feed_id(USDC_PYTH_FEED_ID_BYTE),
     );
+    destroy(sui_currency);
+    destroy(usdc_currency);
     let amm_config = config::new(
         base_spread_bps,
         volatility_multiplier_bps,
@@ -130,18 +152,13 @@ fun create_executor_sets_owner_and_emits_created_event() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        1,
     );
 
     assert_emitted!(executor_created(executor_object.id(), executor_cap.cap_id()));
@@ -151,8 +168,6 @@ fun create_executor_sets_owner_and_emits_created_event() {
     assert_eq!(executor_object.market().pool_id(), pool_id);
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
     scenario.end();
@@ -171,25 +186,18 @@ fun create_executor_and_transfer_moves_objects_to_owner() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        2,
     );
     let executor_id = executor_object.id();
     let executor_cap_id = executor_cap.cap_id();
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, owner);
     transfer::public_transfer(executor_cap, owner);
 
@@ -221,26 +229,29 @@ fun create_executor_creates_distinct_accounts_and_caps() {
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
     let sui_currency = create_sui_currency();
     let usdc_currency = create_usdc_currency();
-
+    // Reuse the same currencies across both markets — `create_sui_currency`/`create_usdc_currency`
+    // register `T` in the `CoinRegistry` and the underlying derived-object claim asserts the
+    // currency type hasn't already been registered, so a second call in the same scenario
+    // aborts with `ECurrencyAlreadyRegistered`.
     let market_a = market::new(
         &pool,
         &sui_currency,
         &usdc_currency,
-        build_pyth_price_feed_id(3),
-        build_pyth_price_feed_id(3),
+        build_pyth_price_feed_id(SUI_PYTH_FEED_ID_BYTE),
+        build_pyth_price_feed_id(USDC_PYTH_FEED_ID_BYTE),
     );
     let market_b = market::new(
         &pool,
         &sui_currency,
         &usdc_currency,
-        build_pyth_price_feed_id(4),
-        build_pyth_price_feed_id(4),
+        build_pyth_price_feed_id(SUI_PYTH_FEED_ID_BYTE),
+        build_pyth_price_feed_id(USDC_PYTH_FEED_ID_BYTE),
     );
+    destroy(sui_currency);
+    destroy(usdc_currency);
     let amm_config_a = config::new(100, 200, 30_000, 30, 1000, 5000, 0);
     let amm_config_b = config::new(125, 250, 30_000, 30, 1000, 5000, 0);
 
-    // Restore the native tx sender after `create_sui_currency`/`create_usdc_currency` used
-    // `tx_context::dummy()` and reset it to @0x0.
     scenario.next_tx(sender);
 
     let (executor_a, executor_cap_a) = executor::create(
@@ -262,8 +273,6 @@ fun create_executor_creates_distinct_accounts_and_caps() {
     assert!(executor_a.balance_manager().id() != executor_b.balance_manager().id());
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_a, sender);
     transfer::public_transfer(executor_cap_a, sender);
     transfer::public_transfer(executor_b, sender);
@@ -290,9 +299,11 @@ fun create_returns_paused_executor() {
         &pool,
         &sui_currency,
         &usdc_currency,
-        build_pyth_price_feed_id(20),
-        build_pyth_price_feed_id(20),
+        build_pyth_price_feed_id(SUI_PYTH_FEED_ID_BYTE),
+        build_pyth_price_feed_id(USDC_PYTH_FEED_ID_BYTE),
     );
+    destroy(sui_currency);
+    destroy(usdc_currency);
     let amm_config = config::new(100, 200, 30_000, 30, 1000, 5000, 0);
     scenario.next_tx(sender);
 
@@ -305,8 +316,6 @@ fun create_returns_paused_executor() {
     assert!(!executor_object.active());
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
     scenario.end();
@@ -315,31 +324,25 @@ fun create_returns_paused_executor() {
 #[test]
 fun deposit_and_withdraw_updates_executor_balance() {
     let sender = @0x14;
-    let feed_id_byte = 5;
     let deposit_amount = 50 * constants::float_scaling();
     let withdraw_amount = 15 * constants::float_scaling();
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (_, _) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        feed_id_byte,
     );
 
     executor_object.deposit(
@@ -357,8 +360,6 @@ fun deposit_and_withdraw_updates_executor_balance() {
     );
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -398,30 +399,24 @@ fun deposit_and_withdraw_updates_executor_balance() {
 #[test]
 fun withdraw_all_returns_full_balance_and_zeroes_remaining() {
     let sender = @0x25;
-    let feed_id_byte = 21;
     let deposit_amount = 50 * constants::float_scaling();
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (_, _) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        feed_id_byte,
     );
 
     executor_object.deposit(
@@ -431,8 +426,6 @@ fun withdraw_all_returns_full_balance_and_zeroes_remaining() {
     );
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -480,18 +473,13 @@ fun deposit_aborts_when_coin_type_is_not_base_or_quote() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        7,
     );
 
     // USDT is neither the configured base (SUI) nor the configured quote (USDC) — should abort.
@@ -511,24 +499,19 @@ fun withdraw_aborts_when_coin_type_is_not_base_or_quote() {
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, 8);
+    let (_, _) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        8,
     );
 
     // Withdraw requires the executor to be paused (otherwise ENotPaused triggers first).
@@ -552,29 +535,23 @@ fun update_config_replaces_config_before_refreshing_quotes() {
     let updated_base_spread_bps = 150;
     let updated_volatility_multiplier_bps = 300;
     let quote_balance = 19_404_002 * constants::float_scaling();
-    let feed_id_byte = 6;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (base_pio_id, quote_pio_id) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        feed_id_byte,
     );
     executor_object.deposit(
         &executor_cap,
@@ -589,8 +566,6 @@ fun update_config_replaces_config_before_refreshing_quotes() {
     assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -599,7 +574,12 @@ fun update_config_replaces_config_before_refreshing_quotes() {
     let mut executor_object: Executor = scenario.take_from_sender();
     let executor_cap: AdminCap = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
+    let base_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        base_pio_id,
+    );
+    let quote_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        quote_pio_id,
+    );
     let clock: Clock = scenario.take_shared();
 
     let updated_config = config::new(
@@ -615,8 +595,8 @@ fun update_config_replaces_config_before_refreshing_quotes() {
     assert_emitted!(executor_config_updated(executor_object.id()));
     executor_object.refresh_quotes_permissionless(
         &mut pool,
-        &price_info_object,
-        &price_info_object,
+        &base_price_info_object,
+        &quote_price_info_object,
         &clock,
         scenario.ctx(),
     );
@@ -624,7 +604,8 @@ fun update_config_replaces_config_before_refreshing_quotes() {
     assert!(event::events_by_type<QuoteUpdated>().length() >= 1);
 
     test_scenario::return_shared(pool);
-    test_scenario::return_shared(price_info_object);
+    test_scenario::return_shared(base_price_info_object);
+    test_scenario::return_shared(quote_price_info_object);
     test_scenario::return_shared(clock);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
@@ -634,34 +615,26 @@ fun update_config_replaces_config_before_refreshing_quotes() {
 #[test]
 fun pause_and_unpause_emit_events_and_toggle_executor_activity() {
     let sender = @0x16;
-    let feed_id_byte = 12;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (_, _) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        feed_id_byte,
     );
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -690,34 +663,26 @@ fun pause_and_unpause_emit_events_and_toggle_executor_activity() {
 #[test]
 fun unpause_emits_event_in_followup_transaction() {
     let sender = @0x17;
-    let feed_id_byte = 13;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (_, _) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        feed_id_byte,
     );
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -753,34 +718,26 @@ fun unpause_emits_event_in_followup_transaction() {
 #[test]
 fun update_config_preserves_paused_state() {
     let sender = @0x18;
-    let feed_id_byte = 14;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (_, _) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        feed_id_byte,
     );
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -810,31 +767,25 @@ fun update_config_preserves_paused_state() {
 #[test, expected_failure(abort_code = executor::EConfigUnchanged)]
 fun update_config_rejects_when_unchanged() {
     let sender = @0x1b;
-    let feed_id_byte = 19;
     let base_spread_bps = 100;
     let volatility_multiplier_bps = 200;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (_, _) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         base_spread_bps,
         volatility_multiplier_bps,
-        feed_id_byte,
     );
 
     // Build a config identical to the one `create_executor_for_pool` used.
@@ -858,29 +809,23 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     let base_spread_bps = 100;
     let volatility_multiplier_bps = 200;
     let quote_balance = 19_404_002 * constants::float_scaling();
-    let feed_id_byte = 7;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (base_pio_id, quote_pio_id) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         base_spread_bps,
         volatility_multiplier_bps,
-        feed_id_byte,
     );
     executor_object.deposit(
         &executor_cap,
@@ -895,8 +840,6 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -904,13 +847,18 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
 
     let mut executor_object: Executor = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
+    let base_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        base_pio_id,
+    );
+    let quote_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        quote_pio_id,
+    );
     let clock: Clock = scenario.take_shared();
 
     executor_object.refresh_quotes_permissionless(
         &mut pool,
-        &price_info_object,
-        &price_info_object,
+        &base_price_info_object,
+        &quote_price_info_object,
         &clock,
         scenario.ctx(),
     );
@@ -928,7 +876,8 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     assert_eq!(event::events_by_type<OrderFullyFilled>().length(), 0);
 
     test_scenario::return_shared(pool);
-    test_scenario::return_shared(price_info_object);
+    test_scenario::return_shared(base_price_info_object);
+    test_scenario::return_shared(quote_price_info_object);
     test_scenario::return_shared(clock);
     transfer::public_transfer(executor_object, sender);
     scenario.end();
@@ -940,29 +889,23 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     let base_spread_bps = 100;
     let volatility_multiplier_bps = 200;
     let quote_balance = 19_404_002 * constants::float_scaling();
-    let feed_id_byte = 12;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (base_pio_id, quote_pio_id) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         base_spread_bps,
         volatility_multiplier_bps,
-        feed_id_byte,
     );
     executor_object.deposit(
         &executor_cap,
@@ -977,8 +920,6 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -986,15 +927,20 @@ fun refresh_quotes_ignores_replayed_publish_time() {
 
     let mut executor_object: Executor = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
+    let base_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        base_pio_id,
+    );
+    let quote_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        quote_pio_id,
+    );
     let clock: Clock = scenario.take_shared();
 
     assert_eq!(event::events_by_type<QuoteUpdated>().length(), 0);
 
     executor_object.refresh_quotes_permissionless(
         &mut pool,
-        &price_info_object,
-        &price_info_object,
+        &base_price_info_object,
+        &quote_price_info_object,
         &clock,
         scenario.ctx(),
     );
@@ -1003,15 +949,16 @@ fun refresh_quotes_ignores_replayed_publish_time() {
     // Same oracle publish timestamp should be treated as stale and skip quote refresh.
     executor_object.refresh_quotes_permissionless(
         &mut pool,
-        &price_info_object,
-        &price_info_object,
+        &base_price_info_object,
+        &quote_price_info_object,
         &clock,
         scenario.ctx(),
     );
     assert_eq!(event::events_by_type<QuoteUpdated>().length(), 1);
 
     test_scenario::return_shared(pool);
-    test_scenario::return_shared(price_info_object);
+    test_scenario::return_shared(base_price_info_object);
+    test_scenario::return_shared(quote_price_info_object);
     test_scenario::return_shared(clock);
     transfer::public_transfer(executor_object, sender);
     scenario.end();
@@ -1020,31 +967,24 @@ fun refresh_quotes_ignores_replayed_publish_time() {
 #[test, expected_failure(abort_code = executor::EPythFeedIdentifierMismatch)]
 fun refresh_quotes_rejects_when_feed_mismatch() {
     let sender = @0x21;
-    let config_feed_id_byte = 8;
-    let oracle_feed_id_byte = 9;
     let quote_balance = 19_404_002 * constants::float_scaling();
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, oracle_feed_id_byte);
+    let (base_pio_id, quote_pio_id) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        config_feed_id_byte,
     );
     executor_object.deposit(
         &executor_cap,
@@ -1058,8 +998,6 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
     );
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -1067,13 +1005,19 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
 
     let mut executor_object: Executor = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
+    // Swap the base/quote PriceInfoObjects so the executor's base feed id check fails.
+    let base_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        quote_pio_id,
+    );
+    let quote_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        base_pio_id,
+    );
     let clock: Clock = scenario.take_shared();
 
     executor_object.refresh_quotes_permissionless(
         &mut pool,
-        &price_info_object,
-        &price_info_object,
+        &base_price_info_object,
+        &quote_price_info_object,
         &clock,
         scenario.ctx(),
     );
@@ -1084,12 +1028,11 @@ fun refresh_quotes_rejects_when_feed_mismatch() {
 #[test, expected_failure(abort_code = executor::EInvalidPool)]
 fun refresh_quotes_rejects_when_pool_mismatch() {
     let sender = @0x22;
-    let feed_id_byte = 10;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (base_pio_id, quote_pio_id) = publish_price_feeds(&mut scenario, sender);
 
     let configured_pool_id = create_pool(&mut scenario, sender);
 
@@ -1114,22 +1057,15 @@ fun refresh_quotes_rejects_when_pool_mismatch() {
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(configured_pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         100,
         200,
-        feed_id_byte,
     );
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -1137,13 +1073,18 @@ fun refresh_quotes_rejects_when_pool_mismatch() {
 
     let mut executor_object: Executor = scenario.take_from_sender();
     let mut other_pool: Pool<SUI, USDT> = scenario.take_shared_by_id(other_pool_id);
-    let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
+    let base_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        base_pio_id,
+    );
+    let quote_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        quote_pio_id,
+    );
     let clock: Clock = scenario.take_shared();
 
     executor_object.refresh_quotes_permissionless(
         &mut other_pool,
-        &price_info_object,
-        &price_info_object,
+        &base_price_info_object,
+        &quote_price_info_object,
         &clock,
         scenario.ctx(),
     );
@@ -1158,29 +1099,23 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     let base_spread_bps = 100;
     let volatility_multiplier_bps = 200;
     let quote_balance = 19_404_002 * constants::float_scaling();
-    let feed_id_byte = 11;
     let mut scenario = test_scenario::begin(sender);
 
     executor::test_init(scenario.ctx());
     create_registry(&mut scenario, sender);
-    publish_price_feed(&mut scenario, sender, feed_id_byte);
+    let (base_pio_id, quote_pio_id) = publish_price_feeds(&mut scenario, sender);
     let pool_id = create_pool(&mut scenario, sender);
 
     scenario.next_tx(sender);
 
     let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let sui_currency = create_sui_currency();
-    let usdc_currency = create_usdc_currency();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
         sender,
         &pool,
-        &sui_currency,
-        &usdc_currency,
         base_spread_bps,
         volatility_multiplier_bps,
-        feed_id_byte,
     );
     executor_object.deposit(
         &executor_cap,
@@ -1195,8 +1130,6 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     assert_eq!(event::events_by_type<BalanceEvent>().length(), 2);
 
     test_scenario::return_shared(pool);
-    destroy(sui_currency);
-    destroy(usdc_currency);
     transfer::public_transfer(executor_object, sender);
     transfer::public_transfer(executor_cap, sender);
 
@@ -1204,13 +1137,18 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
 
     let mut executor_object: Executor = scenario.take_from_sender();
     let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
-    let price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared();
+    let base_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        base_pio_id,
+    );
+    let quote_price_info_object: pyth::price_info::PriceInfoObject = scenario.take_shared_by_id(
+        quote_pio_id,
+    );
     let clock: Clock = scenario.take_shared();
 
     executor_object.refresh_quotes_permissionless(
         &mut pool,
-        &price_info_object,
-        &price_info_object,
+        &base_price_info_object,
+        &quote_price_info_object,
         &clock,
         scenario.ctx(),
     );
@@ -1218,7 +1156,8 @@ fun refresh_quotes_matches_orders_and_emits_fill_events() {
     assert!(event::events_by_type<QuoteUpdated>().length() >= 1);
 
     test_scenario::return_shared(pool);
-    test_scenario::return_shared(price_info_object);
+    test_scenario::return_shared(base_price_info_object);
+    test_scenario::return_shared(quote_price_info_object);
     test_scenario::return_shared(clock);
     transfer::public_transfer(executor_object, sender);
 
