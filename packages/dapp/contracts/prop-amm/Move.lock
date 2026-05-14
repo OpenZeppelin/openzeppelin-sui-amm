@@ -89,7 +89,7 @@ manifest_digest = "D898E3EAE56DD0D14D7C8DA5C29EC4EA9D9FEE5E710C406A485AD8A0DF2F7
 deps = { deepbook = "deepbook", pyth = "Pyth", std = "MoveStdlib", sui = "Sui" }
 
 [pinned.testnet.token]
-source = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/token", rev = "9a0f33d78713c5a9fef9369b369cebadc51315ac" }
+source = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/token", rev = "f0e476420c38ec92cd8610b82edfe67ec03e8232" }
 use_environment = "testnet"
 manifest_digest = "5745706258F61D6CE210904B3E6AE87A73CE9D31A6F93BE4718C442529332A87"
 deps = { std = "MoveStdlib", sui = "Sui" }

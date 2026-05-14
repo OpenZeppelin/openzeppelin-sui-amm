@@ -12,6 +12,10 @@ It is experimental and unaudited.
 - Two quote refresh entrypoints: `refresh_quotes_permissionless` (bot-driven, reads Pyth) and `refresh_quotes` (admin-driven, accepts an off-chain mid price). Both compute spreads and place limit orders.
 - Event surface for market maker executor creation and quote updates (`events.move`).
 
+## Pool requirements
+
+Only **whitelisted** DeepBook pools (`pool.whitelisted() == true`) are supported. The quote-refresh ladder allocates 100% of each side's settled balance across two limit orders with no fee headroom, and orders are placed with `pay_with_deep = false`. On non-whitelisted pools DeepBook charges the maker fee in the input asset, so the second order on each side aborts the refresh with `EBalanceManagerBalanceTooLow`. `market::new` rejects non-whitelisted pools at construction time with `EPoolNotWhitelisted`.
+
 ## Modules
 
 - `market`: validates and builds `Market` values (pool ID, per-side coin type / decimals / Pyth feed ID / cached publish timestamp).
