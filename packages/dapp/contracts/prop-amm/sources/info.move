@@ -85,14 +85,14 @@ public(package) fun update(
 }
 
 /// Record a quote-asset deposit amount.
-/// Will never fail, but can record invalid value (0 or max).
+/// Will never fail, but can record invalid value (u64::MAX).
 public(package) fun record_quote_deposit(self: &mut Info, amount: u64) {
     self.quote.deposited = self.quote.deposited.saturating_add(amount as u128);
     self.quote.balance = self.quote.balance.saturating_add(amount);
 }
 
 /// Record a base-asset deposit amount.
-/// Will never fail, but can record invalid value (0 or max).
+/// Will never fail, but can record invalid value (u64::MAX).
 public(package) fun record_base_deposit(self: &mut Info, amount: u64) {
     self.base.deposited = self.base.deposited.saturating_add(amount as u128);
     self.base.balance = self.base.balance.saturating_add(amount);

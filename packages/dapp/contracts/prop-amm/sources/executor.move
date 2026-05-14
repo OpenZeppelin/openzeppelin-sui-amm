@@ -230,7 +230,7 @@ public fun deposit<T>(self: &mut Executor, cap: &AdminCap, coin: Coin<T>, ctx: &
 /// Fails if the market maker executor is not paused.
 /// Emits `Withdrawn` in addition to Deepbook's `BalanceEvent`.
 ///
-/// NOTE: Pause step let us settle all the balances before making withdrawal.
+/// NOTE: Pause step lets us settle all the balances before making the withdrawal.
 /// Otherwise there is a high chance there is nothing to withdraw.
 public fun withdraw<T>(
     self: &mut Executor,
@@ -260,7 +260,7 @@ public fun withdraw<T>(
 /// Fails if the market maker executor is not paused.
 /// Emits `Withdrawn` in addition to Deepbook's `BalanceEvent`.
 ///
-/// NOTE: Pause step let us settle all the balances before making withdrawal.
+/// NOTE: Pause step lets us settle all the balances before making the withdrawal.
 /// Otherwise there is a high chance there is nothing to withdraw.
 public fun withdraw_all<T>(self: &mut Executor, cap: &AdminCap, ctx: &mut TxContext): Coin<T> {
     let amount = self.balance_manager.balance<T>();
@@ -312,7 +312,7 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
     // Skip refresh only when both feeds are stale (neither feed timestamp advanced)
     // and there are open orders.
     // Protects from calling permissionless quote refresh with old pricing,
-    // that will force market maker resubmit orders and loose priority.
+    // that would force the market maker to resubmit orders and lose priority.
     let has_open_orders = self.has_open_orders(pool);
     let is_price_updated = self.market.try_update_publish_time(base_pyth_price, quote_pyth_price);
     if (has_open_orders && !is_price_updated) {
@@ -408,7 +408,7 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
     // Fetch deepbook's pool parameters.
     let (tick, lot_size, _) = pool.pool_book_params();
 
-    // Calculate bids/ask order prices around the reservation mid so the quote ladder leans
+    // Calculate bid/ask order prices around the reservation mid so the quote ladder leans
     // toward rebalancing the inventory (spreads remain scaled off the oracle mid).
     let bid_outer = compute_bid_price(reservation_mid, volatility_spread, tick);
     let bid_inner = compute_bid_price(reservation_mid, base_spread, tick);
@@ -453,7 +453,7 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
             base_balance,
         );
 
-    // Try place lace 4 limit orders (2 bids + 2 asks) around the reservation mid.
+    // Try to place 4 limit orders (2 bids + 2 asks) around the reservation mid.
     // Skipped if quantity is below the limit.
     let order_params = vector[
         LimitOrderParams { price: bid_outer, quantity: bid_outer_quantity, is_bid: true },
@@ -483,17 +483,17 @@ public fun balance_manager(self: &Executor): &BalanceManager {
     &self.balance_manager
 }
 
-/// Returns a deepbook's trade cap ID.
+/// Returns the DeepBook trade cap ID.
 public fun trade_cap_id(self: &Executor): ID {
     object::id(&self.caps.trade_cap)
 }
 
-/// Returns a deepbook's deposit cap ID.
+/// Returns the DeepBook deposit cap ID.
 public fun deposit_cap_id(self: &Executor): ID {
     object::id(&self.caps.deposit_cap)
 }
 
-/// Returns a deepbook's withdraw cap ID.
+/// Returns the DeepBook withdraw cap ID.
 public fun withdraw_cap_id(self: &Executor): ID {
     object::id(&self.caps.withdraw_cap)
 }
