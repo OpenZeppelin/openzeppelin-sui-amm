@@ -533,7 +533,7 @@ fun has_open_orders<BaseAsset, QuoteAsset>(
 ): bool {
     if (!pool.account_exists(&self.balance_manager)) return false;
 
-    // Checking each placed order's expiration timestamp,
+    // Check each placed order's expiration timestamp,
     // since `pool.account(..).open_orders()` does not consider stale orders.
     let timestamp_ms = clock.timestamp_ms();
     let open_orders = pool.account(&self.balance_manager).open_orders().into_keys();
