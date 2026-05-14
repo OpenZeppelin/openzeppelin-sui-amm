@@ -99,7 +99,7 @@ public(package) fun record_base_deposit(self: &mut Info, amount: u64) {
 }
 
 /// Record a quote-asset withdrawal amount.
-/// Will never fail, but can record invalid balance (0) or withdrawn counter (max)
+/// Will never fail, but can record invalid balance (0) or withdrawn counter (u64::MAX)
 /// (balances math should be taken care of when calling this function).
 public(package) fun record_quote_withdraw(self: &mut Info, amount: u64) {
     self.quote.withdrawn = self.quote.withdrawn.saturating_add(amount as u128);
@@ -107,7 +107,7 @@ public(package) fun record_quote_withdraw(self: &mut Info, amount: u64) {
 }
 
 /// Record a base-asset withdrawal amount.
-/// Will never fail, but can record invalid balance (0) or withdrawn counter (max)
+/// Will never fail, but can record invalid balance (0) or withdrawn counter (u64::MAX)
 /// (balances math should be taken care of when calling this function)
 public(package) fun record_base_withdraw(self: &mut Info, amount: u64) {
     self.base.withdrawn = self.base.withdrawn.saturating_add(amount as u128);
