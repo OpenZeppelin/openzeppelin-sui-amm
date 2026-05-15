@@ -8,17 +8,19 @@
  *      `pyth-mock::price_info::update_price_feed` so AMM quote refreshes pick
  *      up the new price. Skipped when `--max-price-delta 0`.
  *   2. Pick a random side — buy base (USDC → SUI) or sell base (SUI → USDC).
- *   3. Pick a random size up to `--max-base` SUI for sells or `--max-quote`
- *      USDC for buys.
+ *   3. Pick a random size up to `--max-quantity-quote` USDC (dollar terms).
+ *      For sells, the base-side cap is derived per tick as
+ *      `--max-quantity-quote / currentPriceDollars` so per-tick flow stays
+ *      symmetric in dollars even as the price walks.
  *   4. Submit the combined PTB and log the digest.
  *
  * Configuration:
  *   - Pool id, package ids, USDC coin type, and the SUI/USD PriceInfoObject id
  *     are sourced from `packages/dapp/deployments/mock.localnet.json`
  *     (populated by `mock:setup` and `mock:pool:create`).
- *   - Tick cadence and per-side caps come from CLI flags (`--interval-ms`,
- *     `--max-base`, `--max-quote`); defaults: 2000 ms, 1 SUI, 1.5 USDC
- *     (symmetric in dollar terms at the default mock SUI/USD price).
+ *   - Tick cadence and per-tick cap come from CLI flags (`--interval-ms`,
+ *     `--max-quantity-quote`); defaults: 2000 ms, 1.5 USDC. The base-side
+ *     cap is derived per tick from the current price.
  *   - Price walk: `--start-price` / `--max-price-delta` (human dollars). The
  *     mock feed has no auth on `update_price_feed`, so the bot's signer is
  *     enough.
@@ -69,6 +71,13 @@ const USDC_DECIMALS = 6n
 const SUI_ATOMS_PER_UNIT = 10n ** SUI_DECIMALS
 const USDC_ATOMS_PER_UNIT = 10n ** USDC_DECIMALS
 
+// Atom → human-readable string. SUI shows 4 fractional digits (sub-DUST
+// resolution); USDC shows 2 (cent resolution).
+const formatBase = (atoms: bigint): string =>
+  (Number(atoms) / Number(SUI_ATOMS_PER_UNIT)).toFixed(4)
+const formatQuote = (atoms: bigint): string =>
+  (Number(atoms) / Number(USDC_ATOMS_PER_UNIT)).toFixed(2)
+
 // Below the pool's `min_size` (10_000_000 base atoms / 10 USDC quote atoms-equivalent
 // for the localnet SUI/USDC pool) the swap is a no-op. Skip those iterations
 // rather than burn gas on guaranteed-empty fills.
@@ -110,8 +119,8 @@ const requireMockField = <T>(value: T | undefined, label: string): T => {
 // Returns a uniformly random bigint in [minInclusive, maxExclusive). Returns
 // `undefined` when the cap doesn't leave any room above the pool's min_size
 // floor — silently coercing up to `minInclusive` would violate the operator's
-// `--max-base` / `--max-quote` cap and defeat the "skip below min_size"
-// behavior the call sites rely on.
+// `--max-quantity-quote` cap and defeat the "skip below min_size" behavior
+// the call sites rely on.
 const randomBigIntInRange = (
   minInclusive: bigint,
   maxExclusive: bigint
@@ -132,8 +141,7 @@ runSuiScript(
     assertLocalnetNetwork(network.networkName)
 
     const intervalMs = cliArguments.intervalMs
-    const maxBase = cliArguments.maxBase
-    const maxQuote = cliArguments.maxQuote
+    const maxQuantityQuoteDollars = cliArguments.maxQuantityQuote
     const startPriceDollars = cliArguments.startPrice
     const maxPriceDeltaDollars = cliArguments.maxPriceDelta
 
@@ -222,8 +230,7 @@ runSuiScript(
     logKeyValueGreen("quote")(quoteCoinType)
     logKeyValueGreen("signer")(ownerAddress)
     logKeyValueGreen("interval-ms")(String(intervalMs))
-    logKeyValueGreen("max-base")(`${maxBase} SUI`)
-    logKeyValueGreen("max-quote")(`${maxQuote} USDC`)
+    logKeyValueGreen("max-quantity-quote")(`${maxQuantityQuoteDollars} USDC`)
     if (maxPriceDeltaDollars > 0) {
       logKeyValueGreen("price-walk")(
         `start=$${startPriceDollars.toFixed(2)} · max-delta=±$${maxPriceDeltaDollars.toFixed(2)}`
@@ -242,12 +249,13 @@ runSuiScript(
           })
         : undefined
 
-    // Caps are interpreted as human-denominated upper bounds.
-    const maxBaseAtoms = BigInt(
-      Math.floor(maxBase * Number(SUI_ATOMS_PER_UNIT))
-    )
+    // `--max-quantity-quote` is the per-tick dollar cap. The buy side maps to
+    // it directly (one USDC ≈ one dollar). The sell side's base cap is derived
+    // from `currentPriceDollars` *inside* the tick loop below so it tracks the
+    // price walk; computing it once here would skew flows again the moment
+    // `currentPriceDollars` drifts.
     const maxQuoteAtoms = BigInt(
-      Math.floor(maxQuote * Number(USDC_ATOMS_PER_UNIT))
+      Math.floor(maxQuantityQuoteDollars * Number(USDC_ATOMS_PER_UNIT))
     )
 
     let currentPriceDollars = startPriceDollars
@@ -281,10 +289,18 @@ runSuiScript(
 
         let swapDescription: string | undefined
         if (isSellBase) {
+          // Derive the base-side cap from the current price so per-tick flows
+          // stay symmetric in dollar terms across the price walk.
+          const maxBaseAtoms = BigInt(
+            Math.floor(
+              (maxQuantityQuoteDollars / currentPriceDollars) *
+                Number(SUI_ATOMS_PER_UNIT)
+            )
+          )
           const baseAtoms = randomBigIntInRange(MIN_BASE_ATOMS, maxBaseAtoms)
           if (baseAtoms === undefined) {
             logWarning(
-              `tick ${tick} sell-base skipped: --max-base (${maxBaseAtoms.toString()} atoms) is at or below the pool's min_size (${MIN_BASE_ATOMS.toString()})`
+              `tick ${tick} sell-base skipped: derived max-base (${formatBase(maxBaseAtoms)} SUI) is at or below the pool's min_size (${formatBase(MIN_BASE_ATOMS)} SUI)`
             )
           } else {
             addSellBase(transaction, {
@@ -296,13 +312,13 @@ runSuiScript(
               deepCoinType,
               baseAtoms
             })
-            swapDescription = `sell-base ${baseAtoms.toString()} base-atoms`
+            swapDescription = `sell-base ${formatBase(baseAtoms)} SUI`
           }
         } else {
           const quoteAtoms = randomBigIntInRange(MIN_QUOTE_ATOMS, maxQuoteAtoms)
           if (quoteAtoms === undefined) {
             logWarning(
-              `tick ${tick} buy-base skipped: --max-quote (${maxQuoteAtoms.toString()} atoms) is at or below the pool's min_size (${MIN_QUOTE_ATOMS.toString()})`
+              `tick ${tick} buy-base skipped: --max-quantity-quote (${formatQuote(maxQuoteAtoms)} USDC) is at or below the pool's min_size (${formatQuote(MIN_QUOTE_ATOMS)} USDC)`
             )
           } else {
             const ownedQuoteCoins = await fetchCoinBalances(
@@ -312,9 +328,9 @@ runSuiScript(
             const richestQuote = selectRichestCoin(ownedQuoteCoins)
             if (!richestQuote || BigInt(richestQuote.balance) < quoteAtoms) {
               logWarning(
-                `tick ${tick} buy-base skipped: not enough USDC (need ${quoteAtoms.toString()} atoms, have ${
-                  richestQuote?.balance ?? "0"
-                })`
+                `tick ${tick} buy-base skipped: not enough USDC (need ${formatQuote(quoteAtoms)} USDC, have ${
+                  richestQuote ? formatQuote(BigInt(richestQuote.balance)) : "0"
+                } USDC)`
               )
             } else {
               addBuyBase(transaction, {
@@ -327,7 +343,7 @@ runSuiScript(
                 quoteAtoms,
                 quoteCoinObjectId: richestQuote.coinObjectId
               })
-              swapDescription = `buy-base ${quoteAtoms.toString()} quote-atoms`
+              swapDescription = `buy-base ${formatQuote(quoteAtoms)} USDC`
             }
           }
         }
@@ -371,17 +387,11 @@ runSuiScript(
       description: "Delay between market orders, in milliseconds",
       default: 2000
     })
-    .option("maxBase", {
-      alias: ["max-base"],
-      type: "number",
-      description: "Upper bound for base-side (SUI) order size, in human SUI",
-      default: 1
-    })
-    .option("maxQuote", {
-      alias: ["max-quote"],
+    .option("maxQuantityQuote", {
+      alias: ["max-quantity-quote"],
       type: "number",
       description:
-        "Upper bound for quote-side (USDC) order size, in human USDC. Defaults to `maxBase * default SUI/USD ($1.50)` so per-tick base- and quote-side flows are symmetric in dollar terms; otherwise the executor's inventory drifts and one side's order ladder eventually gets skipped for being below the pool's min_size.",
+        "Upper bound for the per-tick swap, expressed in human USDC (dollars). Applied directly on buy ticks; on sell ticks the base-side cap is computed each tick as `maxQuantityQuote / currentPriceDollars` so the dollar-denominated flow stays symmetric across the price walk.",
       default: 1.5
     })
     .option("seedBaseSui", {

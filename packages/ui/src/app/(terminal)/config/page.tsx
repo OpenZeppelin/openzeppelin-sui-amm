@@ -50,10 +50,13 @@ export default function ConfigPage() {
     fieldErrors,
     transactionState,
     canSubmit,
+    canSubmitRefresh,
+    refreshDisabledReason,
     handleInputChange,
     markFieldBlur,
     shouldShowFieldError,
-    handleUpdateAmmConfig
+    handleUpdateAmmConfig,
+    handleUpdateAndRefreshAmmConfig
   } = useUpdateAmmConfigModalState({
     open: true,
     ammConfigId,
@@ -63,6 +66,9 @@ export default function ConfigPage() {
 
   const isProcessing = transactionState.status === "processing"
   const submitLabel = isProcessing ? "Updating..." : "Update config"
+  const refreshSubmitLabel = isProcessing
+    ? "Updating..."
+    : "Update & refresh quotes"
 
   const renderBody = () => {
     if (loadStatus === "idle" || loadStatus === "loading") {
@@ -120,8 +126,18 @@ export default function ConfigPage() {
           >
             Reset defaults
           </Button>
-          <Button onClick={handleUpdateAmmConfig} disabled={!canSubmit}>
+          <Button
+            onClick={() => handleUpdateAmmConfig()}
+            disabled={!canSubmit}
+          >
             {submitLabel}
+          </Button>
+          <Button
+            onClick={() => handleUpdateAndRefreshAmmConfig()}
+            disabled={!canSubmitRefresh}
+            title={refreshDisabledReason}
+          >
+            {refreshSubmitLabel}
           </Button>
         </div>
       </>

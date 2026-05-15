@@ -60,6 +60,7 @@ fun create_market_builds_expected_market() {
     test_scenario::return_shared(pool);
     destroy(sui_currency);
     destroy(usdc_currency);
+    destroy(market);
     scenario.end();
 }
 
@@ -75,13 +76,13 @@ fun create_market_rejects_empty_base_feed_id() {
     let sui_currency = create_sui_currency();
     let usdc_currency = create_usdc_currency();
 
-    let _market = market::new(
+    destroy(market::new(
         &pool,
         &sui_currency,
         &usdc_currency,
         vector[],
         build_pyth_price_feed_id(1),
-    );
+    ));
 
     abort
 }
@@ -98,13 +99,13 @@ fun create_market_rejects_invalid_base_feed_id_length() {
     let sui_currency = create_sui_currency();
     let usdc_currency = create_usdc_currency();
 
-    let _market = market::new(
+    destroy(market::new(
         &pool,
         &sui_currency,
         &usdc_currency,
         build_invalid_pyth_price_feed_id(),
         build_pyth_price_feed_id(1),
-    );
+    ));
 
     abort
 }
@@ -123,13 +124,13 @@ fun create_market_rejects_non_whitelisted_pool() {
     let sui_currency = create_sui_currency();
     let usdc_currency = create_usdc_currency();
 
-    let _market = market::new(
+    destroy(market::new(
         &pool,
         &sui_currency,
         &usdc_currency,
         build_pyth_price_feed_id(0),
         build_pyth_price_feed_id(1),
-    );
+    ));
 
     abort
 }
@@ -146,13 +147,13 @@ fun create_market_rejects_invalid_quote_feed_id_length() {
     let sui_currency = create_sui_currency();
     let usdc_currency = create_usdc_currency();
 
-    let _market = market::new(
+    destroy(market::new(
         &pool,
         &sui_currency,
         &usdc_currency,
         build_pyth_price_feed_id(0),
         build_invalid_pyth_price_feed_id(),
-    );
+    ));
 
     abort
 }
@@ -170,13 +171,13 @@ fun create_market_rejects_identical_feed_ids() {
     let usdc_currency = create_usdc_currency();
 
     let feed_id = build_pyth_price_feed_id(0);
-    let _market = market::new(
+    destroy(market::new(
         &pool,
         &sui_currency,
         &usdc_currency,
         feed_id,
         feed_id,
-    );
+    ));
 
     abort
 }

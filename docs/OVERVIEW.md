@@ -102,6 +102,17 @@ What you do here:
 Quote>` immediately. Pyth `PriceInfoObject` timestamps get re-stamped in
   the same PTB so the executor's `assert_price_age_within_limit` doesn't
   abort.
+- **Refresh Quotes (admin)** runs the AdminCap-gated
+  `executor::refresh_quotes<Base, Quote>` with a caller-supplied mid price
+  and confidence ratio, bypassing Pyth entirely. Useful when you want to
+  quote off off-chain market data (e.g. a CEX feed) or test ladder shape
+  against a known price without waiting for the oracle. The form takes the
+  mid in human dollars (e.g. `1.50`, in `quote per base`) and the
+  confidence ratio in percent (e.g. `1.5`, mapped to `150` bps), then the
+  hook converts to DeepBook fixed-point u64 (`humanPrice × 10^(9 −
+  baseDecimals + quoteDecimals)`) on submit. Works on every network — no
+  Pyth or Hermes dependency. Requires the connected wallet to hold the
+  executor's `AdminCap` and the executor to be active.
 - **Pause / Unpause** toggles trading. While paused the existing orders
   stay live on the book but no new refreshes can run; **Withdraw all** on
   `/funding` is the typical reason to pause.

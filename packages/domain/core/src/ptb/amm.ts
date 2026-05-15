@@ -225,6 +225,155 @@ export type MockPriceComponents = {
   exponentIsNegative: boolean
 }
 
+const stampMockPythFeedsBeforeRefresh = (
+  transaction: ReturnType<typeof newTransaction>,
+  {
+    pythMockPackageId,
+    basePriceInfoObject,
+    quotePriceInfoObject,
+    basePriceComponents,
+    quotePriceComponents
+  }: {
+    pythMockPackageId: string
+    basePriceInfoObject: WrappedSuiSharedObject
+    quotePriceInfoObject: WrappedSuiSharedObject
+    basePriceComponents: MockPriceComponents
+    quotePriceComponents: MockPriceComponents
+  }
+) => {
+  appendMockPriceFeedUpdate(transaction, {
+    pythMockPackageId,
+    priceInfoObject: basePriceInfoObject,
+    components: basePriceComponents
+  })
+
+  // Skip the second stamp when both feeds map to the same object — Sui
+  // forbids two `&mut` references to the same shared object in a single PTB.
+  if (
+    basePriceInfoObject.sharedRef.objectId !==
+    quotePriceInfoObject.sharedRef.objectId
+  ) {
+    appendMockPriceFeedUpdate(transaction, {
+      pythMockPackageId,
+      priceInfoObject: quotePriceInfoObject,
+      components: quotePriceComponents
+    })
+  }
+}
+
+/**
+ * Localnet-only: builds a PTB that replaces the executor's `AMMConfig` and
+ * immediately re-quotes the ladder under the new config via Pyth oracle
+ * prices.
+ *
+ * Mock Pyth feeds are bumped first (only their timestamps; the magnitudes
+ * are passed in by the caller and re-stamped verbatim) so the executor's
+ * `assert_price_age_within_limit` check passes. Then `update_config` mints
+ * a `RefreshTicket` that `refresh_quotes_pyth_after_update` consumes in the
+ * same block — atomic update + repopulation, no window where the ladder
+ * could quote under the replaced configuration.
+ *
+ * Real-network deployment requires Hermes VAA fetching ahead of
+ * `refresh_quotes_pyth_after_update`, which the dapp doesn't currently
+ * implement; callers should fall back to `buildUpdateConfigAndCancelTransaction`
+ * on testnet/mainnet.
+ */
+export const buildUpdateConfigAndLocalnetRefreshTransaction = ({
+  packageId,
+  executor,
+  adminCapId,
+  pool,
+  baseAssetTypeTag,
+  quoteAssetTypeTag,
+  pythMockPackageId,
+  basePriceInfoObject,
+  quotePriceInfoObject,
+  basePriceComponents,
+  quotePriceComponents,
+  baseSpreadBps,
+  volatilityMultiplierBps,
+  orderExpirationTimeMs,
+  maxPriceAgeSecs,
+  maxConfRatioBps,
+  outerBalanceBps,
+  inventorySkewBps,
+  postOnly
+}: {
+  packageId: string
+  executor: WrappedSuiSharedObject
+  adminCapId: string
+  pool: WrappedSuiSharedObject
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
+  pythMockPackageId: string
+  basePriceInfoObject: WrappedSuiSharedObject
+  quotePriceInfoObject: WrappedSuiSharedObject
+  basePriceComponents: MockPriceComponents
+  quotePriceComponents: MockPriceComponents
+  baseSpreadBps: bigint | number
+  volatilityMultiplierBps: bigint | number
+  orderExpirationTimeMs: bigint | number
+  maxPriceAgeSecs: bigint | number
+  maxConfRatioBps: bigint | number
+  outerBalanceBps: bigint | number
+  inventorySkewBps: bigint | number
+  /**
+   * When true, `refresh_quotes` places each order with DeepBook's `post_only` flag —
+   * any order that would cross the resting book aborts the whole refresh and the
+   * previous quotes survive until the next oracle reading. When false, the crossing
+   * portion executes immediately as a taker (legacy `no_restriction` behavior).
+   */
+  postOnly: boolean
+}) => {
+  const transaction = newTransaction()
+
+  stampMockPythFeedsBeforeRefresh(transaction, {
+    pythMockPackageId,
+    basePriceInfoObject,
+    quotePriceInfoObject,
+    basePriceComponents,
+    quotePriceComponents
+  })
+
+  const ammConfig = transaction.moveCall({
+    target: `${packageId}::config::new`,
+    arguments: [
+      transaction.pure.u64(baseSpreadBps),
+      transaction.pure.u64(volatilityMultiplierBps),
+      transaction.pure.u64(orderExpirationTimeMs),
+      transaction.pure.u64(maxPriceAgeSecs),
+      transaction.pure.u64(maxConfRatioBps),
+      transaction.pure.u64(outerBalanceBps),
+      transaction.pure.u64(inventorySkewBps),
+      transaction.pure.bool(postOnly)
+    ]
+  })
+
+  const [refreshTicket] = transaction.moveCall({
+    target: `${packageId}::executor::update_config`,
+    arguments: [
+      transaction.sharedObjectRef(executor.sharedRef),
+      transaction.object(adminCapId),
+      ammConfig
+    ]
+  })
+
+  transaction.moveCall({
+    target: `${packageId}::executor::refresh_quotes_pyth_after_update`,
+    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
+    arguments: [
+      transaction.sharedObjectRef(executor.sharedRef),
+      refreshTicket,
+      transaction.sharedObjectRef(pool.sharedRef),
+      transaction.sharedObjectRef(basePriceInfoObject.sharedRef),
+      transaction.sharedObjectRef(quotePriceInfoObject.sharedRef),
+      transaction.object(SUI_CLOCK_ID)
+    ]
+  })
+
+  return transaction
+}
+
 const appendMockPriceFeedUpdate = (
   transaction: ReturnType<typeof newTransaction>,
   {
@@ -311,6 +460,55 @@ export const buildLocalnetRefreshQuotesTransaction = ({
       transaction.sharedObjectRef(pool.sharedRef),
       transaction.sharedObjectRef(basePriceInfoObject.sharedRef),
       transaction.sharedObjectRef(quotePriceInfoObject.sharedRef),
+      transaction.object(SUI_CLOCK_ID)
+    ]
+  })
+
+  return transaction
+}
+
+/**
+ * Builds an admin-gated `executor::refresh_quotes` transaction. The caller
+ * supplies the DeepBook-format `midPrice` (u64) and combined `confRatioBps`
+ * (u64, basis points) instead of reading the Pyth oracle. Useful when quoting
+ * off off-chain market data is preferable to the on-chain oracle, e.g. to
+ * inject a CEX feed. Requires the executor to be active and the matching
+ * `AdminCap`.
+ *
+ * `midPrice` is the DeepBook-fixed-point representation:
+ *   midPrice = humanPrice * 10^(9 - baseDecimals + quoteDecimals)
+ * For SUI (9d) / USDC (6d) at $1.50, midPrice = 1_500_000.
+ */
+export const buildAdminRefreshQuotesTransaction = ({
+  packageId,
+  executor,
+  adminCapId,
+  pool,
+  baseAssetTypeTag,
+  quoteAssetTypeTag,
+  midPrice,
+  confRatioBps
+}: {
+  packageId: string
+  executor: WrappedSuiSharedObject
+  adminCapId: string
+  pool: WrappedSuiSharedObject
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
+  midPrice: bigint | number
+  confRatioBps: bigint | number
+}) => {
+  const transaction = newTransaction()
+
+  transaction.moveCall({
+    target: `${packageId}::executor::refresh_quotes`,
+    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
+    arguments: [
+      transaction.sharedObjectRef(executor.sharedRef),
+      transaction.object(adminCapId),
+      transaction.sharedObjectRef(pool.sharedRef),
+      transaction.pure.u64(midPrice),
+      transaction.pure.u64(confRatioBps),
       transaction.object(SUI_CLOCK_ID)
     ]
   })

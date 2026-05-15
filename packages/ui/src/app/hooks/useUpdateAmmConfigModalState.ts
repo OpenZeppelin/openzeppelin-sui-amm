@@ -15,7 +15,12 @@ import {
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { buildUpdateConfigAndCancelTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { readPythPriceComponentsFromContent } from "@sui-amm/domain-core/models/pyth"
+import {
+  buildUpdateConfigAndCancelTransaction,
+  buildUpdateConfigAndLocalnetRefreshTransaction
+} from "@sui-amm/domain-core/ptb/amm"
+import { SuiPythClient } from "@pythnetwork/pyth-sui-js"
 import { deriveRelevantPackageId } from "@sui-amm/tooling-core/object"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
@@ -44,6 +49,7 @@ import {
   serializeForJson
 } from "../helpers/transactionErrors"
 import { waitForTransactionBlock } from "../helpers/transactionWait"
+import useDeploymentArtifacts from "./useDeploymentArtifacts"
 import useExplorerUrl from "./useExplorerUrl"
 import { useIdleFieldValidation } from "./useIdleFieldValidation"
 
@@ -119,6 +125,10 @@ export const useUpdateAmmConfigModalState = ({
   const signAndExecuteTransaction = useSignAndExecuteTransaction()
   const signTransaction = useSignTransaction()
   const explorerUrl = useExplorerUrl()
+  const {
+    pythMockPackageId: localnetPythMockPackageId,
+    pythStateId: localnetPythStateId
+  } = useDeploymentArtifacts()
   const localnetClient = useMemo(() => getLocalnetClient(), [])
   const isLocalnet = network === ENetwork.LOCALNET
   const localnetExecutor = useMemo(
@@ -166,6 +176,24 @@ export const useUpdateAmmConfigModalState = ({
     transactionState.status !== "processing" &&
     isSubmissionPending !== true
 
+  // Update & refresh requires the localnet mock-Pyth artifacts (Hermes VAA
+  // fetching isn't wired up here, so the refresh consumer is localnet-only)
+  // and an active executor (refresh_quotes_pyth_after_update aborts on a
+  // paused executor).
+  const localnetRefreshArtifactsReady = Boolean(
+    localnetPythMockPackageId && localnetPythStateId
+  )
+  const refreshDisabledReason = (() => {
+    if (!isLocalnet)
+      return "Update & refresh quotes is localnet-only (no Hermes VAA wiring on real networks)."
+    if (!localnetRefreshArtifactsReady)
+      return "Mock Pyth artifacts missing — run `pnpm mock:setup` and reload."
+    if (ammConfig && ammConfig.active === false)
+      return "Executor is paused — unpause before refreshing quotes."
+    return undefined
+  })()
+  const canSubmitRefresh = canSubmit && refreshDisabledReason === undefined
+
   const resetForm = useCallback(() => {
     setFormState(buildAmmConfigFormState(ammConfig))
     setTransactionState({ status: "idle" })
@@ -203,8 +231,15 @@ export const useUpdateAmmConfigModalState = ({
     [hasAttemptedSubmit, shouldShowFieldFeedback]
   )
 
-  const handleUpdateAmmConfig = useCallback(async () => {
+  const handleUpdateAmmConfig = useCallback(async (
+    variant: "cancel" | "localnet-refresh" = "cancel"
+  ) => {
     setHasAttemptedSubmit(true)
+
+    if (variant === "localnet-refresh" && refreshDisabledReason !== undefined) {
+      setTransactionState({ status: "error", error: refreshDisabledReason })
+      return
+    }
 
     if (!walletAddress) {
       setTransactionState({
@@ -320,7 +355,7 @@ export const useUpdateAmmConfigModalState = ({
         { suiClient }
       )
 
-      const updateTransaction = buildUpdateConfigAndCancelTransaction({
+      const commonBuildArgs = {
         packageId,
         executor: configShared,
         adminCapId,
@@ -335,7 +370,89 @@ export const useUpdateAmmConfigModalState = ({
         outerBalanceBps: updateInputs.outerBalanceBps,
         inventorySkewBps: updateInputs.inventorySkewBps,
         postOnly: updateInputs.postOnly
-      })
+      }
+
+      let updateTransaction
+      if (variant === "cancel") {
+        updateTransaction = buildUpdateConfigAndCancelTransaction(
+          commonBuildArgs
+        )
+      } else {
+        // localnet-refresh variant: gating above guarantees
+        // localnetPythMockPackageId / localnetPythStateId are present and the
+        // network is localnet, but TS doesn't see that — narrow defensively.
+        if (!localnetPythMockPackageId || !localnetPythStateId) {
+          throw new Error(
+            "Mock Pyth artifacts are not configured. Re-run `pnpm mock:setup`."
+          )
+        }
+        // Resolve the on-chain PriceInfoObject IDs from the feed-id hex stored
+        // in `Market.{base,quote}.pyth_price_feed_id`. The mock Pyth `State`
+        // exposes the same `b"price_info"` dynamic-field registry as real
+        // Pyth, so the SDK call works identically on localnet.
+        const pythClient = new SuiPythClient(
+          suiClient,
+          localnetPythStateId,
+          localnetPythStateId
+        )
+        const [basePriceInfoObjectId, quotePriceInfoObjectId] =
+          await Promise.all([
+            pythClient.getPriceFeedObjectId(ammConfig.basePythPriceFeedIdHex),
+            pythClient.getPriceFeedObjectId(ammConfig.quotePythPriceFeedIdHex)
+          ])
+        if (!basePriceInfoObjectId || !quotePriceInfoObjectId) {
+          throw new Error(
+            `Pyth state ${localnetPythStateId} has no PriceInfoObject for feed(s) ${[
+              !basePriceInfoObjectId
+                ? `base ${ammConfig.basePythPriceFeedIdHex}`
+                : undefined,
+              !quotePriceInfoObjectId
+                ? `quote ${ammConfig.quotePythPriceFeedIdHex}`
+                : undefined
+            ]
+              .filter(Boolean)
+              .join(", ")}. Re-run mock:setup --re-publish to seed missing feeds.`
+          )
+        }
+        const [basePriceInfo, quotePriceInfo] =
+          basePriceInfoObjectId === quotePriceInfoObjectId
+            ? await Promise.all([
+                getSuiSharedObject(
+                  { objectId: basePriceInfoObjectId, mutable: true },
+                  { suiClient }
+                )
+              ]).then(([shared]) => [shared, shared] as const)
+            : await Promise.all([
+                getSuiSharedObject(
+                  { objectId: basePriceInfoObjectId, mutable: true },
+                  { suiClient }
+                ),
+                getSuiSharedObject(
+                  { objectId: quotePriceInfoObjectId, mutable: true },
+                  { suiClient }
+                )
+              ])
+
+        // Re-stamp each PriceInfoObject with the magnitude it already holds —
+        // only the `timestamp` advances so `assert_price_age_within_limit`
+        // inside the executor passes. Preserves whatever the market-activity
+        // bot has walked the price to instead of clobbering it.
+        const basePriceComponents = readPythPriceComponentsFromContent(
+          basePriceInfo.object.content
+        )
+        const quotePriceComponents = readPythPriceComponentsFromContent(
+          quotePriceInfo.object.content
+        )
+
+        updateTransaction = buildUpdateConfigAndLocalnetRefreshTransaction({
+          ...commonBuildArgs,
+          pythMockPackageId: localnetPythMockPackageId,
+          basePriceInfoObject: basePriceInfo,
+          quotePriceInfoObject: quotePriceInfo,
+          basePriceComponents,
+          quotePriceComponents
+        })
+      }
       updateTransaction.setSender(walletAddress)
 
       let digest = ""
@@ -445,12 +562,20 @@ export const useUpdateAmmConfigModalState = ({
     hasFieldErrors,
     isLocalnet,
     localnetExecutor,
+    localnetPythMockPackageId,
+    localnetPythStateId,
     network,
     onConfigUpdated,
+    refreshDisabledReason,
     signAndExecuteTransaction,
     suiClient,
     walletAddress
   ])
+
+  const handleUpdateAndRefreshAmmConfig = useCallback(
+    () => handleUpdateAmmConfig("localnet-refresh"),
+    [handleUpdateAmmConfig]
+  )
 
   const isSuccessState = transactionState.status === "success"
   const isErrorState = transactionState.status === "error"
@@ -466,10 +591,13 @@ export const useUpdateAmmConfigModalState = ({
     isSuccessState,
     isErrorState,
     canSubmit,
+    canSubmitRefresh,
+    refreshDisabledReason,
     handleInputChange,
     markFieldBlur,
     shouldShowFieldError,
     handleUpdateAmmConfig,
+    handleUpdateAndRefreshAmmConfig,
     resetForm
   }
 }

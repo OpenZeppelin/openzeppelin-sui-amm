@@ -97,6 +97,7 @@ public struct LimitOrderParams has copy, drop {
 /// - `cancel_orders_after_update`: clear the stale ladder without repopulating.
 /// - `refresh_quotes_after_update`: re-quote with a caller-supplied mid price.
 /// - `refresh_quotes_pyth_after_update`: re-quote from Pyth oracle prices.
+/// - `discard_paused_after_update`: no-op consumer; requires the executor to be paused.
 public struct RefreshTicket {
     /// ID of the executor whose configuration was updated.
     executor_id: ID,
@@ -351,24 +352,6 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     self.refresh_quotes_inner(pool, mid_price, conf_ratio_bps, clock, ctx);
 }
 
-/// Consumes a `RefreshTicket` by cancelling all live orders and settling balances,
-/// without placing new quotes. Suitable when the admin replaces the configuration and
-/// intends to pause or withdraw rather than immediately repopulate the book.
-public fun cancel_orders_after_update<BaseAsset, QuoteAsset>(
-    self: &mut Executor,
-    ticket: RefreshTicket,
-    pool: &mut Pool<BaseAsset, QuoteAsset>,
-    clock: &Clock,
-    ctx: &mut TxContext,
-) {
-    let RefreshTicket { executor_id } = ticket;
-    assert!(executor_id == self.id(), EInvalidCap);
-    assert!(self.market.has_valid_pool(pool), EInvalidPool);
-
-    // Cancel previous orders, settle matched amounts, and refresh cached info.
-    self.cancel_orders(pool, clock, ctx);
-}
-
 /// Consumes a `RefreshTicket` by re-quoting with a caller-supplied mid price under the
 /// newly-installed configuration.
 public fun refresh_quotes_after_update<BaseAsset, QuoteAsset>(
@@ -409,6 +392,31 @@ public fun refresh_quotes_pyth_after_update<BaseAsset, QuoteAsset>(
         clock,
         ctx,
     );
+}
+
+/// Consumes a `RefreshTicket` by cancelling all live orders and settling balances,
+/// without placing new quotes.
+public fun cancel_orders_after_update<BaseAsset, QuoteAsset>(
+    self: &mut Executor,
+    ticket: RefreshTicket,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let RefreshTicket { executor_id } = ticket;
+    assert!(executor_id == self.id(), EInvalidCap);
+    assert!(self.market.has_valid_pool(pool), EInvalidPool);
+
+    // Cancel previous orders, settle matched amounts, and refresh cached info.
+    self.cancel_orders(pool, clock, ctx);
+}
+
+/// Consumes a `RefreshTicket` without touching the pool, settling balances, or
+/// placing new quotes. Requires the executor to be paused.
+public fun discard_paused_after_update(self: &Executor, ticket: RefreshTicket) {
+    let RefreshTicket { executor_id } = ticket;
+    assert!(executor_id == self.id(), EInvalidCap);
+    assert!(!self.active, ENotPaused);
 }
 
 /// Cancels stale orders, settles balances, derives the reservation mid and base/volatility
