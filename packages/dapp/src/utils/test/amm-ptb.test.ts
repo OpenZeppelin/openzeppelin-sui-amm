@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   buildCreateExecutorTransaction,
-  buildUpdateConfigTransaction
+  buildUpdateConfigAndCancelTransaction
 } from "@sui-amm/domain-core/ptb/amm"
 import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 
@@ -168,11 +168,14 @@ describe("amm PTB builders", () => {
     )
   })
 
-  it("builds update config with config::new + executor::update_config", () => {
-    const transaction = buildUpdateConfigTransaction({
+  it("builds update config with config::new + update_config + cancel_orders_after_update", () => {
+    const transaction = buildUpdateConfigAndCancelTransaction({
       packageId: "0x123",
       executor: EXECUTOR,
       adminCapId: "0x456",
+      pool: POOL,
+      baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
+      quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
       baseSpreadBps: 25n,
       volatilityMultiplierBps: 10000n,
       orderExpirationTimeMs: 86400000n,
@@ -184,7 +187,7 @@ describe("amm PTB builders", () => {
     })
 
     const transactionData = transaction.getData()
-    expect(transactionData.commands).toHaveLength(2)
+    expect(transactionData.commands).toHaveLength(3)
 
     const configCall = expectMoveCall(transactionData.commands[0])
     expect(configCall).toMatchObject({
@@ -208,6 +211,25 @@ describe("amm PTB builders", () => {
     expect(updateCall.arguments[1]).toMatchObject({
       $kind: "Input",
       type: "object"
+    })
+
+    const cancelCall = expectMoveCall(transactionData.commands[2])
+    expect(cancelCall).toMatchObject({
+      package:
+        "0x0000000000000000000000000000000000000000000000000000000000000123",
+      module: "executor",
+      function: "cancel_orders_after_update"
+    })
+    expect(cancelCall.typeArguments).toEqual([
+      BASE_ASSET_TYPE_TAG,
+      QUOTE_ASSET_TYPE_TAG
+    ])
+    // arg 0: executor shared ref, arg 1: refresh ticket destructured from
+    // update_config (NestedResult pointing at command index 1, position 0),
+    // arg 2: pool shared ref, arg 3: clock object.
+    expect(cancelCall.arguments[1]).toMatchObject({
+      $kind: "NestedResult",
+      NestedResult: [1, 0]
     })
   })
 })

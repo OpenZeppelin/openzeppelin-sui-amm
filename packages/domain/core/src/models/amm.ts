@@ -8,6 +8,7 @@ import {
   formatOptionalNumericValue,
   formatVectorBytesAsHex
 } from "@sui-amm/tooling-core/utils/formatters"
+import { formatTypeNameFromFieldValue } from "@sui-amm/tooling-core/utils/type-name"
 import {
   parseNonNegativeU64,
   parsePositiveU64
@@ -34,6 +35,8 @@ export type AmmConfigOverview = {
   basePythPriceFeedIdHex: string
   quotePythPriceFeedIdHex: string
   poolId: string
+  baseCoinType: string
+  quoteCoinType: string
   orderExpirationTimeMs: string
   maxPriceAgeSecs: string
   maxConfRatioBps: string
@@ -62,6 +65,7 @@ type MarketFields = {
 type MarketCurrencyFields = {
   pyth_price_feed_id?: unknown
   price_publish_time?: unknown
+  coin_type?: unknown
 }
 
 type ExecutorFields = {
@@ -100,6 +104,12 @@ const requireStringField = (value: unknown, label: string): string => {
   throw new Error(`${label} is required.`)
 }
 
+const requireCoinType = (value: unknown, label: string): string => {
+  const formatted = formatTypeNameFromFieldValue(value)
+  if (!formatted) throw new Error(`${label} is required.`)
+  return formatted
+}
+
 const buildAmmConfigOverviewFromObject = ({
   configId,
   object
@@ -136,6 +146,8 @@ const buildAmmConfigOverviewFromObject = ({
       "Quote Pyth price feed id"
     ),
     poolId: requireStringField(market.pool_id, "Pool id"),
+    baseCoinType: requireCoinType(baseCurrency.coin_type, "Base coin type"),
+    quoteCoinType: requireCoinType(quoteCurrency.coin_type, "Quote coin type"),
     orderExpirationTimeMs: requireNumericField(
       config.order_expiration_time_ms,
       "Order expiration time ms"

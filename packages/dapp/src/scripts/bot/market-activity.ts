@@ -17,7 +17,8 @@
  *     are sourced from `packages/dapp/deployments/mock.localnet.json`
  *     (populated by `mock:setup` and `mock:pool:create`).
  *   - Tick cadence and per-side caps come from CLI flags (`--interval-ms`,
- *     `--max-base`, `--max-quote`); defaults: 2000 ms, 1 SUI, 2 USDC.
+ *     `--max-base`, `--max-quote`); defaults: 2000 ms, 1 SUI, 1.5 USDC
+ *     (symmetric in dollar terms at the default mock SUI/USD price).
  *   - Price walk: `--start-price` / `--max-price-delta` (human dollars). The
  *     mock feed has no auth on `update_price_feed`, so the bot's signer is
  *     enough.
@@ -380,8 +381,8 @@ runSuiScript(
       alias: ["max-quote"],
       type: "number",
       description:
-        "Upper bound for quote-side (USDC) order size, in human USDC",
-      default: 2
+        "Upper bound for quote-side (USDC) order size, in human USDC. Defaults to `maxBase * default SUI/USD ($1.50)` so per-tick base- and quote-side flows are symmetric in dollar terms; otherwise the executor's inventory drifts and one side's order ladder eventually gets skipped for being below the pool's min_size.",
+      default: 1.5
     })
     .option("seedBaseSui", {
       alias: ["seed-base-sui", "seed-base"],

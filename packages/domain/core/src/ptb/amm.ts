@@ -134,10 +134,20 @@ export const buildCreateExecutorTransaction = ({
   return transaction
 }
 
-export const buildUpdateConfigTransaction = ({
+/**
+ * Builds a PTB that replaces the executor's `AMMConfig` and atomically clears the
+ * live order ladder. `executor::update_config` returns a non-droppable
+ * `RefreshTicket`; this builder consumes it in the same PTB via
+ * `cancel_orders_after_update`, guaranteeing no order can remain on the book
+ * quoting under the replaced configuration.
+ */
+export const buildUpdateConfigAndCancelTransaction = ({
   packageId,
   executor,
   adminCapId,
+  pool,
+  baseAssetTypeTag,
+  quoteAssetTypeTag,
   baseSpreadBps,
   volatilityMultiplierBps,
   orderExpirationTimeMs,
@@ -150,6 +160,9 @@ export const buildUpdateConfigTransaction = ({
   packageId: string
   executor: WrappedSuiSharedObject
   adminCapId: string
+  pool: WrappedSuiSharedObject
+  baseAssetTypeTag: string
+  quoteAssetTypeTag: string
   baseSpreadBps: bigint | number
   volatilityMultiplierBps: bigint | number
   orderExpirationTimeMs: bigint | number
@@ -181,12 +194,23 @@ export const buildUpdateConfigTransaction = ({
     ]
   })
 
-  transaction.moveCall({
+  const [refreshTicket] = transaction.moveCall({
     target: `${packageId}::executor::update_config`,
     arguments: [
       transaction.sharedObjectRef(executor.sharedRef),
       transaction.object(adminCapId),
       ammConfig
+    ]
+  })
+
+  transaction.moveCall({
+    target: `${packageId}::executor::cancel_orders_after_update`,
+    typeArguments: [baseAssetTypeTag, quoteAssetTypeTag],
+    arguments: [
+      transaction.sharedObjectRef(executor.sharedRef),
+      refreshTicket,
+      transaction.sharedObjectRef(pool.sharedRef),
+      transaction.object(SUI_CLOCK_ID)
     ]
   })
 

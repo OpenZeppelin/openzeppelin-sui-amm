@@ -15,7 +15,7 @@ import {
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { buildUpdateConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { buildUpdateConfigAndCancelTransaction } from "@sui-amm/domain-core/ptb/amm"
 import { deriveRelevantPackageId } from "@sui-amm/tooling-core/object"
 import { getSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 import { ENetwork } from "@sui-amm/tooling-core/types"
@@ -77,6 +77,8 @@ const buildOptimisticOverview = ({
   basePythPriceFeedIdHex: currentConfig?.basePythPriceFeedIdHex ?? "",
   quotePythPriceFeedIdHex: currentConfig?.quotePythPriceFeedIdHex ?? "",
   poolId: currentConfig?.poolId ?? "0x0",
+  baseCoinType: currentConfig?.baseCoinType ?? "",
+  quoteCoinType: currentConfig?.quoteCoinType ?? "",
   orderExpirationTimeMs: formState.orderExpirationTimeMs.trim(),
   maxPriceAgeSecs: formState.maxPriceAgeSecs.trim(),
   maxConfRatioBps: formState.maxConfRatioBps.trim(),
@@ -307,10 +309,24 @@ export const useUpdateAmmConfigModalState = ({
           "No AMM admin capability found for the connected wallet."
         )
 
-      const updateTransaction = buildUpdateConfigTransaction({
+      if (!ammConfig?.poolId || !ammConfig.baseCoinType || !ammConfig.quoteCoinType) {
+        throw new Error(
+          "AMM config overview is missing pool / base / quote metadata required to cancel the live ladder."
+        )
+      }
+
+      const poolShared = await getSuiSharedObject(
+        { objectId: ammConfig.poolId, mutable: true },
+        { suiClient }
+      )
+
+      const updateTransaction = buildUpdateConfigAndCancelTransaction({
         packageId,
         executor: configShared,
         adminCapId,
+        pool: poolShared,
+        baseAssetTypeTag: ammConfig.baseCoinType,
+        quoteAssetTypeTag: ammConfig.quoteCoinType,
         baseSpreadBps: updateInputs.baseSpreadBps,
         volatilityMultiplierBps: updateInputs.volatilityMultiplierBps,
         orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,
