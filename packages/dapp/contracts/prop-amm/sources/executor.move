@@ -485,7 +485,7 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
 
     // Cache price and confidence that drove this placement, so the permissionless-refresh
     // skip guard can compare them against the next call's oracle inputs.
-    self.market.update_price_and_conf(oracle_mid_price, conf_ratio_bps);
+    self.market.set_price_and_conf(oracle_mid_price, conf_ratio_bps);
 
     events::emit_quote_updated(self.id(), oracle_mid_price, orders);
 }
