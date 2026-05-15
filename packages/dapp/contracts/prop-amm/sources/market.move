@@ -214,7 +214,7 @@ public fun conf_ratio_bps(self: &Market): Option<u64> {
 /// Returns `true` when at least one feed advanced.
 /// Returns `false` when both feeds are stale (no cache mutation).
 /// The caller is expected to skip any downstream refresh work when this returns `false`.
-public(package) fun try_update_publish_time(
+public(package) fun try_update_publish_times(
     self: &mut Market,
     base_price: Price,
     quote_price: Price,
@@ -242,6 +242,14 @@ public(package) fun try_update_publish_time(
     update_base_price_ts || update_quote_price_ts
 }
 
+/// Records the oracle inputs (`mid_price` and combined `conf_ratio_bps`) used for the last
+/// successful quote refresh. Consumed by the permissionless-refresh skip guard on the next
+/// call.
+public(package) fun update_price_and_conf(self: &mut Market, mid_price: u64, conf_ratio_bps: u64) {
+    self.mid_price = option::some(mid_price);
+    self.conf_ratio_bps = option::some(conf_ratio_bps);
+}
+
 /// Clears all cached freshness state — base/quote price publish timestamps and the last
 /// quoted mid / conf ratio. After this, the next `refresh_quotes_permissionless` call
 /// re-prices unconditionally (publish-time guard sees fresh timestamps, stale-tolerance guard
@@ -251,14 +259,6 @@ public(package) fun reset_freshness_state(self: &mut Market) {
     self.quote.price_publish_time = option::none();
     self.mid_price = option::none();
     self.conf_ratio_bps = option::none();
-}
-
-/// Records the oracle inputs (`mid_price` and combined `conf_ratio_bps`) used for the last
-/// successful quote refresh. Consumed by the permissionless-refresh skip guard on the next
-/// call.
-public(package) fun set_price_and_conf(self: &mut Market, mid_price: u64, conf_ratio_bps: u64) {
-    self.mid_price = option::some(mid_price);
-    self.conf_ratio_bps = option::some(conf_ratio_bps);
 }
 
 /// Derive the DeepBook base/quote price and the combined confidence-to-price ratio (in basis

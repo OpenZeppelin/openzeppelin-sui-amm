@@ -315,7 +315,7 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
     // Protects from calling permissionless quote refresh with old pricing,
     // that would force the market maker to resubmit orders and lose priority.
     let has_open_orders = self.has_open_orders(pool);
-    let is_price_updated = self.market.try_update_publish_time(base_pyth_price, quote_pyth_price);
+    let is_price_updated = self.market.try_update_publish_times(base_pyth_price, quote_pyth_price);
     if (has_open_orders && !is_price_updated) {
         return
     };
@@ -485,7 +485,7 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
 
     // Cache price and confidence that drove this placement, so the permissionless-refresh
     // skip guard can compare them against the next call's oracle inputs.
-    self.market.set_price_and_conf(oracle_mid_price, conf_ratio_bps);
+    self.market.update_price_and_conf(oracle_mid_price, conf_ratio_bps);
 
     events::emit_quote_updated(self.id(), oracle_mid_price, orders);
 }
