@@ -6,6 +6,7 @@ use deepbook::pool::Pool;
 use pyth::price::Price;
 use pyth::price_info::PriceInfoObject;
 use std::type_name::{Self, TypeName};
+use sui::clock::Clock;
 use sui::coin_registry::Currency;
 
 // === Errors ===
@@ -194,39 +195,48 @@ public fun quote_price_publish_time(self: &Market): Option<u64> {
 /// Returns `true` when at least one feed advanced.
 /// Returns `false` when both feeds are stale (no cache mutation).
 /// The caller is expected to skip any downstream refresh work when this returns `false`.
-public(package) fun try_update_publish_time(
+public(package) fun try_update_publish_times(
     self: &mut Market,
     base_price: Price,
     quote_price: Price,
 ): bool {
-    let base_price_ts = base_price.get_timestamp();
-    let update_base_price_ts = self
+    let base_price_timestamp = base_price.get_timestamp();
+    let update_base_price_timestamp = self
         .base
         .price_publish_time
-        .map!(|publish_time| publish_time < base_price_ts)
+        .map!(|publish_time| publish_time < base_price_timestamp)
         .destroy_or!(true);
-    if (update_base_price_ts) {
-        self.base.price_publish_time.swap_or_fill(base_price_ts);
+    if (update_base_price_timestamp) {
+        self.base.price_publish_time.swap_or_fill(base_price_timestamp);
     };
 
-    let quote_price_ts = quote_price.get_timestamp();
-    let update_quote_price_ts = self
+    let quote_price_timestamp = quote_price.get_timestamp();
+    let update_quote_price_timestamp = self
         .quote
         .price_publish_time
-        .map!(|publish_time| publish_time < quote_price_ts)
+        .map!(|publish_time| publish_time < quote_price_timestamp)
         .destroy_or!(true);
-    if (update_quote_price_ts) {
-        self.quote.price_publish_time.swap_or_fill(quote_price_ts);
+    if (update_quote_price_timestamp) {
+        self.quote.price_publish_time.swap_or_fill(quote_price_timestamp);
     };
 
-    update_base_price_ts || update_quote_price_ts
+    update_base_price_timestamp || update_quote_price_timestamp
 }
 
 /// Clears cached base and quote price publish timestamps so the next oracle read is not
 /// treated as stale/replayed.
-public(package) fun reset_price_publish_times(self: &mut Market) {
+public(package) fun reset_publish_times(self: &mut Market) {
     self.base.price_publish_time = option::none();
     self.quote.price_publish_time = option::none();
+}
+
+/// Sets the cached base and quote price publish timestamps to the current clock time.
+/// Subsequent `try_update_publish_time` calls require a strictly later Pyth timestamp to advance the
+/// cache.
+public(package) fun set_latest_publish_times(self: &mut Market, clock: &Clock) {
+    let timestamp_s = clock.timestamp_ms() / 1000;
+    self.base.price_publish_time = option::some(timestamp_s);
+    self.quote.price_publish_time = option::some(timestamp_s);
 }
 
 /// Derive the DeepBook base/quote price and the combined confidence-to-price ratio (in basis

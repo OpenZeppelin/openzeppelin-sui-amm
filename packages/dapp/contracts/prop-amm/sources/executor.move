@@ -147,7 +147,7 @@ public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig)
 
     events::emit_executor_config_updated(self.id());
 
-    self.market.reset_price_publish_times();
+    self.market.reset_publish_times();
     self.config = config;
 }
 
@@ -314,7 +314,7 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
     // Protects from calling permissionless quote refresh with old pricing,
     // that would force the market maker to resubmit orders and lose priority.
     let has_open_orders = self.has_open_orders(pool);
-    let is_price_updated = self.market.try_update_publish_time(base_pyth_price, quote_pyth_price);
+    let is_price_updated = self.market.try_update_publish_times(base_pyth_price, quote_pyth_price);
     if (has_open_orders && !is_price_updated) {
         return
     };
@@ -357,6 +357,11 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     assert!(self.market.has_valid_pool(pool), EInvalidPool);
     // Assert trading is active.
     assert!(self.active, EPaused);
+
+    // Update price publish times as a current timestamp.
+    // Permissionless quote refresh can override admin price
+    // only with the latest timestamp.
+    self.market.set_latest_publish_times(clock);
 
     self.refresh_quotes_inner(pool, mid_price, conf_ratio_bps, clock, ctx);
 }
