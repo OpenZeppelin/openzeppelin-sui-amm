@@ -593,9 +593,10 @@ fun update_config_replaces_config_before_refreshing_quotes() {
         0,
         true,
     );
-    executor_object.update_config(&executor_cap, updated_config);
+    let ticket = executor_object.update_config(&executor_cap, updated_config);
     assert_emitted!(executor_config_updated(executor_object.id()));
-    executor_object.refresh_quotes_permissionless(
+    executor_object.refresh_quotes_pyth_after_update(
+        ticket,
         &mut pool,
         &base_price_info_object,
         &quote_price_info_object,
@@ -754,7 +755,8 @@ fun update_config_preserves_paused_state() {
     assert_emitted!(executor_paused(executor_object.id()));
 
     let updated_config = config::new(120, 240, 30_000, 30, 1000, 5000, 0, true);
-    executor_object.update_config(&executor_cap, updated_config);
+    let ticket = executor_object.update_config(&executor_cap, updated_config);
+    executor_object.cancel_orders_after_update(ticket, &mut pool, &clock, scenario.ctx());
 
     assert_emitted!(executor_config_updated(executor_object.id()));
     assert!(!executor_object.active());
@@ -780,7 +782,8 @@ fun update_config_rejects_when_unchanged() {
 
     scenario.next_tx(sender);
 
-    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
 
     let (mut executor_object, executor_cap) = create_executor_for_pool(
         &mut scenario,
@@ -801,7 +804,11 @@ fun update_config_rejects_when_unchanged() {
         0,
         true,
     );
-    executor_object.update_config(&executor_cap, identical_config);
+    let ticket = executor_object.update_config(&executor_cap, identical_config);
+
+    // Unreachable: `update_config` aborts with `EConfigUnchanged` above. Present so the
+    // non-droppable `RefreshTicket` is syntactically consumed for type-checking.
+    executor_object.cancel_orders_after_update(ticket, &mut pool, &clock, scenario.ctx());
 
     abort
 }
