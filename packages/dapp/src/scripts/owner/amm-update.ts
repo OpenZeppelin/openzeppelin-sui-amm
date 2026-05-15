@@ -8,12 +8,6 @@
 import yargs from "yargs"
 
 import {
-  DEFAULT_INVENTORY_SKEW_BPS,
-  DEFAULT_MAX_CONF_RATIO_BPS,
-  DEFAULT_MAX_PRICE_AGE_SECS,
-  DEFAULT_ORDER_EXPIRATION_TIME_MS,
-  DEFAULT_OUTER_BALANCE_BPS,
-  DEFAULT_STALE_PRICE_TOLERANCE_BPS,
   type AmmConfigOverview,
   getAmmConfigOverview,
   resolveAmmConfigInputs
@@ -255,7 +249,6 @@ runSuiScript(
       type: "string",
       description:
         "Order expiration duration in milliseconds (u64); defaults to the current config value.",
-      default: DEFAULT_ORDER_EXPIRATION_TIME_MS,
       demandOption: false
     })
     .option("maxPriceAgeSecs", {
@@ -263,7 +256,6 @@ runSuiScript(
       type: "string",
       description:
         "Maximum acceptable Pyth price age in seconds (u64); defaults to the current config value.",
-      default: DEFAULT_MAX_PRICE_AGE_SECS,
       demandOption: false
     })
     .option("maxConfRatioBps", {
@@ -271,7 +263,6 @@ runSuiScript(
       type: "string",
       description:
         "Maximum acceptable confidence-to-price ratio in basis points (u64); defaults to the current config value.",
-      default: DEFAULT_MAX_CONF_RATIO_BPS,
       demandOption: false
     })
     .option("outerBalanceBps", {
@@ -279,7 +270,6 @@ runSuiScript(
       type: "string",
       description:
         "Share of the settleable balance allocated to the outer (volatility) spread order in basis points (u64); defaults to the current config value.",
-      default: DEFAULT_OUTER_BALANCE_BPS,
       demandOption: false
     })
     .option("inventorySkewBps", {
@@ -287,7 +277,6 @@ runSuiScript(
       type: "string",
       description:
         "Inventory-driven mid-shift coefficient in basis points (u64); defaults to the current config value.",
-      default: DEFAULT_INVENTORY_SKEW_BPS,
       demandOption: false
     })
     .option("stalePriceToleranceBps", {
@@ -295,7 +284,6 @@ runSuiScript(
       type: "string",
       description:
         "Permissionless-refresh skip threshold in basis points [0..10000), expressed as a fraction of base_spread (u64); 0 disables the guard. E.g. with base-spread-bps=100, 5000 tolerates 50 bps of price drift. Defaults to the current config value.",
-      default: DEFAULT_STALE_PRICE_TOLERANCE_BPS,
       demandOption: false
     })
     .option("postOnly", {
