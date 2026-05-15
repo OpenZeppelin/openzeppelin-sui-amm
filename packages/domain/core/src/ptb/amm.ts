@@ -51,6 +51,7 @@ export const buildCreateExecutorTransaction = ({
   maxConfRatioBps,
   outerBalanceBps,
   inventorySkewBps,
+  stalePriceToleranceBps,
   postOnly
 }: {
   packageId: string
@@ -69,6 +70,12 @@ export const buildCreateExecutorTransaction = ({
   maxConfRatioBps: bigint | number
   outerBalanceBps: bigint | number
   inventorySkewBps: bigint | number
+  /**
+   * Permissionless-refresh skip threshold in bps of price. `0` disables the
+   * guard (every Pyth tick triggers a refresh). Bounded on-chain by
+   * `base_spread_bps`.
+   */
+  stalePriceToleranceBps: bigint | number
   /**
    * When true, `refresh_quotes` places each order with DeepBook's `post_only` flag —
    * any order that would cross the resting book aborts the whole refresh and the
@@ -111,6 +118,7 @@ export const buildCreateExecutorTransaction = ({
       transaction.pure.u64(maxConfRatioBps),
       transaction.pure.u64(outerBalanceBps),
       transaction.pure.u64(inventorySkewBps),
+      transaction.pure.u64(stalePriceToleranceBps),
       transaction.pure.bool(postOnly)
     ]
   })
@@ -145,6 +153,7 @@ export const buildUpdateConfigTransaction = ({
   maxConfRatioBps,
   outerBalanceBps,
   inventorySkewBps,
+  stalePriceToleranceBps,
   postOnly
 }: {
   packageId: string
@@ -157,6 +166,12 @@ export const buildUpdateConfigTransaction = ({
   maxConfRatioBps: bigint | number
   outerBalanceBps: bigint | number
   inventorySkewBps: bigint | number
+  /**
+   * Permissionless-refresh skip threshold in bps of price. `0` disables the
+   * guard (every Pyth tick triggers a refresh). Bounded on-chain by
+   * `base_spread_bps`.
+   */
+  stalePriceToleranceBps: bigint | number
   /**
    * When true, `refresh_quotes` places each order with DeepBook's `post_only` flag —
    * any order that would cross the resting book aborts the whole refresh and the
@@ -177,6 +192,7 @@ export const buildUpdateConfigTransaction = ({
       transaction.pure.u64(maxConfRatioBps),
       transaction.pure.u64(outerBalanceBps),
       transaction.pure.u64(inventorySkewBps),
+      transaction.pure.u64(stalePriceToleranceBps),
       transaction.pure.bool(postOnly)
     ]
   })

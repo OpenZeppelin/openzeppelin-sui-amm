@@ -13,6 +13,7 @@ import {
   DEFAULT_MAX_PRICE_AGE_SECS,
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
   DEFAULT_OUTER_BALANCE_BPS,
+  DEFAULT_STALE_PRICE_TOLERANCE_BPS,
   type AmmConfigOverview,
   getAmmConfigOverview,
   resolveAmmConfigInputs
@@ -42,6 +43,7 @@ type UpdateAmmArguments = {
   maxConfRatioBps?: string
   outerBalanceBps?: string
   inventorySkewBps?: string
+  stalePriceToleranceBps?: string
   postOnly?: string
   devInspect?: boolean
   dryRun?: boolean
@@ -56,6 +58,7 @@ type ResolvedAmmUpdateInputs = {
   maxConfRatioBps: bigint
   outerBalanceBps: bigint
   inventorySkewBps: bigint
+  stalePriceToleranceBps: bigint
   postOnly: boolean
 }
 
@@ -116,6 +119,9 @@ const resolveAmmUpdateInputs = ({
       cliArguments.outerBalanceBps ?? currentOverview.outerBalanceBps,
     inventorySkewBps:
       cliArguments.inventorySkewBps ?? currentOverview.inventorySkewBps,
+    stalePriceToleranceBps:
+      cliArguments.stalePriceToleranceBps ??
+      currentOverview.stalePriceToleranceBps,
     postOnly: cliArguments.postOnly ?? String(currentOverview.postOnly)
   })
 
@@ -127,6 +133,7 @@ const resolveAmmUpdateInputs = ({
     maxConfRatioBps: inputs.maxConfRatioBps,
     outerBalanceBps: inputs.outerBalanceBps,
     inventorySkewBps: inputs.inventorySkewBps,
+    stalePriceToleranceBps: inputs.stalePriceToleranceBps,
     postOnly: inputs.postOnly
   }
 }
@@ -168,6 +175,7 @@ runSuiScript(
       maxConfRatioBps: updateInputs.maxConfRatioBps,
       outerBalanceBps: updateInputs.outerBalanceBps,
       inventorySkewBps: updateInputs.inventorySkewBps,
+      stalePriceToleranceBps: updateInputs.stalePriceToleranceBps,
       postOnly: updateInputs.postOnly
     })
 
@@ -280,6 +288,14 @@ runSuiScript(
       description:
         "Inventory-driven mid-shift coefficient in basis points (u64); defaults to the current config value.",
       default: DEFAULT_INVENTORY_SKEW_BPS,
+      demandOption: false
+    })
+    .option("stalePriceToleranceBps", {
+      alias: ["stale-price-tolerance-bps"],
+      type: "string",
+      description:
+        "Permissionless-refresh skip threshold in basis points of price (u64); 0 disables the guard. Bounded on-chain by base-spread-bps. Defaults to the current config value.",
+      default: DEFAULT_STALE_PRICE_TOLERANCE_BPS,
       demandOption: false
     })
     .option("postOnly", {

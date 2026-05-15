@@ -97,6 +97,7 @@ describe("amm PTB builders", () => {
       maxConfRatioBps: 1000n,
       outerBalanceBps: 5000n,
       inventorySkewBps: 0n,
+      stalePriceToleranceBps: 0n,
       postOnly: true
     })
 
@@ -161,6 +162,7 @@ describe("amm PTB builders", () => {
         maxConfRatioBps: 1000n,
         outerBalanceBps: 5000n,
         inventorySkewBps: 0n,
+        stalePriceToleranceBps: 0n,
         postOnly: true
       })
     ).toThrowError(
@@ -180,6 +182,7 @@ describe("amm PTB builders", () => {
       maxConfRatioBps: 1000n,
       outerBalanceBps: 5000n,
       inventorySkewBps: 0n,
+      stalePriceToleranceBps: 0n,
       postOnly: true
     })
 

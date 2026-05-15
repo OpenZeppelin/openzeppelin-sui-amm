@@ -17,6 +17,7 @@ export type AmmConfigFormState = {
   maxConfRatioBps: string
   outerBalanceBps: string
   inventorySkewBps: string
+  stalePriceToleranceBps: string
   postOnly: string
 }
 
@@ -148,6 +149,21 @@ const GROUPS: GroupSpec[] = [
         title: "Max Pyth price age (s)",
         description: "Reject oracle reads older than this many seconds.",
         placeholder: "60"
+      }
+    ]
+  },
+  {
+    title: "Refresh Throttling",
+    description:
+      "Skip a permissionless refresh when the new oracle inputs would barely move the resting ladder, to preserve FIFO priority on DeepBook.",
+    fields: [
+      {
+        kind: "bps",
+        key: "stalePriceToleranceBps",
+        title: "Stale price tolerance",
+        description:
+          "Skip refresh when the worst-case ladder drift is below this fraction of price. 0 disables the guard. Bounded by Base spread.",
+        sliderMaxBps: SLIDER_MAX_BOUNDED_BPS
       }
     ]
   },

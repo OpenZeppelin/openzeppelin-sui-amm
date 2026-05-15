@@ -402,6 +402,7 @@ export const useCreateExecutorState = () => {
         maxConfRatioBps: ammFormState.maxConfRatioBps.trim(),
         outerBalanceBps: ammFormState.outerBalanceBps.trim(),
         inventorySkewBps: ammFormState.inventorySkewBps.trim(),
+        stalePriceToleranceBps: ammFormState.stalePriceToleranceBps.trim(),
         postOnly: ammFormState.postOnly.trim()
       })
 
@@ -422,6 +423,7 @@ export const useCreateExecutorState = () => {
         maxConfRatioBps: inputs.maxConfRatioBps,
         outerBalanceBps: inputs.outerBalanceBps,
         inventorySkewBps: inputs.inventorySkewBps,
+        stalePriceToleranceBps: inputs.stalePriceToleranceBps,
         postOnly: inputs.postOnly
       })
       createTransaction.setSender(walletAddress)
