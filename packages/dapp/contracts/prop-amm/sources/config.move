@@ -77,12 +77,14 @@ public struct AMMConfig has drop, store {
     /// `base_spread`:
     ///   `mid_drift_bps + conf_drift_bps < base_spread_bps * stale_price_tolerance_bps / 10_000`
     /// where `mid_drift_bps = |d(mid)| / last_mid * 10_000` (affects every order) and
-    ///       `conf_drift_bps = volatility_multiplier_bps * |d(conf)| / 10_000` (outer orders only).
+    ///       `conf_drift_bps = volatility_multiplier_bps * |d(conf)| / 10_000
+    ///                         * (outer_balance_bps * 2 / 10_000)` (outer orders only, balance-weighted;
+    ///                         `1.0` at the 50/50 split, `0` when `outer_balance_bps == 0`).
     /// Bounding the threshold by `base_spread` ensures a skipped refresh can never hide a
     /// shift that would move an order across the inner placement distance.
     /// Mitigates FIFO-priority grief on DeepBook where any address can force a cancel-and-replace
     /// on every Pyth tick. The admin `refresh_quotes` bypasses this guard.
-    /// E.g (assuming `base_spread_bps = 100`):
+    /// E.g (assuming `base_spread_bps = 100` and `outer_balance_bps = 5_000` — the 50/50 split):
     ///     `0` disables the guard (every Pyth tick triggers a refresh; original behavior).
     ///     `5_000` tolerates 50 bps of price drift (50% of `base_spread`) when `conf_ratio_bps`
     ///             is unchanged.
@@ -203,12 +205,14 @@ public fun inventory_skew_bps(self: &AMMConfig): u64 {
 /// `base_spread`:
 ///   `mid_drift_bps + conf_drift_bps < base_spread_bps * stale_price_tolerance_bps / 10_000`
 /// where `mid_drift_bps = |d(mid)| / last_mid * 10_000` (affects every order) and
-///       `conf_drift_bps = volatility_multiplier_bps * |d(conf)| / 10_000` (outer orders only).
+///       `conf_drift_bps = volatility_multiplier_bps * |d(conf)| / 10_000
+///                         * (outer_balance_bps * 2 / 10_000)` (outer orders only, balance-weighted;
+///                         `1.0` at the 50/50 split, `0` when `outer_balance_bps == 0`).
 /// Bounding the threshold by `base_spread` ensures a skipped refresh can never hide a
 /// shift that would move an order across the inner placement distance.
 /// Mitigates FIFO-priority grief on DeepBook where any address can force a cancel-and-replace
 /// on every Pyth tick. The admin `refresh_quotes` bypasses this guard.
-/// E.g (assuming `base_spread_bps = 100`):
+/// E.g (assuming `base_spread_bps = 100` and `outer_balance_bps = 5_000` — the 50/50 split):
 ///     `0` disables the guard (every Pyth tick triggers a refresh; original behavior).
 ///     `5_000` tolerates 50 bps of price drift (50% of `base_spread`) when `conf_ratio_bps`
 ///             is unchanged.
@@ -259,8 +263,9 @@ public(package) fun outer_balance(self: &AMMConfig, balance: u64): u64 {
 ///
 /// The worst-case order drift sums the two independent contributions, both in bps of price:
 /// - `mid_drift_bps  = |new_mid - last_mid| / last_mid * 10_000`         (affects every order)
-/// - `conf_drift_bps = volatility_multiplier_bps * |new_conf - last_conf| / 10_000`
-///                                                                       (outer orders only)
+/// - `conf_drift_bps = volatility_multiplier_bps * |new_conf - last_conf| / 10_000
+///                    * (outer_balance_bps * 2 / 10_000)`                (outer orders only,
+///                                                                       balance-weighted)
 ///
 /// Outer-order drift `mid_drift_bps + conf_drift_bps` dominates inner-order drift
 /// `mid_drift_bps` (conf_drift is non-negative), so checking the outer alone bounds all
@@ -280,10 +285,12 @@ public(package) fun is_stale_tolerant(
         .diff(last_mid_price)
         .mul_div(HUNDRED_PERCENT_BPS, last_mid_price);
 
-    // Confidence drift as an outer-order shift in bps of price.
+    // Conf moves only the outer order and weighted by `outer_balance_bps * 2 / 10_000`.
+    // So the 50/50 split is `1.0` and conf weight scales to `0` as the ladder becomes inner-only.
     let conf_drift_bps = self
         .volatility_multiplier_bps
-        .mul_div(new_conf_ratio_bps.diff(last_conf_ratio_bps), HUNDRED_PERCENT_BPS);
+        .mul_div(new_conf_ratio_bps.diff(last_conf_ratio_bps), HUNDRED_PERCENT_BPS)
+        .mul_div(self.outer_balance_bps * 2, HUNDRED_PERCENT_BPS);
 
     // Compute absolute tolerance bps.
     let tolerance_bps = self

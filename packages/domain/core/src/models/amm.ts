@@ -25,7 +25,7 @@ export const DEFAULT_MAX_CONF_RATIO_BPS = "1000"
 export const DEFAULT_OUTER_BALANCE_BPS = "5000"
 export const DEFAULT_INVENTORY_SKEW_BPS = "0"
 // Disabled by default: every Pyth tick triggers a refresh (original behavior).
-// Move-side constraint is `stale_price_tolerance_bps <= base_spread_bps`.
+// Move-side constraint is `stale_price_tolerance_bps < 10_000` (fraction of `base_spread_bps`).
 export const DEFAULT_STALE_PRICE_TOLERANCE_BPS = "0"
 export const DEFAULT_POST_ONLY = "true"
 
