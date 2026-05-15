@@ -49,13 +49,12 @@ public struct Market has drop, store {
     base: MarketCurrency,
     /// Quote asset metadata.
     quote: MarketCurrency,
-    /// DeepBook mid price (base/quote) recorded at the last successful quote refresh.
+    /// Mid price (base/quote) recorded at the last successful quote refresh.
     /// `none()` before the first refresh and after `reset_freshness_state` (e.g. on
-    /// `update_config`). Compared against the new oracle mid in the permissionless-refresh
-    /// skip guard, alongside `conf_ratio_bps`.
+    /// `update_config`).
     mid_price: Option<u64>,
-    /// Combined Pyth confidence-to-price ratio (bps) recorded at the last successful quote
-    /// refresh. See `mid_price` for the freshness guard it participates in.
+    /// Combined confidence-to-price ratio (bps) recorded at the last successful quote
+    /// refresh.
     conf_ratio_bps: Option<u64>,
 }
 
@@ -67,7 +66,7 @@ public struct MarketCurrency has drop, store {
     decimals: u8,
     /// Pyth price feed identifier bytes (32 bytes).
     pyth_price_feed_id: vector<u8>,
-    /// Latest observed Pyth publish timestamp for this feed, if any.
+    /// Latest observed publish timestamp for this market currency, if any.
     price_publish_time: Option<u64>,
 }
 
