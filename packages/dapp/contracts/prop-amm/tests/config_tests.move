@@ -114,3 +114,30 @@ fun create_amm_config_rejects_inventory_skew_bps_above_ten_thousand() {
 
     abort
 }
+
+#[test]
+fun reservation_mid_handles_large_inventories_without_overflow() {
+    // base_spread * imbalance ≈ 1e17 * 1e28 = 1e45, well beyond u128's ~3.4e38 ceiling.
+    // The function still returns a valid mid shifted toward quote (base-heavy inventory).
+    let amm_config = config::new(
+        1000,
+        10_000,
+        30_000,
+        30,
+        1000,
+        5_000,
+        5_000,
+        true,
+    );
+
+    let mid_price = 1_000_000_000_000_000_000;
+    let base_balance = 10_000_000_000_000_000_000;
+    let quote_balance = 0;
+
+    let reservation_mid = amm_config.reservation_mid(mid_price, base_balance, quote_balance);
+
+    // base_spread = mid_price * 1000 / 10_000 = 1e17.
+    // imbalance / total_balance = 1, so shift = base_spread = 1e17.
+    // adjusted_shift = shift * inventory_skew_bps / 10_000 = 5e16.
+    assert_eq!(reservation_mid, mid_price - 50_000_000_000_000_000);
+}

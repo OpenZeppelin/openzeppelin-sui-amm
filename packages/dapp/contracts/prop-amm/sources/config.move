@@ -240,8 +240,7 @@ public(package) fun reservation_mid(
     let base_spread = self.base_spread(mid_price) as u128;
     let skew_bps = self.inventory_skew_bps as u128;
     let imbalance = base_balance_in_quote.diff(quote_balance);
-    let shift =
-        base_spread.checked_mul(imbalance).destroy_or!(abort EPriceOverflow) / total_balance;
+    let shift = base_spread.mul_div(imbalance, total_balance);
     let adjusted_shift = shift * skew_bps / HUNDRED_PERCENT_BPS_U128;
 
     // Apply shift to the mid_price.
