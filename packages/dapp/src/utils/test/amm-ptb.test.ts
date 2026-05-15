@@ -1,16 +1,22 @@
 import { describe, expect, it } from "vitest"
 
+import { bcs } from "@mysten/sui/bcs"
+import { fromBase64 } from "@mysten/sui/utils"
 import {
   buildCreateExecutorTransaction,
   buildUpdateConfigTransaction
 } from "@sui-amm/domain-core/ptb/amm"
 import type { WrappedSuiSharedObject } from "@sui-amm/tooling-core/shared-object"
 
-const expectMoveCall = (
-  command: ReturnType<
-    ReturnType<typeof buildCreateExecutorTransaction>["getData"]
-  >["commands"][number]
-) => {
+type TxData = ReturnType<
+  ReturnType<typeof buildCreateExecutorTransaction>["getData"]
+>
+type TxInputs = TxData["inputs"]
+type MoveCallArgs = NonNullable<
+  Extract<TxData["commands"][number], { $kind: "MoveCall" }>["MoveCall"]
+>["arguments"]
+
+const expectMoveCall = (command: TxData["commands"][number]) => {
   expect(command.$kind).toBe("MoveCall")
   if (command.$kind !== "MoveCall") {
     throw new Error("Expected MoveCall command.")
@@ -18,6 +24,38 @@ const expectMoveCall = (
 
   return command.MoveCall
 }
+
+const resolvePureBytes = (
+  inputs: TxInputs,
+  args: MoveCallArgs,
+  argIndex: number
+): Uint8Array => {
+  const arg = args[argIndex]
+  expect(arg.$kind).toBe("Input")
+  if (arg.$kind !== "Input") {
+    throw new Error(`Expected Input at arg index ${argIndex}.`)
+  }
+  const input = inputs[arg.Input]
+  expect(input.$kind).toBe("Pure")
+  if (input.$kind !== "Pure") {
+    throw new Error(`Expected Pure input for arg index ${argIndex}.`)
+  }
+  return fromBase64(input.Pure.bytes)
+}
+
+// `bcs.u64().parse` returns a string representation of the u64 (numbers can't
+// safely represent the full u64 range). Tests compare via string equality.
+const decodePureU64 = (
+  inputs: TxInputs,
+  args: MoveCallArgs,
+  argIndex: number
+): string => bcs.u64().parse(resolvePureBytes(inputs, args, argIndex))
+
+const decodePureBool = (
+  inputs: TxInputs,
+  args: MoveCallArgs,
+  argIndex: number
+): boolean => bcs.bool().parse(resolvePureBytes(inputs, args, argIndex))
 
 const FEED_BYTES = Array.from({ length: 32 }, (_, index) => index)
 
@@ -80,6 +118,18 @@ const QUOTE_CURRENCY: WrappedSuiSharedObject = {
 
 describe("amm PTB builders", () => {
   it("builds create with market::new + config::new + executor::create + share + transfer", () => {
+    // Unique per-arg values so any positional swap in `config::new` is caught
+    // by the per-position assertions below.
+    const baseSpreadBps = 25n
+    const volatilityMultiplierBps = 12_345n
+    const orderExpirationTimeMs = 86_400_001n
+    const maxPriceAgeSecs = 31n
+    const maxConfRatioBps = 1_001n
+    const outerBalanceBps = 5_001n
+    const inventorySkewBps = 100n
+    const stalePriceToleranceBps = 7_000n
+    const postOnly = true
+
     const transaction = buildCreateExecutorTransaction({
       packageId: "0x123",
       pool: POOL,
@@ -88,17 +138,17 @@ describe("amm PTB builders", () => {
       baseAssetTypeTag: BASE_ASSET_TYPE_TAG,
       quoteAssetTypeTag: QUOTE_ASSET_TYPE_TAG,
       senderAddress: "0x789",
-      baseSpreadBps: 25n,
-      volatilityMultiplierBps: 10000n,
+      baseSpreadBps,
+      volatilityMultiplierBps,
       basePythPriceFeedIdBytes: FEED_BYTES,
       quotePythPriceFeedIdBytes: FEED_BYTES,
-      orderExpirationTimeMs: 86400000n,
-      maxPriceAgeSecs: 60n,
-      maxConfRatioBps: 1000n,
-      outerBalanceBps: 5000n,
-      inventorySkewBps: 0n,
-      stalePriceToleranceBps: 0n,
-      postOnly: true
+      orderExpirationTimeMs,
+      maxPriceAgeSecs,
+      maxConfRatioBps,
+      outerBalanceBps,
+      inventorySkewBps,
+      stalePriceToleranceBps,
+      postOnly
     })
 
     const transactionData = transaction.getData()
@@ -123,6 +173,37 @@ describe("amm PTB builders", () => {
       module: "config",
       function: "new"
     })
+
+    // Guard the positional encoding of `config::new` arguments: a dropped or
+    // reordered field would either change the count or shift a unique value
+    // to a neighboring slot, failing one of these checks.
+    const configArgs = configCall.arguments
+    expect(configArgs).toHaveLength(9)
+    expect(decodePureU64(transactionData.inputs, configArgs, 0)).toBe(
+      baseSpreadBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 1)).toBe(
+      volatilityMultiplierBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 2)).toBe(
+      orderExpirationTimeMs.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 3)).toBe(
+      maxPriceAgeSecs.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 4)).toBe(
+      maxConfRatioBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 5)).toBe(
+      outerBalanceBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 6)).toBe(
+      inventorySkewBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 7)).toBe(
+      stalePriceToleranceBps.toString()
+    )
+    expect(decodePureBool(transactionData.inputs, configArgs, 8)).toBe(postOnly)
 
     const createCall = expectMoveCall(transactionData.commands[2])
     expect(createCall).toMatchObject({
@@ -171,19 +252,30 @@ describe("amm PTB builders", () => {
   })
 
   it("builds update config with config::new + executor::update_config", () => {
+    // Unique per-arg values — same regression-catching rationale as the create test.
+    const baseSpreadBps = 26n
+    const volatilityMultiplierBps = 12_346n
+    const orderExpirationTimeMs = 86_400_002n
+    const maxPriceAgeSecs = 32n
+    const maxConfRatioBps = 1_002n
+    const outerBalanceBps = 5_002n
+    const inventorySkewBps = 101n
+    const stalePriceToleranceBps = 7_001n
+    const postOnly = true
+
     const transaction = buildUpdateConfigTransaction({
       packageId: "0x123",
       executor: EXECUTOR,
       adminCapId: "0x456",
-      baseSpreadBps: 25n,
-      volatilityMultiplierBps: 10000n,
-      orderExpirationTimeMs: 86400000n,
-      maxPriceAgeSecs: 60n,
-      maxConfRatioBps: 1000n,
-      outerBalanceBps: 5000n,
-      inventorySkewBps: 0n,
-      stalePriceToleranceBps: 0n,
-      postOnly: true
+      baseSpreadBps,
+      volatilityMultiplierBps,
+      orderExpirationTimeMs,
+      maxPriceAgeSecs,
+      maxConfRatioBps,
+      outerBalanceBps,
+      inventorySkewBps,
+      stalePriceToleranceBps,
+      postOnly
     })
 
     const transactionData = transaction.getData()
@@ -196,6 +288,35 @@ describe("amm PTB builders", () => {
       module: "config",
       function: "new"
     })
+
+    // Guard the positional encoding of `config::new` arguments.
+    const configArgs = configCall.arguments
+    expect(configArgs).toHaveLength(9)
+    expect(decodePureU64(transactionData.inputs, configArgs, 0)).toBe(
+      baseSpreadBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 1)).toBe(
+      volatilityMultiplierBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 2)).toBe(
+      orderExpirationTimeMs.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 3)).toBe(
+      maxPriceAgeSecs.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 4)).toBe(
+      maxConfRatioBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 5)).toBe(
+      outerBalanceBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 6)).toBe(
+      inventorySkewBps.toString()
+    )
+    expect(decodePureU64(transactionData.inputs, configArgs, 7)).toBe(
+      stalePriceToleranceBps.toString()
+    )
+    expect(decodePureBool(transactionData.inputs, configArgs, 8)).toBe(postOnly)
 
     const updateCall = expectMoveCall(transactionData.commands[1])
     expect(updateCall).toMatchObject({
