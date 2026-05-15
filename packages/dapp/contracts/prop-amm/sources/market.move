@@ -39,8 +39,9 @@ const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 
 // === Structs ===
 
-/// Market metadata: pool identity, cached asset decimals, Pyth feed identifiers, and the
-/// latest observed publish timestamps used to detect replayed oracle prices.
+/// Market metadata: pool identity, cached asset decimals, Pyth feed identifiers, the
+/// latest observed publish timestamps used to detect replayed oracle prices, and the
+/// mid price mid confidence ratio recorded at the last quote refresh.
 public struct Market has drop, store {
     /// ID of the associated pool.
     pool_id: ID,
@@ -48,6 +49,14 @@ public struct Market has drop, store {
     base: MarketCurrency,
     /// Quote asset metadata.
     quote: MarketCurrency,
+    /// DeepBook mid price (base/quote) recorded at the last successful quote refresh.
+    /// `none()` before the first refresh and after `reset_freshness_state` (e.g. on
+    /// `update_config`). Compared against the new oracle mid in the permissionless-refresh
+    /// skip guard, alongside `conf_ratio_bps`.
+    mid_price: Option<u64>,
+    /// Combined Pyth confidence-to-price ratio (bps) recorded at the last successful quote
+    /// refresh. See `mid_price` for the freshness guard it participates in.
+    conf_ratio_bps: Option<u64>,
 }
 
 /// Per-side (base or quote) asset metadata.
@@ -113,6 +122,8 @@ public fun new<BaseAsset, QuoteAsset>(
             pyth_price_feed_id: quote_pyth_price_feed_id,
             price_publish_time: option::none(),
         },
+        mid_price: option::none(),
+        conf_ratio_bps: option::none(),
     }
 }
 
@@ -187,6 +198,16 @@ public fun quote_price_publish_time(self: &Market): Option<u64> {
     self.quote.price_publish_time
 }
 
+/// Returns the mid price (base/quote) recorded at the last successful quote refresh, if any.
+public fun mid_price(self: &Market): Option<u64> {
+    self.mid_price
+}
+
+/// Returns the confidence-to-price ratio (bps) recorded at the last successful quote refresh, if any.
+public fun conf_ratio_bps(self: &Market): Option<u64> {
+    self.conf_ratio_bps
+}
+
 // === Package Functions ===
 
 /// Attempts to advance the cached base and quote publish times to the incoming price
@@ -222,11 +243,27 @@ public(package) fun try_update_publish_time(
     update_base_price_ts || update_quote_price_ts
 }
 
-/// Clears cached base and quote price publish timestamps so the next oracle read is not
-/// treated as stale/replayed.
-public(package) fun reset_price_publish_times(self: &mut Market) {
+/// Clears all cached freshness state — base/quote price publish timestamps and the last
+/// quoted mid / conf ratio. After this, the next `refresh_quotes_permissionless` call
+/// re-prices unconditionally (publish-time guard sees fresh timestamps, stale-tolerance guard
+/// sees `none()` last values).
+public(package) fun reset_freshness_state(self: &mut Market) {
     self.base.price_publish_time = option::none();
     self.quote.price_publish_time = option::none();
+    self.mid_price = option::none();
+    self.conf_ratio_bps = option::none();
+}
+
+/// Records the oracle inputs (`mid_price` and combined `conf_ratio_bps`) used for the last
+/// successful quote refresh. Consumed by the permissionless-refresh skip guard on the next
+/// call.
+public(package) fun record_last_quote_inputs(
+    self: &mut Market,
+    mid_price: u64,
+    conf_ratio_bps: u64,
+) {
+    self.mid_price = option::some(mid_price);
+    self.conf_ratio_bps = option::some(conf_ratio_bps);
 }
 
 /// Derive the DeepBook base/quote price and the combined confidence-to-price ratio (in basis

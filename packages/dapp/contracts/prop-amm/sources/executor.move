@@ -136,9 +136,10 @@ public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Exec
     (executor, executor_cap)
 }
 
-/// Replaces AMM configuration. Resets the cached Pyth publish timestamps so the next
-/// `refresh_quotes_permissionless` call re-prices even when the oracle timestamp has not
-/// advanced. Requires the matching market maker executor capability.
+/// Replaces AMM configuration. Resets the cached freshness state (Pyth publish timestamps
+/// and last quoted mid / conf ratio) so the next `refresh_quotes_permissionless` call
+/// re-prices unconditionally even when the oracle timestamp or value has not advanced.
+/// Requires the matching market maker executor capability.
 /// To reflect trading configuration immediately, `refresh_quotes_permissionless` (or the
 /// admin `refresh_quotes`) should be called within a single PTB.
 public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig) {
@@ -147,7 +148,7 @@ public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig)
 
     events::emit_executor_config_updated(self.id());
 
-    self.market.reset_price_publish_times();
+    self.market.reset_freshness_state();
     self.config = config;
 }
 
@@ -330,6 +331,25 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
             self.config.max_conf_ratio_bps(),
         );
 
+    // Skip refresh when the new oracle inputs are within `stale_price_tolerance_bps` of the
+    // last placed ones.
+    // Defends against FIFO-priority on Pyth ticks that would barely move the ladder.
+    let last_mid_price = self.market.mid_price();
+    let last_conf_ratio_bps = self.market.conf_ratio_bps();
+    if (has_open_orders && last_mid_price.is_some() && last_conf_ratio_bps.is_some()) {
+        let is_within_tolerance = self
+            .config
+            .has_stale_tolerance(
+                oracle_mid_price,
+                conf_ratio_bps,
+                last_mid_price.destroy_some(),
+                last_conf_ratio_bps.destroy_some(),
+            );
+        if (is_within_tolerance) {
+            return
+        };
+    };
+
     self.refresh_quotes_inner(pool, oracle_mid_price, conf_ratio_bps, clock, ctx);
 }
 
@@ -462,6 +482,10 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
         LimitOrderParams { price: ask_outer, quantity: ask_outer_quantity, is_bid: false },
     ];
     let orders = self.try_place_limit_orders(pool, &trade_proof, order_params, clock, ctx);
+
+    // Cache the inputs that drove this placement so the permissionless-refresh skip guard
+    // can compare them against the next call's oracle inputs.
+    self.market.record_last_quote_inputs(oracle_mid_price, conf_ratio_bps);
 
     events::emit_quote_updated(self.id(), oracle_mid_price, orders);
 }

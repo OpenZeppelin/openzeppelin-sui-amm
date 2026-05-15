@@ -23,6 +23,9 @@ const EInvalidInventorySkewBps: vector<u8> = "inventory skew bps must be less th
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 7)]
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
+#[error(code = 8)]
+const EInvalidStalePriceToleranceBps: vector<u8> =
+    "stale price tolerance bps must be less than 10000";
 
 // === Constants ===
 
@@ -68,6 +71,17 @@ public struct AMMConfig has drop, store {
     ///     `0` disables skewing (reservation_mid == mid).
     ///     `5_000` shifts the mid by half the `base_spread` at fully one-sided inventory.
     inventory_skew_bps: u64,
+    /// Permissionless-refresh skip threshold in basis points [0..10_000), expressed as a fraction
+    /// of `base_spread`. A `refresh_quotes_permissionless` call is skipped when the executor
+    /// has open orders AND both the oracle mid and the combined Pyth confidence ratio differ
+    /// from the values cached at the last refresh by less than this threshold (mapped through
+    /// `base_spread` for mid, and through `volatility_multiplier_bps`/`base_spread` for conf).
+    /// Mitigates FIFO-priority grief on DeepBook where any address can force a cancel-and-replace
+    /// on every Pyth tick. The admin `refresh_quotes` bypasses this guard.
+    /// E.g:
+    ///     `0` disables the guard (every Pyth tick triggers a refresh; original behavior).
+    ///     `5_000` skips refreshes that would shift the ladder by less than half of `base_spread`.
+    stale_price_tolerance_bps: u64,
     /// Restricts every refresh-quotes order to the passive (post-only) book side.
     /// `true` places each order with DeepBook's `post_only` flag: any order that would
     /// cross the resting book aborts the whole `refresh_quotes` transaction, leaving the
@@ -93,6 +107,7 @@ public fun new(
     max_conf_ratio_bps: u64,
     outer_balance_bps: u64,
     inventory_skew_bps: u64,
+    stale_price_tolerance_bps: u64,
     post_only: bool,
 ): AMMConfig {
     assert!(base_spread_bps > 0 && base_spread_bps < HUNDRED_PERCENT_BPS, EInvalidBaseSpreadBps);
@@ -102,6 +117,10 @@ public fun new(
     );
     assert!(outer_balance_bps < HUNDRED_PERCENT_BPS, EInvalidOuterBalanceBps);
     assert!(inventory_skew_bps < HUNDRED_PERCENT_BPS, EInvalidInventorySkewBps);
+    assert!(
+        stale_price_tolerance_bps < HUNDRED_PERCENT_BPS,
+        EInvalidStalePriceToleranceBps,
+    );
     assert!(order_expiration_time_ms > 0, EInvalidOrderExpirationTime);
     assert!(max_price_age_secs > 0, EInvalidMaxPriceAge);
 
@@ -113,6 +132,7 @@ public fun new(
         max_conf_ratio_bps,
         outer_balance_bps,
         inventory_skew_bps,
+        stale_price_tolerance_bps,
         post_only,
     }
 }
@@ -175,6 +195,20 @@ public fun inventory_skew_bps(self: &AMMConfig): u64 {
     self.inventory_skew_bps
 }
 
+/// Permissionless-refresh skip threshold in basis points [0..10_000), expressed as a fraction
+/// of `base_spread`. A `refresh_quotes_permissionless` call is skipped when the executor
+/// has open orders AND both the oracle mid and the combined Pyth confidence ratio differ
+/// from the values cached at the last refresh by less than this threshold (mapped through
+/// `base_spread` for mid, and through `volatility_multiplier_bps`/`base_spread` for conf).
+/// Mitigates FIFO-priority grief on DeepBook where any address can force a cancel-and-replace
+/// on every Pyth tick. The admin `refresh_quotes` bypasses this guard.
+/// E.g:
+///     `0` disables the guard (every Pyth tick triggers a refresh; original behavior).
+///     `5_000` skips refreshes that would shift the ladder by less than half of `base_spread`.
+public fun stale_price_tolerance_bps(self: &AMMConfig): u64 {
+    self.stale_price_tolerance_bps
+}
+
 /// Returns whether `refresh_quotes` should place orders as post-only.
 /// `true` aborts the whole refresh if any order would cross the resting book, preserving
 /// the previous quotes. `false` allows the crossing portion to execute as a taker.
@@ -208,6 +242,43 @@ public(package) fun outer_spread(self: &AMMConfig, mid_price: u64, conf_ratio_bp
 /// Compute the amount of `balance` that should be allocated to the outer (volatility) spread order.
 public(package) fun outer_balance(self: &AMMConfig, balance: u64): u64 {
     balance.mul_div(self.outer_balance_bps, HUNDRED_PERCENT_BPS)
+}
+
+/// Returns `true` when the new oracle inputs are within `stale_price_tolerance_bps` of the
+/// last placed ones (measured as ladder displacement in price units, taken as a fraction of
+/// `base_spread`). When this returns `true`, the permissionless refresh path skips the
+/// cancel-and-replace cycle to preserve FIFO priority.
+///
+/// Both halves of the guard use the same `tolerance` budget:
+/// - `|new_mid - last_mid|` (mid drift in price units)
+/// - `last_mid * volatility_multiplier_bps * |new_conf - last_conf| / 10_000^2`
+///   (outer-order displacement caused by the conf change, in price units)
+///
+/// With `stale_price_tolerance_bps == 0`, `tolerance == 0` so any non-zero drift returns
+/// `false` and the guard is effectively disabled.
+public(package) fun has_stale_tolerance(
+    self: &AMMConfig,
+    new_mid_price: u64,
+    new_conf_ratio_bps: u64,
+    last_mid_price: u64,
+    last_conf_ratio_bps: u64,
+): bool {
+    // Tolerance in price units as a fraction of `base_spread`.
+    let tolerance = self
+        .base_spread(last_mid_price)
+        .mul_div(self.stale_price_tolerance_bps, HUNDRED_PERCENT_BPS);
+
+    // Mid drift in price units.
+    let mid_drift = new_mid_price.diff(last_mid_price);
+
+    // Confidence drift as an outer-order displacement in price units.
+    let conf_diff = new_conf_ratio_bps.diff(last_conf_ratio_bps);
+    let conf_volatility_bps = self
+        .volatility_multiplier_bps
+        .mul_div(conf_diff, HUNDRED_PERCENT_BPS);
+    let conf_drift = last_mid_price.mul_div(conf_volatility_bps, HUNDRED_PERCENT_BPS);
+
+    mid_drift < tolerance && conf_drift < tolerance
 }
 
 /// Compute the reservation mid: the oracle `mid_price` shifted by up to `base_spread`
