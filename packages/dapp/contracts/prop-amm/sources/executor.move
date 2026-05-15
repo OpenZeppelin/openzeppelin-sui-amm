@@ -44,6 +44,8 @@ const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
 #[error(code = 9)]
 const EUnsupportedAsset: vector<u8> = "coin type does not match the configured base or quote asset";
+#[error(code = 10)]
+const EBaseSpreadZero: vector<u8> = "base spread truncated to zero at the current mid price";
 
 // === Structs ===
 
@@ -396,6 +398,7 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
     // Calculate spreads for the following limit orders.
     let base_spread = self.config.base_spread(oracle_mid_price);
     let volatility_spread = self.config.outer_spread(oracle_mid_price, conf_ratio_bps);
+    assert!(base_spread > 0, EBaseSpreadZero);
 
     // Read current balances (post-settlement) and derive the reservation mid: the oracle mid
     // shifted toward the side that rebalances the book (bounded by base_spread).
