@@ -339,7 +339,7 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
     if (has_open_orders && last_mid_price.is_some() && last_conf_ratio_bps.is_some()) {
         let is_within_tolerance = self
             .config
-            .has_stale_tolerance(
+            .is_stale_tolerant(
                 oracle_mid_price,
                 conf_ratio_bps,
                 last_mid_price.destroy_some(),
@@ -483,9 +483,9 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
     ];
     let orders = self.try_place_limit_orders(pool, &trade_proof, order_params, clock, ctx);
 
-    // Cache the inputs that drove this placement so the permissionless-refresh skip guard
-    // can compare them against the next call's oracle inputs.
-    self.market.record_last_quote_inputs(oracle_mid_price, conf_ratio_bps);
+    // Cache price and confidence that drove this placement, so the permissionless-refresh
+    // skip guard can compare them against the next call's oracle inputs.
+    self.market.set_price_and_conf(oracle_mid_price, conf_ratio_bps);
 
     events::emit_quote_updated(self.id(), oracle_mid_price, orders);
 }

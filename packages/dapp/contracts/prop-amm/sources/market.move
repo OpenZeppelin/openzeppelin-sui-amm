@@ -257,11 +257,7 @@ public(package) fun reset_freshness_state(self: &mut Market) {
 /// Records the oracle inputs (`mid_price` and combined `conf_ratio_bps`) used for the last
 /// successful quote refresh. Consumed by the permissionless-refresh skip guard on the next
 /// call.
-public(package) fun record_last_quote_inputs(
-    self: &mut Market,
-    mid_price: u64,
-    conf_ratio_bps: u64,
-) {
+public(package) fun set_price_and_conf(self: &mut Market, mid_price: u64, conf_ratio_bps: u64) {
     self.mid_price = option::some(mid_price);
     self.conf_ratio_bps = option::some(conf_ratio_bps);
 }

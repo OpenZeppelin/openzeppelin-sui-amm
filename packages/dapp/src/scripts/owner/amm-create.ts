@@ -316,7 +316,7 @@ runSuiScript(
       alias: ["stale-price-tolerance-bps"],
       type: "string",
       description:
-        "Permissionless-refresh skip threshold in basis points of price; 0 disables the guard (u64). Bounded on-chain by --base-spread-bps.",
+        "Permissionless-refresh skip threshold in basis points [0..10000), expressed as a fraction of base_spread (u64). 0 disables the guard. E.g. with base-spread-bps=100, 5000 tolerates 50 bps of price drift.",
       default: DEFAULT_STALE_PRICE_TOLERANCE_BPS,
       demandOption: false
     })

@@ -71,9 +71,10 @@ export const buildCreateExecutorTransaction = ({
   outerBalanceBps: bigint | number
   inventorySkewBps: bigint | number
   /**
-   * Permissionless-refresh skip threshold in bps of price. `0` disables the
-   * guard (every Pyth tick triggers a refresh). Bounded on-chain by
-   * `base_spread_bps`.
+   * Permissionless-refresh skip threshold in basis points [0..10_000), expressed as a
+   * fraction of `base_spread`. `0` disables the guard (every Pyth tick triggers a
+   * refresh). E.g. with `baseSpreadBps = 100`, `5_000` tolerates 50 bps of price
+   * drift before refreshing.
    */
   stalePriceToleranceBps: bigint | number
   /**
@@ -167,9 +168,10 @@ export const buildUpdateConfigTransaction = ({
   outerBalanceBps: bigint | number
   inventorySkewBps: bigint | number
   /**
-   * Permissionless-refresh skip threshold in bps of price. `0` disables the
-   * guard (every Pyth tick triggers a refresh). Bounded on-chain by
-   * `base_spread_bps`.
+   * Permissionless-refresh skip threshold in basis points [0..10_000), expressed as a
+   * fraction of `base_spread`. `0` disables the guard (every Pyth tick triggers a
+   * refresh). E.g. with `baseSpreadBps = 100`, `5_000` tolerates 50 bps of price
+   * drift before refreshing.
    */
   stalePriceToleranceBps: bigint | number
   /**
