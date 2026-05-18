@@ -241,6 +241,7 @@ public(package) fun reservation_mid(
     let skew_bps = self.inventory_skew_bps as u128;
     let imbalance = base_balance_in_quote.diff(quote_balance);
     let shift = base_spread.mul_div(imbalance, total_balance);
+    // Safe to multiply without upcast: shift <= base_spread <= u64::MAX; skew_bps <= u64::MAX
     let adjusted_shift = shift * skew_bps / HUNDRED_PERCENT_BPS_U128;
 
     // Apply shift to the mid_price.

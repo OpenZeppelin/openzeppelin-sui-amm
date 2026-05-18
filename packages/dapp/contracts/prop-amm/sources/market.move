@@ -262,6 +262,7 @@ public(package) fun deepbook_price(
         decimal_adj.mul_div(base_mantissa * constants::float_scaling_u128(), quote_mantissa)
     } else {
         let decimal_adj = 10_u128.pow(base_total - quote_total);
+        // Safe to multiply without upcast: base_mantissa <= u64::MAX; float_scaling <= u64::MAX
         base_mantissa * constants::float_scaling_u128() / quote_mantissa / decimal_adj
     };
     let price = price.try_as_u64().destroy_or!(abort EPriceOverflow);
