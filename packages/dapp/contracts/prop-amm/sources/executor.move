@@ -354,6 +354,7 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
 
 /// Consumes a `RefreshTicket` by re-quoting with a caller-supplied mid price under the
 /// newly-installed configuration.
+/// Requires the executor to be in unpaused state.
 public fun refresh_quotes_after_update<BaseAsset, QuoteAsset>(
     self: &mut Executor,
     ticket: RefreshTicket,
@@ -373,6 +374,7 @@ public fun refresh_quotes_after_update<BaseAsset, QuoteAsset>(
 
 /// Consumes a `RefreshTicket` by re-quoting from Pyth oracle prices under the
 /// newly-installed configuration.
+/// Requires the executor to be in unpaused state.
 public fun refresh_quotes_pyth_after_update<BaseAsset, QuoteAsset>(
     self: &mut Executor,
     ticket: RefreshTicket,
@@ -396,6 +398,7 @@ public fun refresh_quotes_pyth_after_update<BaseAsset, QuoteAsset>(
 
 /// Consumes a `RefreshTicket` by cancelling all live orders and settling balances,
 /// without placing new quotes.
+/// Does not change paused state of the `Executor`.
 public fun cancel_orders_after_update<BaseAsset, QuoteAsset>(
     self: &mut Executor,
     ticket: RefreshTicket,
@@ -412,7 +415,8 @@ public fun cancel_orders_after_update<BaseAsset, QuoteAsset>(
 }
 
 /// Consumes a `RefreshTicket` without touching the pool, settling balances, or
-/// placing new quotes. Requires the executor to be paused.
+/// placing new quotes.
+/// Requires the executor to be paused.
 public fun discard_paused_after_update(self: &Executor, ticket: RefreshTicket) {
     let RefreshTicket { executor_id } = ticket;
     assert!(executor_id == self.id(), EInvalidCap);
