@@ -110,7 +110,7 @@ public fun new(
     assert!(inventory_skew_bps < HUNDRED_PERCENT_BPS, EInvalidInventorySkewBps);
     assert!(order_expiration_time_ms > 0, EInvalidOrderExpirationTime);
     assert!(max_price_age_secs > 0, EInvalidMaxPriceAge);
-    assert!(order_expiration_time_ms <= max_price_age_secs * 1000, EOrderExpirationExceedsPriceAge);
+    assert!(order_expiration_time_ms / 1000 <= max_price_age_secs, EOrderExpirationExceedsPriceAge);
 
     AMMConfig {
         base_spread_bps,
