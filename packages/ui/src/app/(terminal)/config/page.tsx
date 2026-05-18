@@ -126,10 +126,7 @@ export default function ConfigPage() {
           >
             Reset defaults
           </Button>
-          <Button
-            onClick={() => handleUpdateAmmConfig()}
-            disabled={!canSubmit}
-          >
+          <Button onClick={() => handleUpdateAmmConfig()} disabled={!canSubmit}>
             {submitLabel}
           </Button>
           <Button

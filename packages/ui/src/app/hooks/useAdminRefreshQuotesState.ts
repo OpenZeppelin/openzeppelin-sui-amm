@@ -76,12 +76,10 @@ const buildFieldErrors = (
 ): AdminRefreshFieldErrors => {
   const errors: AdminRefreshFieldErrors = {}
   if (parsePositiveDecimal(formState.priceDollars) === undefined) {
-    errors.priceDollars =
-      "Enter a positive decimal price (e.g. 1.50)."
+    errors.priceDollars = "Enter a positive decimal price (e.g. 1.50)."
   }
   if (parseNonNegativeDecimal(formState.confRatioPercent) === undefined) {
-    errors.confRatioPercent =
-      "Enter a non-negative decimal percent (e.g. 1.5)."
+    errors.confRatioPercent = "Enter a non-negative decimal percent (e.g. 1.5)."
   }
   return errors
 }
@@ -207,7 +205,10 @@ export const useAdminRefreshQuotesState = () => {
     const parsedConfRatioPercent = parseNonNegativeDecimal(
       formState.confRatioPercent
     )
-    if (parsedPriceDollars === undefined || parsedConfRatioPercent === undefined) {
+    if (
+      parsedPriceDollars === undefined ||
+      parsedConfRatioPercent === undefined
+    ) {
       setTransactionState({
         status: "error",
         error: "Form inputs invalid; see field errors."

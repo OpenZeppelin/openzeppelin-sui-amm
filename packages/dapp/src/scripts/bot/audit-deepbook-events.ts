@@ -110,12 +110,18 @@ const countEventsForExecutor = async ({
       counts.total += 1
       if (data.is_bid === true) {
         counts.bid += 1
-        if (counts.sampleBidOrderIds.length < 3 && data.order_id !== undefined) {
+        if (
+          counts.sampleBidOrderIds.length < 3 &&
+          data.order_id !== undefined
+        ) {
           counts.sampleBidOrderIds.push(String(data.order_id))
         }
       } else if (data.is_bid === false) {
         counts.ask += 1
-        if (counts.sampleAskOrderIds.length < 3 && data.order_id !== undefined) {
+        if (
+          counts.sampleAskOrderIds.length < 3 &&
+          data.order_id !== undefined
+        ) {
           counts.sampleAskOrderIds.push(String(data.order_id))
         }
       } else {

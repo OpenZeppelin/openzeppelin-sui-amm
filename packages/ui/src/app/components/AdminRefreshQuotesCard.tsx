@@ -41,7 +41,9 @@ const AdminRefreshQuotesCard = () => {
     ? getStructLabel(traderAccount.quoteCoinType)
     : ""
   const priceUnitLabel =
-    baseSymbol && quoteSymbol ? `${quoteSymbol} per ${baseSymbol}` : "quote / base"
+    baseSymbol && quoteSymbol
+      ? `${quoteSymbol} per ${baseSymbol}`
+      : "quote / base"
 
   return (
     <section className="rounded-2xl border border-slate-200/70 bg-white/90 p-6 shadow-[0_14px_35px_-30px_rgba(15,23,42,0.4)] dark:border-slate-50/15 dark:bg-slate-950/70">
