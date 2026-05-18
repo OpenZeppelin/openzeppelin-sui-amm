@@ -39,8 +39,6 @@ const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 
 // === Structs ===
 
-// TODO#q: add admin quote refresh to ui
-
 /// Market metadata: pool identity, cached asset decimals, Pyth feed identifiers, and the
 /// latest observed publish timestamps used to detect replayed oracle prices.
 public struct Market has store {
