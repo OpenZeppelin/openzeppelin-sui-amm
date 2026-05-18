@@ -398,7 +398,7 @@ public fun refresh_quotes_pyth_after_update<BaseAsset, QuoteAsset>(
 
 /// Consumes a `RefreshTicket` by cancelling all live orders and settling balances,
 /// without placing new quotes.
-/// Does not change paused state of the `Executor`.
+/// Does not require `Executor` to be paused/unpaused.
 public fun cancel_orders_after_update<BaseAsset, QuoteAsset>(
     self: &mut Executor,
     ticket: RefreshTicket,
