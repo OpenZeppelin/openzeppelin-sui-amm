@@ -17,6 +17,7 @@ export type AmmConfigFormState = {
   maxConfRatioBps: string
   outerBalanceBps: string
   inventorySkewBps: string
+  stalePriceToleranceBps: string
   postOnly: string
 }
 
@@ -154,8 +155,16 @@ const GROUPS: GroupSpec[] = [
   {
     title: "Safety",
     description:
-      "How refresh_quotes places its orders relative to the resting book.",
+      "How refresh_quotes places its orders relative to the resting book, and when a permissionless refresh is allowed to skip.",
     fields: [
+      {
+        kind: "bps",
+        key: "stalePriceToleranceBps",
+        title: "Stale price tolerance",
+        description:
+          "Fraction of Base spread the ladder is allowed to drift before a permissionless refresh proceeds. 0 disables the guard. E.g. at base spread 100 bps, 50 % tolerates 50 bps of price drift before re-quoting.",
+        sliderMaxBps: SLIDER_MAX_BOUNDED_BPS
+      },
       {
         kind: "toggle",
         key: "postOnly",

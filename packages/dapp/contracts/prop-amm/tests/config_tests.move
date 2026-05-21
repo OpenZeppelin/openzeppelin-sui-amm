@@ -18,6 +18,7 @@ fun create_amm_config_builds_expected_config() {
         1000,
         5000,
         0,
+        0,
         true,
     );
 
@@ -28,47 +29,48 @@ fun create_amm_config_builds_expected_config() {
     assert_eq!(amm_config.max_conf_ratio_bps(), 1000);
     assert_eq!(amm_config.outer_balance_bps(), 5000);
     assert_eq!(amm_config.inventory_skew_bps(), 0);
+    assert_eq!(amm_config.stale_price_tolerance_bps(), 0);
     assert_eq!(amm_config.post_only(), true);
 }
 
 #[test, expected_failure(abort_code = config::EInvalidBaseSpreadBps)]
 fun create_amm_config_rejects_zero_base_spread_bps() {
-    let _amm_config = config::new(0, 10_000, 30_000, 30, 1000, 5000, 0, true);
+    let _amm_config = config::new(0, 10_000, 30_000, 30, 1000, 5000, 0, 0, true);
 
     abort
 }
 
 #[test, expected_failure(abort_code = config::EInvalidBaseSpreadBps)]
 fun create_amm_config_rejects_base_spread_bps_above_ten_thousand() {
-    let _amm_config = config::new(10_001, 10_000, 30_000, 30, 1000, 5000, 0, true);
+    let _amm_config = config::new(10_001, 10_000, 30_000, 30, 1000, 5000, 0, 0, true);
 
     abort
 }
 
 #[test, expected_failure(abort_code = config::EInvalidMaxConfRatioBps)]
 fun create_amm_config_rejects_zero_max_conf_ratio_bps() {
-    let _amm_config = config::new(100, 10_000, 30_000, 30, 0, 5000, 0, true);
+    let _amm_config = config::new(100, 10_000, 30_000, 30, 0, 5000, 0, 0, true);
 
     abort
 }
 
 #[test, expected_failure(abort_code = config::EInvalidMaxConfRatioBps)]
 fun create_amm_config_rejects_max_conf_ratio_bps_above_ten_thousand() {
-    let _amm_config = config::new(100, 10_000, 30_000, 30, 10_001, 5000, 0, true);
+    let _amm_config = config::new(100, 10_000, 30_000, 30, 10_001, 5000, 0, 0, true);
 
     abort
 }
 
 #[test, expected_failure(abort_code = config::EInvalidOrderExpirationTime)]
 fun create_amm_config_rejects_zero_order_expiration_time() {
-    let _amm_config = config::new(100, 10_000, 0, 30, 1000, 5000, 0, true);
+    let _amm_config = config::new(100, 10_000, 0, 30, 1000, 5000, 0, 0, true);
 
     abort
 }
 
 #[test, expected_failure(abort_code = config::EInvalidMaxPriceAge)]
 fun create_amm_config_rejects_zero_max_price_age() {
-    let _amm_config = config::new(100, 10_000, 30_000, 0, 1000, 5000, 0, true);
+    let _amm_config = config::new(100, 10_000, 30_000, 0, 1000, 5000, 0, 0, true);
 
     abort
 }
@@ -76,7 +78,7 @@ fun create_amm_config_rejects_zero_max_price_age() {
 #[test]
 fun create_amm_config_accepts_order_expiration_equal_to_max_price_age() {
     // 30_000 ms == 30 s * 1000: boundary is inclusive.
-    let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 0, true);
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 0, 0, true);
 
     assert_eq!(amm_config.order_expiration_time_ms(), 30_000);
     assert_eq!(amm_config.max_price_age_secs(), 30);
@@ -85,49 +87,49 @@ fun create_amm_config_accepts_order_expiration_equal_to_max_price_age() {
 #[test, expected_failure(abort_code = config::EOrderExpirationExceedsPriceAge)]
 fun create_amm_config_rejects_order_expiration_above_max_price_age() {
     // 30_001 ms > 30 s * 1000: even by 1 ms must fail.
-    let _amm_config = config::new(100, 10_000, 30_001, 30, 1000, 5000, 0, true);
+    let _amm_config = config::new(100, 10_000, 30_001, 30, 1000, 5000, 0, 0, true);
 
     abort
 }
 
 #[test]
 fun create_amm_config_accepts_zero_outer_balance_bps() {
-    let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 0, 0, true);
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 0, 0, 0, true);
 
     assert_eq!(amm_config.outer_balance_bps(), 0);
 }
 
 #[test, expected_failure(abort_code = config::EInvalidOuterBalanceBps)]
 fun create_amm_config_rejects_outer_balance_bps_at_hundred_percent() {
-    let _amm_config = config::new(100, 10_000, 30_000, 30, 1000, 10_000, 0, true);
+    let _amm_config = config::new(100, 10_000, 30_000, 30, 1000, 10_000, 0, 0, true);
 
     abort
 }
 
 #[test, expected_failure(abort_code = config::EInvalidOuterBalanceBps)]
 fun create_amm_config_rejects_outer_balance_bps_above_ten_thousand() {
-    let _amm_config = config::new(100, 10_000, 30_000, 30, 1000, 10_001, 0, true);
+    let _amm_config = config::new(100, 10_000, 30_000, 30, 1000, 10_001, 0, 0, true);
 
     abort
 }
 
 #[test]
 fun create_amm_config_accepts_inventory_skew_bps_just_below_hundred_percent() {
-    let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 9_999, true);
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 9_999, 0, true);
 
     assert_eq!(amm_config.inventory_skew_bps(), 9_999);
 }
 
 #[test, expected_failure(abort_code = config::EInvalidInventorySkewBps)]
 fun create_amm_config_rejects_inventory_skew_bps_at_hundred_percent() {
-    let _amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 10_000, true);
+    let _amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 10_000, 0, true);
 
     abort
 }
 
 #[test, expected_failure(abort_code = config::EInvalidInventorySkewBps)]
 fun create_amm_config_rejects_inventory_skew_bps_above_ten_thousand() {
-    let _amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 10_001, true);
+    let _amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 10_001, 0, true);
 
     abort
 }
@@ -144,6 +146,7 @@ fun reservation_mid_handles_large_inventories_without_overflow() {
         1000,
         5_000,
         5_000,
+        0,
         true,
     );
 
@@ -157,4 +160,73 @@ fun reservation_mid_handles_large_inventories_without_overflow() {
     // imbalance / total_balance = 1, so shift = base_spread = 1e17.
     // adjusted_shift = shift * inventory_skew_bps / 10_000 = 5e16.
     assert_eq!(reservation_mid, mid_price - 50_000_000_000_000_000);
+}
+
+#[test]
+fun is_stale_tolerant_returns_true_when_drift_is_zero() {
+    // tolerance = base_spread_bps * stale_price_tolerance_bps / 10_000 = 100 * 5_000 / 10_000 = 50 bps.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 0, conf_drift = 0, tolerance = 50 → 0 < 50 → skip.
+    assert_eq!(amm_config.is_stale_tolerant(1_000_000, 100, 1_000_000, 100), true);
+}
+
+#[test]
+fun is_stale_tolerant_returns_false_when_tolerance_is_zero() {
+    // stale_price_tolerance_bps = 0 disables the guard: tolerance = 0 and the comparison is strict.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 0, true);
+
+    // Identical inputs still fail 0 < 0, so refresh proceeds.
+    assert_eq!(amm_config.is_stale_tolerant(1_000_000, 100, 1_000_000, 100), false);
+}
+
+#[test]
+fun is_stale_tolerant_returns_true_when_mid_drift_below_tolerance() {
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 3_000 / 1_000_000 * 10_000 = 30 bps; tolerance = 50 → skip.
+    assert_eq!(amm_config.is_stale_tolerant(1_003_000, 100, 1_000_000, 100), true);
+}
+
+#[test]
+fun is_stale_tolerant_returns_false_when_mid_drift_above_tolerance() {
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 10_000 / 1_000_000 * 10_000 = 100 bps; tolerance = 50 → refresh.
+    assert_eq!(amm_config.is_stale_tolerant(1_010_000, 100, 1_000_000, 100), false);
+}
+
+#[test]
+fun is_stale_tolerant_returns_false_when_drift_equals_tolerance() {
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 5_000 / 1_000_000 * 10_000 = 50 bps; tolerance = 50 → 50 < 50 is false → refresh.
+    assert_eq!(amm_config.is_stale_tolerant(1_005_000, 100, 1_000_000, 100), false);
+}
+
+#[test]
+fun is_stale_tolerant_returns_false_when_conf_drift_above_tolerance() {
+    // outer_balance_bps = 5_000 (50/50 split) → conf weight = 5_000 * 2 / 10_000 = 1.0.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 0; conf_drift = 10_000 * 100 / 10_000 * 10_000 / 10_000 = 100 bps;
+    // tolerance = 50 → 100 < 50 is false → refresh.
+    assert_eq!(amm_config.is_stale_tolerant(1_000_000, 200, 1_000_000, 100), false);
+}
+
+#[test]
+fun is_stale_tolerant_zeros_conf_drift_when_outer_balance_is_zero() {
+    // outer_balance_bps = 0 → conf weight = 0 → conf_drift collapses to 0 regardless of value.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 0, 0, 5_000, true);
+
+    // Huge conf change is ignored; mid_drift = 0 → 0 < 50 → skip.
+    assert_eq!(amm_config.is_stale_tolerant(1_000_000, 10_000, 1_000_000, 0), true);
+}
+
+#[test]
+fun is_stale_tolerant_sums_mid_and_conf_drift() {
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 30 bps; conf_drift = 25 bps; sum = 55; tolerance = 50 → refresh.
+    assert_eq!(amm_config.is_stale_tolerant(1_003_000, 125, 1_000_000, 100), false);
 }

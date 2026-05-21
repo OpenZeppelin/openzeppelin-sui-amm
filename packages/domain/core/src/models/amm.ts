@@ -24,6 +24,9 @@ export const DEFAULT_MAX_PRICE_AGE_SECS = "60"
 export const DEFAULT_MAX_CONF_RATIO_BPS = "1000"
 export const DEFAULT_OUTER_BALANCE_BPS = "5000"
 export const DEFAULT_INVENTORY_SKEW_BPS = "0"
+// Disabled by default: every Pyth tick triggers a refresh (original behavior).
+// Move-side constraint is `stale_price_tolerance_bps < 10_000` (fraction of `base_spread_bps`).
+export const DEFAULT_STALE_PRICE_TOLERANCE_BPS = "0"
 export const DEFAULT_POST_ONLY = "true"
 
 export type AmmConfigOverview = {
@@ -39,6 +42,7 @@ export type AmmConfigOverview = {
   maxConfRatioBps: string
   outerBalanceBps: string
   inventorySkewBps: string
+  stalePriceToleranceBps: string
   postOnly: boolean
 }
 
@@ -50,6 +54,7 @@ type AmmConfigFields = {
   max_conf_ratio_bps?: unknown
   outer_balance_bps?: unknown
   inventory_skew_bps?: unknown
+  stale_price_tolerance_bps?: unknown
   post_only?: unknown
 }
 
@@ -156,6 +161,10 @@ const buildAmmConfigOverviewFromObject = ({
       config.inventory_skew_bps,
       "Inventory skew bps"
     ),
+    stalePriceToleranceBps: requireNumericField(
+      config.stale_price_tolerance_bps,
+      "Stale price tolerance bps"
+    ),
     postOnly: requireBooleanField(config.post_only, "Post only")
   }
 }
@@ -211,6 +220,7 @@ export const resolveAmmConfigInputs = ({
   maxConfRatioBps,
   outerBalanceBps,
   inventorySkewBps,
+  stalePriceToleranceBps,
   postOnly
 }: {
   volatilityMultiplierBps?: string
@@ -222,6 +232,7 @@ export const resolveAmmConfigInputs = ({
   maxConfRatioBps?: string
   outerBalanceBps?: string
   inventorySkewBps?: string
+  stalePriceToleranceBps?: string
   postOnly?: string
 }): {
   baseSpreadBps: bigint
@@ -235,6 +246,7 @@ export const resolveAmmConfigInputs = ({
   maxConfRatioBps: bigint
   outerBalanceBps: bigint
   inventorySkewBps: bigint
+  stalePriceToleranceBps: bigint
   postOnly: boolean
 } => ({
   baseSpreadBps: resolveBaseSpreadBps(baseSpreadBps),
@@ -264,6 +276,10 @@ export const resolveAmmConfigInputs = ({
   inventorySkewBps: parseNonNegativeU64(
     inventorySkewBps ?? DEFAULT_INVENTORY_SKEW_BPS,
     "Inventory skew bps"
+  ),
+  stalePriceToleranceBps: parseNonNegativeU64(
+    stalePriceToleranceBps ?? DEFAULT_STALE_PRICE_TOLERANCE_BPS,
+    "Stale price tolerance bps"
   ),
   postOnly: parseBooleanFlag(postOnly ?? DEFAULT_POST_ONLY, "Post only")
 })

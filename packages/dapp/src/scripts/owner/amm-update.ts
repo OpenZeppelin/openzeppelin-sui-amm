@@ -8,11 +8,6 @@
 import yargs from "yargs"
 
 import {
-  DEFAULT_INVENTORY_SKEW_BPS,
-  DEFAULT_MAX_CONF_RATIO_BPS,
-  DEFAULT_MAX_PRICE_AGE_SECS,
-  DEFAULT_ORDER_EXPIRATION_TIME_MS,
-  DEFAULT_OUTER_BALANCE_BPS,
   type AmmConfigOverview,
   getAmmConfigOverview,
   resolveAmmConfigInputs
@@ -42,6 +37,7 @@ type UpdateAmmArguments = {
   maxConfRatioBps?: string
   outerBalanceBps?: string
   inventorySkewBps?: string
+  stalePriceToleranceBps?: string
   postOnly?: string
   devInspect?: boolean
   dryRun?: boolean
@@ -56,6 +52,7 @@ type ResolvedAmmUpdateInputs = {
   maxConfRatioBps: bigint
   outerBalanceBps: bigint
   inventorySkewBps: bigint
+  stalePriceToleranceBps: bigint
   postOnly: boolean
 }
 
@@ -116,6 +113,9 @@ const resolveAmmUpdateInputs = ({
       cliArguments.outerBalanceBps ?? currentOverview.outerBalanceBps,
     inventorySkewBps:
       cliArguments.inventorySkewBps ?? currentOverview.inventorySkewBps,
+    stalePriceToleranceBps:
+      cliArguments.stalePriceToleranceBps ??
+      currentOverview.stalePriceToleranceBps,
     postOnly: cliArguments.postOnly ?? String(currentOverview.postOnly)
   })
 
@@ -127,6 +127,7 @@ const resolveAmmUpdateInputs = ({
     maxConfRatioBps: inputs.maxConfRatioBps,
     outerBalanceBps: inputs.outerBalanceBps,
     inventorySkewBps: inputs.inventorySkewBps,
+    stalePriceToleranceBps: inputs.stalePriceToleranceBps,
     postOnly: inputs.postOnly
   }
 }
@@ -168,6 +169,7 @@ runSuiScript(
       maxConfRatioBps: updateInputs.maxConfRatioBps,
       outerBalanceBps: updateInputs.outerBalanceBps,
       inventorySkewBps: updateInputs.inventorySkewBps,
+      stalePriceToleranceBps: updateInputs.stalePriceToleranceBps,
       postOnly: updateInputs.postOnly
     })
 
@@ -247,7 +249,6 @@ runSuiScript(
       type: "string",
       description:
         "Order expiration duration in milliseconds (u64); defaults to the current config value.",
-      default: DEFAULT_ORDER_EXPIRATION_TIME_MS,
       demandOption: false
     })
     .option("maxPriceAgeSecs", {
@@ -255,7 +256,6 @@ runSuiScript(
       type: "string",
       description:
         "Maximum acceptable Pyth price age in seconds (u64); defaults to the current config value.",
-      default: DEFAULT_MAX_PRICE_AGE_SECS,
       demandOption: false
     })
     .option("maxConfRatioBps", {
@@ -263,7 +263,6 @@ runSuiScript(
       type: "string",
       description:
         "Maximum acceptable confidence-to-price ratio in basis points (u64); defaults to the current config value.",
-      default: DEFAULT_MAX_CONF_RATIO_BPS,
       demandOption: false
     })
     .option("outerBalanceBps", {
@@ -271,7 +270,6 @@ runSuiScript(
       type: "string",
       description:
         "Share of the settleable balance allocated to the outer (volatility) spread order in basis points (u64); defaults to the current config value.",
-      default: DEFAULT_OUTER_BALANCE_BPS,
       demandOption: false
     })
     .option("inventorySkewBps", {
@@ -279,7 +277,13 @@ runSuiScript(
       type: "string",
       description:
         "Inventory-driven mid-shift coefficient in basis points (u64); defaults to the current config value.",
-      default: DEFAULT_INVENTORY_SKEW_BPS,
+      demandOption: false
+    })
+    .option("stalePriceToleranceBps", {
+      alias: ["stale-price-tolerance-bps"],
+      type: "string",
+      description:
+        "Permissionless-refresh skip threshold in basis points [0..10000), expressed as a fraction of base_spread (u64); 0 disables the guard. E.g. with base-spread-bps=100, 5000 tolerates 50 bps of price drift. Defaults to the current config value.",
       demandOption: false
     })
     .option("postOnly", {

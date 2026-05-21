@@ -82,6 +82,7 @@ const buildOptimisticOverview = ({
   maxConfRatioBps: formState.maxConfRatioBps.trim(),
   outerBalanceBps: formState.outerBalanceBps.trim(),
   inventorySkewBps: formState.inventorySkewBps.trim(),
+  stalePriceToleranceBps: formState.stalePriceToleranceBps.trim(),
   postOnly: formState.postOnly.trim().toLowerCase() === "true"
 })
 
@@ -96,6 +97,7 @@ const ammConfigMatches = (
   first.maxConfRatioBps === second.maxConfRatioBps &&
   first.outerBalanceBps === second.outerBalanceBps &&
   first.inventorySkewBps === second.inventorySkewBps &&
+  first.stalePriceToleranceBps === second.stalePriceToleranceBps &&
   first.postOnly === second.postOnly &&
   first.active === second.active
 
@@ -286,6 +288,7 @@ export const useUpdateAmmConfigModalState = ({
         maxConfRatioBps: formState.maxConfRatioBps.trim(),
         outerBalanceBps: formState.outerBalanceBps.trim(),
         inventorySkewBps: formState.inventorySkewBps.trim(),
+        stalePriceToleranceBps: formState.stalePriceToleranceBps.trim(),
         postOnly: formState.postOnly.trim()
       })
 
@@ -318,6 +321,7 @@ export const useUpdateAmmConfigModalState = ({
         maxConfRatioBps: updateInputs.maxConfRatioBps,
         outerBalanceBps: updateInputs.outerBalanceBps,
         inventorySkewBps: updateInputs.inventorySkewBps,
+        stalePriceToleranceBps: updateInputs.stalePriceToleranceBps,
         postOnly: updateInputs.postOnly
       })
       updateTransaction.setSender(walletAddress)
