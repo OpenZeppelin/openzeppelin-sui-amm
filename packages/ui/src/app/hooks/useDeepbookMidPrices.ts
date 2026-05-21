@@ -15,6 +15,14 @@ import type { ExecutorEvent } from "./useExecutorEventLog"
 // book is empty). Chart skips these — line gets a gap rather than a zero spike.
 type DeepbookMidEntry = bigint | "error"
 
+// DeepBook exposes only the *current* book mid (`pool::mid_price`), not a
+// historical price feed, so the only honest sample we can take is right now.
+// Restrict backfill to events whose on-chain timestamp is within this window of
+// fetch time — older events stay uncached and render as gaps, instead of every
+// historical point getting clamped to today's mid and producing a misleading
+// horizontal stretch on the chart.
+const FRESH_EVENT_WINDOW_MS = 30_000
+
 const PROBE_SENDER =
   "0x0000000000000000000000000000000000000000000000000000000000000001"
 
@@ -239,11 +247,14 @@ export const useDeepbookMidPrices = ({
       return
     }
     const entry = getOrCreateEntry(key)
+    const freshnessCutoffMs = Date.now() - FRESH_EVENT_WINDOW_MS
     const pending = events.filter(
       (event) =>
         event.type === "QuoteUpdated" &&
         !entry.byEventId.has(event.id) &&
-        !entry.inFlight.has(event.id)
+        !entry.inFlight.has(event.id) &&
+        event.timestampMs !== null &&
+        event.timestampMs >= freshnessCutoffMs
     )
     if (pending.length === 0) return
 

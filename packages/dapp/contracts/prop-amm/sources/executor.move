@@ -95,6 +95,16 @@ public struct LimitOrderParams has copy, drop {
     is_bid: bool,
 }
 
+/// Hot potato issued by `update_config`. Must be consumed within the same PTB by one of:
+/// - `cancel_orders_after_update`: clear the stale ladder without repopulating.
+/// - `refresh_quotes_after_update`: re-quote with a caller-supplied mid price.
+/// - `refresh_quotes_pyth_after_update`: re-quote from Pyth oracle prices.
+/// - `discard_paused_after_update`: no-op consumer; requires the executor to be paused.
+public struct RefreshTicket {
+    /// ID of the executor whose configuration was updated.
+    executor_id: ID,
+}
+
 /// One-time publisher witness created at publish time.
 public struct EXECUTOR has drop {}
 
@@ -138,13 +148,14 @@ public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Exec
     (executor, executor_cap)
 }
 
-/// Replaces AMM configuration. Resets the cached freshness state (Pyth publish timestamps
-/// and last quoted mid / conf ratio) so the next `refresh_quotes_permissionless` call
-/// re-prices unconditionally even when the oracle timestamp or value has not advanced.
+/// Replaces AMM configuration. Resets the cached Pyth freshness state (Pyth publish timestamps
+/// and last quoted mid / conf ratio) so the next `refresh_quotes_permissionless` call re-prices
+/// unconditionally even when the oracle timestamp or value has not advanced.
 /// Requires the matching market maker executor capability.
-/// To reflect trading configuration immediately, `refresh_quotes_permissionless` (or the
-/// admin `refresh_quotes`) should be called within a single PTB.
-public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig) {
+/// Returns a `RefreshTicket` that must be consumed in the same PTB by one of the `*_after_update`
+/// functions, ensuring the live ladder cannot remain on the book quoting under the replaced
+/// configuration.
+public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig): RefreshTicket {
     assert!(self.id() == cap.executor_id, EInvalidCap);
     assert!(&self.config != &config, EConfigUnchanged);
 
@@ -152,6 +163,8 @@ public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig)
 
     self.market.reset_freshness_state();
     self.config = config;
+
+    RefreshTicket { executor_id: self.id() }
 }
 
 /// Pauses trading by cancelling all existing orders and preventing new orders until next activation.
@@ -166,29 +179,8 @@ public fun pause<BaseAsset, QuoteAsset>(
     assert!(self.active, EPaused);
     assert!(self.market.has_valid_pool(pool), EInvalidPool);
 
-    // Generate trade proof.
-    let trade_proof = self.balance_manager.generate_proof_as_trader(&self.caps.trade_cap, ctx);
-
-    // Cancel all previous active orders.
-    pool.cancel_all_orders(
-        &mut self.balance_manager,
-        &trade_proof,
-        clock,
-        ctx,
-    );
-
-    // Update balance manager, to reflect previous settled limit orders in balance.
-    pool.withdraw_settled_amounts(&mut self.balance_manager, &trade_proof);
-
-    // Update trading information.
-    let volume_base = self.volume_base(pool);
-    self
-        .info
-        .update(
-            volume_base,
-            self.balance_manager.balance<QuoteAsset>(),
-            self.balance_manager.balance<BaseAsset>(),
-        );
+    // Cancel previous orders, settle matched amounts, and refresh cached info.
+    self.cancel_orders(pool, clock, ctx);
 
     // Emit paused event.
     events::emit_executor_paused(self.id());
@@ -388,6 +380,77 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     self.refresh_quotes_inner(pool, mid_price, conf_ratio_bps, clock, ctx);
 }
 
+/// Consumes a `RefreshTicket` by re-quoting with a caller-supplied mid price under the
+/// newly-installed configuration.
+/// Requires the executor to be in unpaused state.
+public fun refresh_quotes_after_update<BaseAsset, QuoteAsset>(
+    self: &mut Executor,
+    ticket: RefreshTicket,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    mid_price: u64,
+    conf_ratio_bps: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let RefreshTicket { executor_id } = ticket;
+    assert!(executor_id == self.id(), EInvalidCap);
+    assert!(self.market.has_valid_pool(pool), EInvalidPool);
+    assert!(self.active, EPaused);
+
+    self.refresh_quotes_inner(pool, mid_price, conf_ratio_bps, clock, ctx);
+}
+
+/// Consumes a `RefreshTicket` by re-quoting from Pyth oracle prices under the
+/// newly-installed configuration.
+/// Requires the executor to be in unpaused state.
+public fun refresh_quotes_pyth_after_update<BaseAsset, QuoteAsset>(
+    self: &mut Executor,
+    ticket: RefreshTicket,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    base_price_info_object: &PriceInfoObject,
+    quote_price_info_object: &PriceInfoObject,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let RefreshTicket { executor_id } = ticket;
+    assert!(executor_id == self.id(), EInvalidCap);
+
+    self.refresh_quotes_permissionless(
+        pool,
+        base_price_info_object,
+        quote_price_info_object,
+        clock,
+        ctx,
+    );
+}
+
+/// Consumes a `RefreshTicket` by cancelling all live orders and settling balances,
+/// without placing new quotes.
+/// Does not require `Executor` to be paused/unpaused.
+public fun cancel_orders_after_update<BaseAsset, QuoteAsset>(
+    self: &mut Executor,
+    ticket: RefreshTicket,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let RefreshTicket { executor_id } = ticket;
+    assert!(executor_id == self.id(), EInvalidCap);
+    assert!(self.market.has_valid_pool(pool), EInvalidPool);
+
+    // Cancel previous orders, settle matched amounts, and refresh cached info.
+    self.cancel_orders(pool, clock, ctx);
+}
+
+/// Consumes a `RefreshTicket` without touching the pool, settling balances, or
+/// placing new quotes.
+/// Requires the executor to be paused.
+public fun discard_paused_after_update(self: &Executor, ticket: RefreshTicket) {
+    let RefreshTicket { executor_id } = ticket;
+    assert!(executor_id == self.id(), EInvalidCap);
+    assert!(!self.active, ENotPaused);
+}
+
 /// Cancels stale orders, settles balances, derives the reservation mid and base/volatility
 /// spreads from the supplied `oracle_mid_price` and combined `conf_ratio_bps`, then re-places
 /// the four-order ladder around the reservation mid.
@@ -405,20 +468,9 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
     clock: &Clock,
     ctx: &TxContext,
 ) {
-    // Generate trade proof.
-    let trade_proof = self.balance_manager.generate_proof_as_trader(&self.caps.trade_cap, ctx);
-
-    // Cancel all previous active orders.
-    pool.cancel_all_orders(
-        &mut self.balance_manager,
-        &trade_proof,
-        clock,
-        ctx,
-    );
-
-    // Update balance manager to reflect previous settled limit orders in balance,
-    // before using balance in quantity computation for the next orders.
-    pool.withdraw_settled_amounts(&mut self.balance_manager, &trade_proof);
+    // Cancel previous orders, settle matched amounts, and refresh cached info. The
+    // returned trade proof is reused below when placing the new ladder.
+    let trade_proof = self.cancel_orders(pool, clock, ctx);
 
     // Calculate spreads for the following limit orders.
     let base_spread = self.config.base_spread(oracle_mid_price);
@@ -470,16 +522,6 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
     let ask_inner_quantity = base_balance - ask_outer_quantity;
     let ask_outer_quantity = round_down_quantity(ask_outer_quantity, lot_size);
     let ask_inner_quantity = round_down_quantity(ask_inner_quantity, lot_size);
-
-    // Update trading information.
-    let volume_base = self.volume_base(pool);
-    self
-        .info
-        .update(
-            volume_base,
-            quote_balance,
-            base_balance,
-        );
 
     // Try to place 4 limit orders (2 bids + 2 asks) around the reservation mid.
     // Skipped if quantity is below the limit.
@@ -556,6 +598,42 @@ public fun cap_id(amm_cap: &AdminCap): ID {
 }
 
 // === Private Functions ===
+
+/// Cancels all live orders, settles matched amounts into the balance manager, and
+/// refreshes the cached trading info. Returns the generated trade proof so the caller
+/// can place follow-on orders without regenerating it.
+fun cancel_orders<BaseAsset, QuoteAsset>(
+    self: &mut Executor,
+    pool: &mut Pool<BaseAsset, QuoteAsset>,
+    clock: &Clock,
+    ctx: &TxContext,
+): TradeProof {
+    // Generate trade proof.
+    let trade_proof = self.balance_manager.generate_proof_as_trader(&self.caps.trade_cap, ctx);
+
+    // Cancel all previous active orders.
+    pool.cancel_all_orders(
+        &mut self.balance_manager,
+        &trade_proof,
+        clock,
+        ctx,
+    );
+
+    // Update balance manager to reflect previous settled limit orders in balance.
+    pool.withdraw_settled_amounts(&mut self.balance_manager, &trade_proof);
+
+    // Update trading information.
+    let volume_base = self.volume_base(pool);
+    self
+        .info
+        .update(
+            volume_base,
+            self.balance_manager.balance<QuoteAsset>(),
+            self.balance_manager.balance<BaseAsset>(),
+        );
+
+    trade_proof
+}
 
 /// Returns whether there are open unexpired orders for the executor in the pool.
 fun has_open_orders<BaseAsset, QuoteAsset>(

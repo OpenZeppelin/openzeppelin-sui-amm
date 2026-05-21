@@ -296,10 +296,6 @@ const Sparkline = ({ points }: { points: SeriesPoint[] }) => {
   })
   if (currentSegment.length > 0) deepbookSegments.push(currentSegment.join(" "))
 
-  const lastDeepbookPoint = [...points]
-    .reverse()
-    .find((point) => point.deepbookValue !== undefined)
-
   // Build a band polygon for each contiguous run of points that has both an
   // ask (top) and bid (bottom) price defined. SVG polygons can't render gaps
   // so segments break wherever a side is missing (e.g. single-sided refresh).
@@ -446,9 +442,9 @@ const Sparkline = ({ points }: { points: SeriesPoint[] }) => {
               {points[lastIndex].oracleDisplay}
             </span>
           ) : undefined}
-          {isVisible("deepbook") && lastDeepbookPoint?.deepbookDisplay ? (
+          {isVisible("deepbook") && points[lastIndex].deepbookDisplay ? (
             <span className="font-semibold" style={{ color: DEEPBOOK_COLOR }}>
-              {lastDeepbookPoint.deepbookDisplay}
+              {points[lastIndex].deepbookDisplay}
             </span>
           ) : undefined}
         </div>

@@ -140,15 +140,16 @@ const GROUPS: GroupSpec[] = [
         kind: "numeric",
         key: "orderExpirationTimeMs",
         title: "Order expiration (ms)",
-        description: "DeepBook order time-to-live in milliseconds.",
-        placeholder: "86400000"
+        description:
+          "DeepBook order time-to-live in milliseconds. Must be ≤ Max Pyth price age × 1000 so orders cannot outlive the oracle freshness window.",
+        placeholder: "300000"
       },
       {
         kind: "numeric",
         key: "maxPriceAgeSecs",
         title: "Max Pyth price age (s)",
         description: "Reject oracle reads older than this many seconds.",
-        placeholder: "60"
+        placeholder: "300"
       }
     ]
   },

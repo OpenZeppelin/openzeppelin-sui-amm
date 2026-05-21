@@ -1,6 +1,7 @@
 "use client"
 
 import { getStructLabel } from "@sui-amm/tooling-core/utils/formatters"
+import AdminRefreshQuotesCard from "../../components/AdminRefreshQuotesCard"
 import Button from "../../components/Button"
 import CopyableId from "../../components/CopyableId"
 import RefreshQuotesCard from "../../components/RefreshQuotesCard"
@@ -130,6 +131,9 @@ export default function BotPage() {
         ) : undefined}
       </section>
 
+      <RefreshQuotesCard />
+      <AdminRefreshQuotesCard />
+
       {traderAccount ? (
         <section className="rounded-2xl border border-slate-200/70 bg-white/90 p-6 shadow-[0_14px_35px_-30px_rgba(15,23,42,0.4)] dark:border-slate-50/15 dark:bg-slate-950/70">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-sds-dark dark:text-sds-light">
@@ -169,8 +173,6 @@ export default function BotPage() {
           </div>
         </section>
       ) : undefined}
-
-      <RefreshQuotesCard />
     </>
   )
 }

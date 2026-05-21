@@ -15,7 +15,7 @@ const RefreshQuotesCard = () => {
   return (
     <section className="rounded-2xl border border-slate-200/70 bg-white/90 p-6 shadow-[0_14px_35px_-30px_rgba(15,23,42,0.4)] dark:border-slate-50/15 dark:bg-slate-950/70">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-sds-dark dark:text-sds-light">
             Refresh quotes
           </h2>
@@ -33,9 +33,11 @@ const RefreshQuotesCard = () => {
             </div>
           ) : undefined}
         </div>
-        <Button onClick={handleSubmit} disabled={!canSubmit}>
-          {isProcessing ? "Refreshing…" : "Refresh quotes"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={handleSubmit} disabled={!canSubmit}>
+            {isProcessing ? "Refreshing…" : "Refresh quotes"}
+          </Button>
+        </div>
       </div>
 
       {transactionState.status === "error" ? (

@@ -43,7 +43,7 @@ const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 /// Market metadata: pool identity, cached asset decimals, Pyth feed identifiers, the
 /// latest observed publish timestamps used to detect replayed oracle prices, and the
 /// mid price and mid confidence ratio recorded at the last quote refresh.
-public struct Market has drop, store {
+public struct Market has store {
     /// ID of the associated pool.
     pool_id: ID,
     /// Base asset metadata.
@@ -60,7 +60,7 @@ public struct Market has drop, store {
 }
 
 /// Per-side (base or quote) asset metadata.
-public struct MarketCurrency has drop, store {
+public struct MarketCurrency has store {
     /// Asset type used to route deposits and withdrawals.
     coin_type: TypeName,
     /// Cached asset decimals (read from the asset's `Currency` object at creation time).

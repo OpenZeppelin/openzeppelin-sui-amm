@@ -12,7 +12,7 @@ import {
   getAmmConfigOverview,
   resolveAmmConfigInputs
 } from "@sui-amm/domain-core/models/amm"
-import { buildUpdateConfigTransaction } from "@sui-amm/domain-core/ptb/amm"
+import { buildUpdateConfigAndCancelTransaction } from "@sui-amm/domain-core/ptb/amm"
 import {
   resolveAmmConfigId,
   resolveAmmPackageId
@@ -158,10 +158,17 @@ runSuiScript(
       currentOverview
     })
 
-    const updateConfigTransaction = buildUpdateConfigTransaction({
+    const poolSharedObject = await tooling.getMutableSharedObject({
+      objectId: currentOverview.poolId
+    })
+
+    const updateConfigTransaction = buildUpdateConfigAndCancelTransaction({
       packageId: ammPackageId,
       executor: ammConfigSharedObject,
       adminCapId,
+      pool: poolSharedObject,
+      baseAssetTypeTag: currentOverview.baseCoinType,
+      quoteAssetTypeTag: currentOverview.quoteCoinType,
       baseSpreadBps: updateInputs.baseSpreadBps,
       volatilityMultiplierBps: updateInputs.volatilityMultiplierBps,
       orderExpirationTimeMs: updateInputs.orderExpirationTimeMs,

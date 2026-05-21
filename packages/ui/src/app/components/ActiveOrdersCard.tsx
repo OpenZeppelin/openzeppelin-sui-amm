@@ -5,6 +5,8 @@ import {
   getStructLabel
 } from "@sui-amm/tooling-core/utils/formatters"
 import { useMemo } from "react"
+import { useDeepbookCanceledOrders } from "../hooks/useDeepbookCanceledOrders"
+import { useDeepbookExpiredOrders } from "../hooks/useDeepbookExpiredOrders"
 import { useDeepbookFullyFilledOrders } from "../hooks/useDeepbookFullyFilledOrders"
 import { useExecutorEventLog } from "../hooks/useExecutorEventLog"
 import useResolvedPackageId from "../hooks/useResolvedPackageId"
@@ -78,19 +80,24 @@ const SidePill = ({ isBid }: { isBid: boolean }) => {
   )
 }
 
-const StatusPill = ({ status }: { status: "OPEN" | "FILLED" }) => {
-  const tone =
-    status === "FILLED"
-      ? "bg-sds-blue/10 text-sds-blue border-sds-blue/30"
-      : "bg-slate-100/80 text-slate-600 border-slate-200/70 dark:bg-slate-50/10 dark:text-slate-200/80 dark:border-slate-50/15"
-  return (
-    <span
-      className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.14em] ${tone}`}
-    >
-      {status}
-    </span>
-  )
+type OrderStatus = "OPEN" | "FILLED" | "CANCELLED" | "EXPIRED"
+
+const STATUS_TONE: Record<OrderStatus, string> = {
+  FILLED: "bg-sds-blue/10 text-sds-blue border-sds-blue/30",
+  CANCELLED:
+    "bg-amber-100/80 text-amber-700 border-amber-200/70 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30",
+  EXPIRED:
+    "bg-purple-100/80 text-purple-700 border-purple-200/70 dark:bg-purple-500/15 dark:text-purple-200 dark:border-purple-500/30",
+  OPEN: "bg-slate-100/80 text-slate-600 border-slate-200/70 dark:bg-slate-50/10 dark:text-slate-200/80 dark:border-slate-50/15"
 }
+
+const StatusPill = ({ status }: { status: OrderStatus }) => (
+  <span
+    className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.14em] ${STATUS_TONE[status]}`}
+  >
+    {status}
+  </span>
+)
 
 const formatDeepbookPrice = (
   rawPrice: bigint,
@@ -117,6 +124,14 @@ const ActiveOrdersCard = () => {
   const traderAccount = overview.traderAccount
 
   const filledOrderIds = useDeepbookFullyFilledOrders({
+    poolId: traderAccount?.poolId,
+    balanceManagerId: traderAccount?.balanceManagerId
+  })
+  const canceledOrderIds = useDeepbookCanceledOrders({
+    poolId: traderAccount?.poolId,
+    balanceManagerId: traderAccount?.balanceManagerId
+  })
+  const expiredOrderIds = useDeepbookExpiredOrders({
     poolId: traderAccount?.poolId,
     balanceManagerId: traderAccount?.balanceManagerId
   })
@@ -147,7 +162,8 @@ const ActiveOrdersCard = () => {
               Active Orders
             </h2>
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-200/60">
-              From the most recent QuoteUpdated · cancelled on next refresh
+              From the most recent QuoteUpdated · marked FILLED / CANCELLED /
+              EXPIRED via DeepBook events
             </p>
           </div>
           <span className="bg-sds-blue/10 rounded-full px-2.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-sds-blue">
@@ -174,11 +190,13 @@ const ActiveOrdersCard = () => {
               </thead>
               <tbody className="divide-y divide-slate-200/70 dark:divide-slate-50/10">
                 {orders.map((order) => {
-                  const status: "OPEN" | "FILLED" = filledOrderIds.has(
-                    order.orderId
-                  )
+                  const status: OrderStatus = filledOrderIds.has(order.orderId)
                     ? "FILLED"
-                    : "OPEN"
+                    : canceledOrderIds.has(order.orderId)
+                      ? "CANCELLED"
+                      : expiredOrderIds.has(order.orderId)
+                        ? "EXPIRED"
+                        : "OPEN"
                   return (
                     <tr key={order.orderId}>
                       <td className="px-4 py-2">
