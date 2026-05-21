@@ -13,6 +13,7 @@ import {
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
   DEFAULT_OUTER_BALANCE_BPS,
   DEFAULT_POST_ONLY,
+  DEFAULT_STALE_PRICE_TOLERANCE_BPS,
   DEFAULT_VOLATILITY_MULTIPLIER_BPS,
   getAmmConfigOverview,
   resolveAmmConfigInputs
@@ -46,6 +47,7 @@ type CreateAmmArguments = {
   maxConfRatioBps?: string
   outerBalanceBps?: string
   inventorySkewBps?: string
+  stalePriceToleranceBps?: string
   postOnly?: string
   ammPackageId?: string
   devInspect?: boolean
@@ -104,6 +106,7 @@ runSuiScript(
       maxConfRatioBps: cliArguments.maxConfRatioBps,
       outerBalanceBps: cliArguments.outerBalanceBps,
       inventorySkewBps: cliArguments.inventorySkewBps,
+      stalePriceToleranceBps: cliArguments.stalePriceToleranceBps,
       postOnly: cliArguments.postOnly
     })
 
@@ -152,6 +155,7 @@ runSuiScript(
       maxConfRatioBps: ammConfigInputs.maxConfRatioBps,
       outerBalanceBps: ammConfigInputs.outerBalanceBps,
       inventorySkewBps: ammConfigInputs.inventorySkewBps,
+      stalePriceToleranceBps: ammConfigInputs.stalePriceToleranceBps,
       postOnly: ammConfigInputs.postOnly
     })
 
@@ -306,6 +310,14 @@ runSuiScript(
       description:
         "Inventory-driven mid-shift coefficient in basis points; 0 disables skewing (u64).",
       default: DEFAULT_INVENTORY_SKEW_BPS,
+      demandOption: false
+    })
+    .option("stalePriceToleranceBps", {
+      alias: ["stale-price-tolerance-bps"],
+      type: "string",
+      description:
+        "Permissionless-refresh skip threshold in basis points [0..10000), expressed as a fraction of base_spread (u64). 0 disables the guard. E.g. with base-spread-bps=100, 5000 tolerates 50 bps of price drift.",
+      default: DEFAULT_STALE_PRICE_TOLERANCE_BPS,
       demandOption: false
     })
     .option("postOnly", {

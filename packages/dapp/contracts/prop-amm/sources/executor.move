@@ -44,6 +44,8 @@ const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
 #[error(code = 9)]
 const EUnsupportedAsset: vector<u8> = "coin type does not match the configured base or quote asset";
+#[error(code = 10)]
+const EBaseSpreadZero: vector<u8> = "base spread truncated to zero at the current mid price";
 
 // === Structs ===
 
@@ -146,9 +148,11 @@ public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Exec
     (executor, executor_cap)
 }
 
-/// Replaces AMM configuration and resets the cached Pyth publish timestamps so the next
-/// refresh re-prices even when the oracle timestamp has not advanced. Returns a
-/// `RefreshTicket` that must be consumed in the same PTB by one of the `*_after_update`
+/// Replaces AMM configuration. Resets the cached Pyth freshness state (Pyth publish timestamps
+/// and last quoted mid / conf ratio) so the next `refresh_quotes_permissionless` call
+/// re-prices unconditionally even when the oracle timestamp or value has not advanced.
+/// Requires the matching market maker executor capability.
+/// Returns a `RefreshTicket` that must be consumed in the same PTB by one of the `*_after_update`
 /// functions, ensuring the live ladder cannot remain on the book quoting under the
 /// replaced configuration.
 public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig): RefreshTicket {
@@ -157,7 +161,7 @@ public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig)
 
     events::emit_executor_config_updated(self.id());
 
-    self.market.reset_price_publish_times();
+    self.market.reset_freshness_state();
     self.config = config;
 
     RefreshTicket { executor_id: self.id() }
@@ -304,8 +308,8 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
     // and there are open orders.
     // Protects from calling permissionless quote refresh with old pricing,
     // that would force the market maker to resubmit orders and lose priority.
-    let has_open_orders = self.has_open_orders(pool);
-    let is_price_updated = self.market.try_update_publish_time(base_pyth_price, quote_pyth_price);
+    let has_open_orders = self.has_open_orders(pool, clock);
+    let is_price_updated = self.market.try_update_publish_times(base_pyth_price, quote_pyth_price);
     if (has_open_orders && !is_price_updated) {
         return
     };
@@ -320,6 +324,25 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
             quote_pyth_price,
             self.config.max_conf_ratio_bps(),
         );
+
+    // Skip refresh when the new oracle inputs are within `stale_price_tolerance_bps` of the
+    // last placed ones.
+    // Defends against FIFO-priority on Pyth ticks that would barely move the ladder.
+    let last_mid_price = self.market.mid_price();
+    let last_conf_ratio_bps = self.market.conf_ratio_bps();
+    if (has_open_orders && last_mid_price.is_some() && last_conf_ratio_bps.is_some()) {
+        let is_within_tolerance = self
+            .config
+            .is_stale_tolerant(
+                oracle_mid_price,
+                conf_ratio_bps,
+                last_mid_price.destroy_some(),
+                last_conf_ratio_bps.destroy_some(),
+            );
+        if (is_within_tolerance) {
+            return
+        };
+    };
 
     self.refresh_quotes_inner(pool, oracle_mid_price, conf_ratio_bps, clock, ctx);
 }
@@ -348,6 +371,11 @@ public fun refresh_quotes<BaseAsset, QuoteAsset>(
     assert!(self.market.has_valid_pool(pool), EInvalidPool);
     // Assert trading is active.
     assert!(self.active, EPaused);
+
+    // Update price publish times as a current timestamp.
+    // Permissionless quote refresh can override admin price
+    // only with the latest timestamp.
+    self.market.set_latest_publish_times(clock);
 
     self.refresh_quotes_inner(pool, mid_price, conf_ratio_bps, clock, ctx);
 }
@@ -447,6 +475,7 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
     // Calculate spreads for the following limit orders.
     let base_spread = self.config.base_spread(oracle_mid_price);
     let volatility_spread = self.config.outer_spread(oracle_mid_price, conf_ratio_bps);
+    assert!(base_spread > 0, EBaseSpreadZero);
 
     // Read current balances (post-settlement) and derive the reservation mid: the oracle mid
     // shifted toward the side that rebalances the book (bounded by base_spread).
@@ -503,6 +532,10 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
         LimitOrderParams { price: ask_outer, quantity: ask_outer_quantity, is_bid: false },
     ];
     let orders = self.try_place_limit_orders(pool, &trade_proof, order_params, clock, ctx);
+
+    // Cache price and confidence that drove this placement, so the permissionless-refresh
+    // skip guard can compare them against the next call's oracle inputs.
+    self.market.set_price_and_conf(oracle_mid_price, conf_ratio_bps);
 
     events::emit_quote_updated(self.id(), oracle_mid_price, orders);
 }
@@ -602,12 +635,21 @@ fun cancel_orders<BaseAsset, QuoteAsset>(
     trade_proof
 }
 
-/// Returns whether there are open orders for the executor in the pool.
+/// Returns whether there are open unexpired orders for the executor in the pool.
 fun has_open_orders<BaseAsset, QuoteAsset>(
     self: &Executor,
     pool: &Pool<BaseAsset, QuoteAsset>,
+    clock: &Clock,
 ): bool {
-    pool.account_exists(&self.balance_manager) && !pool.account(&self.balance_manager).open_orders().is_empty()
+    if (!pool.account_exists(&self.balance_manager)) return false;
+
+    // Check each placed order's expiration timestamp,
+    // since `pool.account(..).open_orders()` does not consider stale orders.
+    let timestamp_ms = clock.timestamp_ms();
+    let open_orders = pool.account(&self.balance_manager).open_orders().into_keys();
+    pool.get_orders(open_orders).any!(|order| {
+        order.expire_timestamp() >= timestamp_ms
+    })
 }
 
 /// Returns the current epoch's base-asset volume from DeepBook,

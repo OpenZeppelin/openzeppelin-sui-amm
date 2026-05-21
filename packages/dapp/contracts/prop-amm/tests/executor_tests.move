@@ -126,6 +126,7 @@ fun create_executor_for_pool(
         1000,
         5000,
         0,
+        0,
         true,
     );
     // Restore the native tx sender after `tx_context::dummy()` inside the `create_*_currency`
@@ -250,8 +251,8 @@ fun create_executor_creates_distinct_accounts_and_caps() {
     );
     destroy(sui_currency);
     destroy(usdc_currency);
-    let amm_config_a = config::new(100, 200, 30_000, 30, 1000, 5000, 0, true);
-    let amm_config_b = config::new(125, 250, 30_000, 30, 1000, 5000, 0, true);
+    let amm_config_a = config::new(100, 200, 30_000, 30, 1000, 5000, 0, 0, true);
+    let amm_config_b = config::new(125, 250, 30_000, 30, 1000, 5000, 0, 0, true);
 
     scenario.next_tx(sender);
 
@@ -305,7 +306,7 @@ fun create_returns_paused_executor() {
     );
     destroy(sui_currency);
     destroy(usdc_currency);
-    let amm_config = config::new(100, 200, 30_000, 30, 1000, 5000, 0, true);
+    let amm_config = config::new(100, 200, 30_000, 30, 1000, 5000, 0, 0, true);
     scenario.next_tx(sender);
 
     let (executor_object, executor_cap) = executor::create(
@@ -591,6 +592,7 @@ fun update_config_replaces_config_before_refreshing_quotes() {
         1000,
         5000,
         0,
+        0,
         true,
     );
     let ticket = executor_object.update_config(&executor_cap, updated_config);
@@ -754,7 +756,7 @@ fun update_config_preserves_paused_state() {
     executor_object.pause(&executor_cap, &mut pool, &clock, scenario.ctx());
     assert_emitted!(executor_paused(executor_object.id()));
 
-    let updated_config = config::new(120, 240, 30_000, 30, 1000, 5000, 0, true);
+    let updated_config = config::new(120, 240, 30_000, 30, 1000, 5000, 0, 0, true);
     let ticket = executor_object.update_config(&executor_cap, updated_config);
     executor_object.discard_paused_after_update(ticket);
 
@@ -800,6 +802,7 @@ fun update_config_rejects_when_unchanged() {
         30,
         1000,
         5000,
+        0,
         0,
         true,
     );
@@ -889,6 +892,62 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     test_scenario::return_shared(quote_price_info_object);
     test_scenario::return_shared(clock);
     transfer::public_transfer(executor_object, sender);
+    scenario.end();
+}
+
+#[test, expected_failure(abort_code = executor::EBaseSpreadZero)]
+fun refresh_quotes_aborts_when_base_spread_truncates_to_zero() {
+    let sender = @0x40;
+    // mul_div(100, 99, 10_000) = 0 — small mid combined with a small bps truncates the
+    // computed base spread to zero, which would otherwise collapse the inner ladder.
+    let mid_price = 100;
+    let base_spread_bps = 99;
+    let mut scenario = test_scenario::begin(sender);
+
+    executor::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+    clock::create_for_testing(scenario.ctx()).share_for_testing();
+
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
+        &mut scenario,
+        sender,
+        &pool,
+        base_spread_bps,
+        200,
+    );
+
+    test_scenario::return_shared(pool);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+
+    executor_object.refresh_quotes(
+        &executor_cap,
+        &mut pool,
+        mid_price,
+        0,
+        &clock,
+        scenario.ctx(),
+    );
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(clock);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
     scenario.end();
 }
 

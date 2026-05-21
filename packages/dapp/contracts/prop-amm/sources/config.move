@@ -23,6 +23,12 @@ const EInvalidInventorySkewBps: vector<u8> = "inventory skew bps must be less th
 const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 7)]
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
+#[error(code = 8)]
+const EOrderExpirationExceedsPriceAge: vector<u8> =
+    "order expiration time must not exceed the max Pyth price age";
+#[error(code = 9)]
+const EInvalidStalePriceToleranceBps: vector<u8> =
+    "stale price tolerance bps must be less than 10000";
 
 // === Constants ===
 
@@ -34,6 +40,9 @@ const HUNDRED_PERCENT_BPS: u64 = 10_000;
 /// AMM configuration for market maker executor.
 public struct AMMConfig has drop, store {
     /// Duration in milliseconds after which a placed limit order expires.
+    /// Must not exceed `max_price_age_secs * 1000` so that any stranded orders left behind by a
+    /// staleness-induced refresh abort are guaranteed to expire by the time Pyth itself would be
+    /// considered stale.
     order_expiration_time_ms: u64,
     /// Maximum acceptable age in seconds for a Pyth price feed update.
     max_price_age_secs: u64,
@@ -68,6 +77,24 @@ public struct AMMConfig has drop, store {
     ///     `0` disables skewing (reservation_mid == mid).
     ///     `5_000` shifts the mid by half the `base_spread` at fully one-sided inventory.
     inventory_skew_bps: u64,
+    /// Permissionless-refresh skip threshold in basis points [0..10_000), expressed as a
+    /// fraction of `base_spread`. A `refresh_quotes_permissionless` call is skipped when the
+    /// executor has open orders AND the worst-case order drift is below this fraction of
+    /// `base_spread`:
+    ///   `mid_drift_bps + conf_drift_bps < base_spread_bps * stale_price_tolerance_bps / 10_000`
+    /// where `mid_drift_bps = |d(mid)| / last_mid * 10_000` (affects every order) and
+    ///       `conf_drift_bps = volatility_multiplier_bps * |d(conf)| / 10_000
+    ///                         * (outer_balance_bps * 2 / 10_000)` (outer orders only, balance-weighted;
+    ///                         `1.0` at the 50/50 split, `0` when `outer_balance_bps == 0`).
+    /// Bounding the threshold by `base_spread` ensures a skipped refresh can never hide a
+    /// shift that would move an order across the inner placement distance.
+    /// Mitigates FIFO-priority grief on DeepBook where any address can force a cancel-and-replace
+    /// on every Pyth tick. The admin `refresh_quotes` bypasses this guard.
+    /// E.g (assuming `base_spread_bps = 100` and `outer_balance_bps = 5_000` — the 50/50 split):
+    ///     `0` disables the guard (every Pyth tick triggers a refresh; original behavior).
+    ///     `5_000` tolerates 50 bps of price drift (50% of `base_spread`) when `conf_ratio_bps`
+    ///             is unchanged.
+    stale_price_tolerance_bps: u64,
     /// Restricts every refresh-quotes order to the passive (post-only) book side.
     /// `true` places each order with DeepBook's `post_only` flag: any order that would
     /// cross the resting book aborts the whole `refresh_quotes` transaction, leaving the
@@ -93,6 +120,7 @@ public fun new(
     max_conf_ratio_bps: u64,
     outer_balance_bps: u64,
     inventory_skew_bps: u64,
+    stale_price_tolerance_bps: u64,
     post_only: bool,
 ): AMMConfig {
     assert!(base_spread_bps > 0 && base_spread_bps < HUNDRED_PERCENT_BPS, EInvalidBaseSpreadBps);
@@ -102,8 +130,13 @@ public fun new(
     );
     assert!(outer_balance_bps < HUNDRED_PERCENT_BPS, EInvalidOuterBalanceBps);
     assert!(inventory_skew_bps < HUNDRED_PERCENT_BPS, EInvalidInventorySkewBps);
+    assert!(stale_price_tolerance_bps < HUNDRED_PERCENT_BPS, EInvalidStalePriceToleranceBps);
     assert!(order_expiration_time_ms > 0, EInvalidOrderExpirationTime);
     assert!(max_price_age_secs > 0, EInvalidMaxPriceAge);
+    assert!(
+        (order_expiration_time_ms as u128) <= (max_price_age_secs as u128) * 1000,
+        EOrderExpirationExceedsPriceAge,
+    );
 
     AMMConfig {
         base_spread_bps,
@@ -113,6 +146,7 @@ public fun new(
         max_conf_ratio_bps,
         outer_balance_bps,
         inventory_skew_bps,
+        stale_price_tolerance_bps,
         post_only,
     }
 }
@@ -175,6 +209,27 @@ public fun inventory_skew_bps(self: &AMMConfig): u64 {
     self.inventory_skew_bps
 }
 
+/// Permissionless-refresh skip threshold in basis points [0..10_000), expressed as a
+/// fraction of `base_spread`. A `refresh_quotes_permissionless` call is skipped when the
+/// executor has open orders AND the worst-case order drift is below this fraction of
+/// `base_spread`:
+///   `mid_drift_bps + conf_drift_bps < base_spread_bps * stale_price_tolerance_bps / 10_000`
+/// where `mid_drift_bps = |d(mid)| / last_mid * 10_000` (affects every order) and
+///       `conf_drift_bps = volatility_multiplier_bps * |d(conf)| / 10_000
+///                         * (outer_balance_bps * 2 / 10_000)` (outer orders only, balance-weighted;
+///                         `1.0` at the 50/50 split, `0` when `outer_balance_bps == 0`).
+/// Bounding the threshold by `base_spread` ensures a skipped refresh can never hide a
+/// shift that would move an order across the inner placement distance.
+/// Mitigates FIFO-priority grief on DeepBook where any address can force a cancel-and-replace
+/// on every Pyth tick. The admin `refresh_quotes` bypasses this guard.
+/// E.g (assuming `base_spread_bps = 100` and `outer_balance_bps = 5_000` — the 50/50 split):
+///     `0` disables the guard (every Pyth tick triggers a refresh; original behavior).
+///     `5_000` tolerates 50 bps of price drift (50% of `base_spread`) when `conf_ratio_bps`
+///             is unchanged.
+public fun stale_price_tolerance_bps(self: &AMMConfig): u64 {
+    self.stale_price_tolerance_bps
+}
+
 /// Returns whether `refresh_quotes` should place orders as post-only.
 /// `true` aborts the whole refresh if any order would cross the resting book, preserving
 /// the previous quotes. `false` allows the crossing portion to execute as a taker.
@@ -210,6 +265,51 @@ public(package) fun outer_balance(self: &AMMConfig, balance: u64): u64 {
     balance.mul_div(self.outer_balance_bps, HUNDRED_PERCENT_BPS)
 }
 
+/// Returns `true` when the worst-case ladder drift (in bps of price) between the resting
+/// ladder and the new ladder is below `base_spread_bps * stale_price_tolerance_bps / 10_000`
+/// (`stale_price_tolerance_bps` interpreted as a fraction of `base_spread`).
+/// When this returns `true`, the permissionless refresh path skips the cancel-and-replace
+/// cycle to preserve FIFO priority.
+///
+/// The worst-case order drift sums the two independent contributions, both in bps of price:
+/// - `mid_drift_bps  = |new_mid - last_mid| / last_mid * 10_000`         (affects every order)
+/// - `conf_drift_bps = volatility_multiplier_bps * |new_conf - last_conf| / 10_000
+///                    * (outer_balance_bps * 2 / 10_000)`                (outer orders only,
+///                                                                       balance-weighted)
+///
+/// Outer-order drift `mid_drift_bps + conf_drift_bps` dominates inner-order drift
+/// `mid_drift_bps` (conf_drift is non-negative), so checking the outer alone bounds all
+/// four orders.
+///
+/// With `stale_price_tolerance_bps == 0` the computed tolerance is `0`, so any non-zero
+/// drift returns `false` and the guard is effectively disabled.
+public(package) fun is_stale_tolerant(
+    self: &AMMConfig,
+    new_mid_price: u64,
+    new_conf_ratio_bps: u64,
+    last_mid_price: u64,
+    last_conf_ratio_bps: u64,
+): bool {
+    // Mid drift in bps of `last_mid_price`.
+    let mid_drift_bps = new_mid_price
+        .diff(last_mid_price)
+        .mul_div(HUNDRED_PERCENT_BPS, last_mid_price);
+
+    // Conf moves only the outer order and weighted by `outer_balance_bps * 2 / 10_000`.
+    // So the 50/50 split is `1.0` and conf weight scales to `0` as the ladder becomes inner-only.
+    let conf_drift_bps = self
+        .volatility_multiplier_bps
+        .mul_div(new_conf_ratio_bps.diff(last_conf_ratio_bps), HUNDRED_PERCENT_BPS)
+        .mul_div(self.outer_balance_bps * 2, HUNDRED_PERCENT_BPS);
+
+    // Compute absolute tolerance bps.
+    let tolerance_bps = self
+        .base_spread_bps
+        .mul_div(self.stale_price_tolerance_bps, HUNDRED_PERCENT_BPS);
+
+    mid_drift_bps + conf_drift_bps < tolerance_bps
+}
+
 /// Compute the reservation mid: the oracle `mid_price` shifted by up to `base_spread`
 /// toward the side that rebalances the book, scaled by `inventory_skew_bps` (fraction of
 /// `base_spread` to apply at fully one-sided inventory).
@@ -240,8 +340,8 @@ public(package) fun reservation_mid(
     let base_spread = self.base_spread(mid_price) as u128;
     let skew_bps = self.inventory_skew_bps as u128;
     let imbalance = base_balance_in_quote.diff(quote_balance);
-    let shift =
-        base_spread.checked_mul(imbalance).destroy_or!(abort EPriceOverflow) / total_balance;
+    let shift = base_spread.mul_div(imbalance, total_balance);
+    // Safe to multiply without upcast: shift <= base_spread <= u64::MAX; skew_bps <= u64::MAX
     let adjusted_shift = shift * skew_bps / HUNDRED_PERCENT_BPS_U128;
 
     // Apply shift to the mid_price.

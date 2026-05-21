@@ -234,6 +234,7 @@ export const logAmmConfigOverview = (
   logKeyValueGreen("Max-conf-bps")(overview.maxConfRatioBps)
   logKeyValueGreen("Outer-balance-bps")(overview.outerBalanceBps)
   logKeyValueGreen("Inv-skew-bps")(overview.inventorySkewBps)
+  logKeyValueGreen("Stale-tol-bps")(overview.stalePriceToleranceBps)
   if (options?.initialSharedVersion) {
     logKeyValueGreen("Shared-ver")(options.initialSharedVersion)
   }

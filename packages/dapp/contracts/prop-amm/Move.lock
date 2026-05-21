@@ -19,7 +19,7 @@ deps = { MoveStdlib = "MoveStdlib" }
 [pinned.test-publish.deepbook]
 source = { local = "../../../../vendor/deepbookv3/packages/deepbook" }
 use_environment = "test-publish"
-manifest_digest = "A07E009D1B3FCEF9F886F837C413B49FB6609363F4CB092B1211A405CE676059"
+manifest_digest = "4CE7EBF2D294B2073FAC96555A5584741C6DEAA89256AA4FD4FED535D3C79C54"
 deps = { std = "MoveStdlib", sui = "Sui", token = "token" }
 
 [pinned.test-publish.local_mock_pyth]
@@ -35,7 +35,7 @@ manifest_digest = "E14692E4DD4ACA9F0F39F9777C47565F7441A4ACCD1AE2B98E892F12BBAC8
 deps = { deepbook = "deepbook", pyth = "local_mock_pyth", std = "MoveStdlib", sui = "Sui" }
 
 [pinned.test-publish.token]
-source = { local = "../../../../vendor/deepbookv3/packages/token" }
+source = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/token", rev = "aacc105fab902376d86283158656debfdc60b387" }
 use_environment = "test-publish"
 manifest_digest = "2963D6B4689ED068546E86F8453FBCA51DCDF68A1C96D681328D2CDACE14B5CF"
 deps = { std = "MoveStdlib", sui = "Sui" }

@@ -285,6 +285,7 @@ export const createAmmConfigSnapshot = async ({
     maxConfRatioBps: ammConfigInputs.maxConfRatioBps,
     outerBalanceBps: ammConfigInputs.outerBalanceBps,
     inventorySkewBps: ammConfigInputs.inventorySkewBps,
+    stalePriceToleranceBps: ammConfigInputs.stalePriceToleranceBps,
     postOnly: ammConfigInputs.postOnly
   })
 
@@ -333,6 +334,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
   maxConfRatioBps,
   outerBalanceBps,
   inventorySkewBps,
+  stalePriceToleranceBps,
   postOnly
 }: {
   tooling: Tooling
@@ -347,6 +349,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
   maxConfRatioBps?: string
   outerBalanceBps?: string
   inventorySkewBps?: string
+  stalePriceToleranceBps?: string
   postOnly?: string
 }): Promise<{
   ammConfigSnapshot: AmmConfigSnapshot
@@ -365,6 +368,7 @@ export const createAmmConfigSnapshotFromArgs = async ({
     maxConfRatioBps,
     outerBalanceBps,
     inventorySkewBps,
+    stalePriceToleranceBps,
     postOnly
   })
 

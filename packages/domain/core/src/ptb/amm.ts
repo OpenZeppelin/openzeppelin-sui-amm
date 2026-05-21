@@ -51,6 +51,7 @@ export const buildCreateExecutorTransaction = ({
   maxConfRatioBps,
   outerBalanceBps,
   inventorySkewBps,
+  stalePriceToleranceBps,
   postOnly
 }: {
   packageId: string
@@ -69,6 +70,13 @@ export const buildCreateExecutorTransaction = ({
   maxConfRatioBps: bigint | number
   outerBalanceBps: bigint | number
   inventorySkewBps: bigint | number
+  /**
+   * Permissionless-refresh skip threshold in basis points [0..10_000), expressed as a
+   * fraction of `base_spread`. `0` disables the guard (every Pyth tick triggers a
+   * refresh). E.g. with `baseSpreadBps = 100`, `5_000` tolerates 50 bps of price
+   * drift before refreshing.
+   */
+  stalePriceToleranceBps: bigint | number
   /**
    * When true, `refresh_quotes` places each order with DeepBook's `post_only` flag —
    * any order that would cross the resting book aborts the whole refresh and the
@@ -111,6 +119,7 @@ export const buildCreateExecutorTransaction = ({
       transaction.pure.u64(maxConfRatioBps),
       transaction.pure.u64(outerBalanceBps),
       transaction.pure.u64(inventorySkewBps),
+      transaction.pure.u64(stalePriceToleranceBps),
       transaction.pure.bool(postOnly)
     ]
   })
@@ -155,6 +164,7 @@ export const buildUpdateConfigAndCancelTransaction = ({
   maxConfRatioBps,
   outerBalanceBps,
   inventorySkewBps,
+  stalePriceToleranceBps,
   postOnly
 }: {
   packageId: string
@@ -170,6 +180,13 @@ export const buildUpdateConfigAndCancelTransaction = ({
   maxConfRatioBps: bigint | number
   outerBalanceBps: bigint | number
   inventorySkewBps: bigint | number
+  /**
+   * Permissionless-refresh skip threshold in basis points [0..10_000), expressed as a
+   * fraction of `base_spread`. `0` disables the guard (every Pyth tick triggers a
+   * refresh). E.g. with `baseSpreadBps = 100`, `5_000` tolerates 50 bps of price
+   * drift before refreshing.
+   */
+  stalePriceToleranceBps: bigint | number
   /**
    * When true, `refresh_quotes` places each order with DeepBook's `post_only` flag —
    * any order that would cross the resting book aborts the whole refresh and the
@@ -190,6 +207,7 @@ export const buildUpdateConfigAndCancelTransaction = ({
       transaction.pure.u64(maxConfRatioBps),
       transaction.pure.u64(outerBalanceBps),
       transaction.pure.u64(inventorySkewBps),
+      transaction.pure.u64(stalePriceToleranceBps),
       transaction.pure.bool(postOnly)
     ]
   })

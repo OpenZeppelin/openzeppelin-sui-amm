@@ -7,6 +7,7 @@ import {
   DEFAULT_ORDER_EXPIRATION_TIME_MS,
   DEFAULT_OUTER_BALANCE_BPS,
   DEFAULT_POST_ONLY,
+  DEFAULT_STALE_PRICE_TOLERANCE_BPS,
   DEFAULT_VOLATILITY_MULTIPLIER_BPS
 } from "@sui-amm/domain-core/models/amm"
 import {
@@ -76,6 +77,13 @@ const FIELD_VALIDATORS: Partial<Record<AmmConfigFieldKey, FieldValidator>> = {
     parse: parseNonNegativeU64,
     label: "Inventory skew bps",
     maxExclusiveBps: true
+  },
+  stalePriceToleranceBps: {
+    required: "Stale price tolerance is required.",
+    fallbackMessage: "Stale price tolerance must be a valid u64.",
+    parse: parseNonNegativeU64,
+    label: "Stale price tolerance bps",
+    maxExclusiveBps: true
   }
 }
 
@@ -93,6 +101,8 @@ export const buildAmmConfigFormState = (
   maxConfRatioBps: ammConfig?.maxConfRatioBps ?? DEFAULT_MAX_CONF_RATIO_BPS,
   outerBalanceBps: ammConfig?.outerBalanceBps ?? DEFAULT_OUTER_BALANCE_BPS,
   inventorySkewBps: ammConfig?.inventorySkewBps ?? DEFAULT_INVENTORY_SKEW_BPS,
+  stalePriceToleranceBps:
+    ammConfig?.stalePriceToleranceBps ?? DEFAULT_STALE_PRICE_TOLERANCE_BPS,
   postOnly:
     ammConfig?.postOnly !== undefined
       ? String(ammConfig.postOnly)
