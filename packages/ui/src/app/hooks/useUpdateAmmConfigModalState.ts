@@ -327,7 +327,8 @@ export const useUpdateAmmConfigModalState = ({
           maxConfRatioBps: formState.maxConfRatioBps.trim(),
           outerBalanceBps: formState.outerBalanceBps.trim(),
           inventorySkewBps: formState.inventorySkewBps.trim(),
-          stalePriceToleranceBps: formState.stalePriceToleranceBps.trim(),postOnly: formState.postOnly.trim()
+          stalePriceToleranceBps: formState.stalePriceToleranceBps.trim(),
+          postOnly: formState.postOnly.trim()
         })
 
         const configShared = await getSuiSharedObject(
@@ -377,7 +378,8 @@ export const useUpdateAmmConfigModalState = ({
           maxConfRatioBps: updateInputs.maxConfRatioBps,
           outerBalanceBps: updateInputs.outerBalanceBps,
           inventorySkewBps: updateInputs.inventorySkewBps,
-          stalePriceToleranceBps: updateInputs.stalePriceToleranceBps,postOnly: updateInputs.postOnly
+          stalePriceToleranceBps: updateInputs.stalePriceToleranceBps,
+          postOnly: updateInputs.postOnly
         }
 
         let updateTransaction

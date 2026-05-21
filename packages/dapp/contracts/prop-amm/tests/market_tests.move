@@ -230,6 +230,7 @@ fun deepbook_price_handles_small_base_mantissa_in_upward_branch() {
     test_scenario::return_shared(pool);
     destroy(sui_currency);
     destroy(usdc_currency);
+    destroy(market);
     scenario.end();
 }
 
@@ -266,6 +267,7 @@ fun deepbook_price_handles_large_decimal_adjustment() {
     test_scenario::return_shared(pool);
     destroy(sui_currency);
     destroy(usdc_currency);
+    destroy(market);
     scenario.end();
 }
 
@@ -302,5 +304,6 @@ fun deepbook_price_handles_small_base_mantissa_in_downward_branch() {
     test_scenario::return_shared(pool);
     destroy(sui_currency);
     destroy(usdc_currency);
+    destroy(market);
     scenario.end();
 }
