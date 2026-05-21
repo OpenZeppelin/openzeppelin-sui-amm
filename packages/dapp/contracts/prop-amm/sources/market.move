@@ -253,15 +253,17 @@ public(package) fun deepbook_price(
     // Convert (Base/USD)/(Quote/USD) to DeepBook price units (quote atoms per base atom).
     let base_mantissa = base_mantissa as u128;
     let quote_mantissa = quote_mantissa as u128;
-    let price = base_mantissa * constants::float_scaling_u128() / quote_mantissa;
 
     // Include decimal adjustment for token precision mismatch.
     let quote_total = quote_exponent + self.quote.decimals;
     let base_total = base_exponent + self.base.decimals;
     let price = if (quote_total >= base_total) {
-        price.checked_mul(10_u128.pow(quote_total - base_total)).destroy_or!(abort EPriceOverflow)
+        let decimal_adj = 10_u128.pow(quote_total - base_total);
+        decimal_adj.mul_div(base_mantissa * constants::float_scaling_u128(), quote_mantissa)
     } else {
-        price / 10_u128.pow(base_total - quote_total)
+        let decimal_adj = 10_u128.pow(base_total - quote_total);
+        // Safe to multiply without upcast: base_mantissa <= u64::MAX; float_scaling <= u64::MAX
+        base_mantissa * constants::float_scaling_u128() / quote_mantissa / decimal_adj
     };
     let price = price.try_as_u64().destroy_or!(abort EPriceOverflow);
 
