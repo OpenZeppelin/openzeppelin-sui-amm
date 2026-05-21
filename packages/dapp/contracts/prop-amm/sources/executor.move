@@ -44,6 +44,8 @@ const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
 #[error(code = 9)]
 const EUnsupportedAsset: vector<u8> = "coin type does not match the configured base or quote asset";
+#[error(code = 10)]
+const EBaseSpreadZero: vector<u8> = "base spread truncated to zero at the current mid price";
 
 // === Structs ===
 
@@ -313,7 +315,7 @@ public fun refresh_quotes_permissionless<BaseAsset, QuoteAsset>(
     // and there are open orders.
     // Protects from calling permissionless quote refresh with old pricing,
     // that would force the market maker to resubmit orders and lose priority.
-    let has_open_orders = self.has_open_orders(pool);
+    let has_open_orders = self.has_open_orders(pool, clock);
     let is_price_updated = self.market.try_update_publish_times(base_pyth_price, quote_pyth_price);
     if (has_open_orders && !is_price_updated) {
         return
@@ -401,6 +403,7 @@ fun refresh_quotes_inner<BaseAsset, QuoteAsset>(
     // Calculate spreads for the following limit orders.
     let base_spread = self.config.base_spread(oracle_mid_price);
     let volatility_spread = self.config.outer_spread(oracle_mid_price, conf_ratio_bps);
+    assert!(base_spread > 0, EBaseSpreadZero);
 
     // Read current balances (post-settlement) and derive the reservation mid: the oracle mid
     // shifted toward the side that rebalances the book (bounded by base_spread).
@@ -530,12 +533,21 @@ public fun cap_id(amm_cap: &AdminCap): ID {
 
 // === Private Functions ===
 
-/// Returns whether there are open orders for the executor in the pool.
+/// Returns whether there are open unexpired orders for the executor in the pool.
 fun has_open_orders<BaseAsset, QuoteAsset>(
     self: &Executor,
     pool: &Pool<BaseAsset, QuoteAsset>,
+    clock: &Clock,
 ): bool {
-    pool.account_exists(&self.balance_manager) && !pool.account(&self.balance_manager).open_orders().is_empty()
+    if (!pool.account_exists(&self.balance_manager)) return false;
+
+    // Check each placed order's expiration timestamp,
+    // since `pool.account(..).open_orders()` does not consider stale orders.
+    let timestamp_ms = clock.timestamp_ms();
+    let open_orders = pool.account(&self.balance_manager).open_orders().into_keys();
+    pool.get_orders(open_orders).any!(|order| {
+        order.expire_timestamp() >= timestamp_ms
+    })
 }
 
 /// Returns the current epoch's base-asset volume from DeepBook,

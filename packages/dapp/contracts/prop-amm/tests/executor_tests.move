@@ -886,6 +886,62 @@ fun refresh_quotes_places_quotes_and_emits_quote_updated() {
     scenario.end();
 }
 
+#[test, expected_failure(abort_code = executor::EBaseSpreadZero)]
+fun refresh_quotes_aborts_when_base_spread_truncates_to_zero() {
+    let sender = @0x40;
+    // mul_div(100, 99, 10_000) = 0 — small mid combined with a small bps truncates the
+    // computed base spread to zero, which would otherwise collapse the inner ladder.
+    let mid_price = 100;
+    let base_spread_bps = 99;
+    let mut scenario = test_scenario::begin(sender);
+
+    executor::test_init(scenario.ctx());
+    create_registry(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+    clock::create_for_testing(scenario.ctx()).share_for_testing();
+
+    let pool_id = create_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+
+    let (executor_object, executor_cap) = create_executor_for_pool(
+        &mut scenario,
+        sender,
+        &pool,
+        base_spread_bps,
+        200,
+    );
+
+    test_scenario::return_shared(pool);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
+
+    scenario.next_tx(sender);
+
+    let mut executor_object: Executor = scenario.take_from_sender();
+    let executor_cap: AdminCap = scenario.take_from_sender();
+    let mut pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let clock: Clock = scenario.take_shared();
+
+    executor_object.refresh_quotes(
+        &executor_cap,
+        &mut pool,
+        mid_price,
+        0,
+        &clock,
+        scenario.ctx(),
+    );
+
+    test_scenario::return_shared(pool);
+    test_scenario::return_shared(clock);
+    transfer::public_transfer(executor_object, sender);
+    transfer::public_transfer(executor_cap, sender);
+    scenario.end();
+}
+
 #[test]
 fun refresh_quotes_ignores_replayed_publish_time() {
     let sender = @0x2a;

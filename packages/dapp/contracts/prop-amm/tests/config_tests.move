@@ -74,6 +74,23 @@ fun create_amm_config_rejects_zero_max_price_age() {
 }
 
 #[test]
+fun create_amm_config_accepts_order_expiration_equal_to_max_price_age() {
+    // 30_000 ms == 30 s * 1000: boundary is inclusive.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 0, true);
+
+    assert_eq!(amm_config.order_expiration_time_ms(), 30_000);
+    assert_eq!(amm_config.max_price_age_secs(), 30);
+}
+
+#[test, expected_failure(abort_code = config::EOrderExpirationExceedsPriceAge)]
+fun create_amm_config_rejects_order_expiration_above_max_price_age() {
+    // 30_001 ms > 30 s * 1000: even by 1 ms must fail.
+    let _amm_config = config::new(100, 10_000, 30_001, 30, 1000, 5000, 0, true);
+
+    abort
+}
+
+#[test]
 fun create_amm_config_accepts_zero_outer_balance_bps() {
     let amm_config = config::new(100, 10_000, 30_000, 30, 1000, 0, 0, true);
 
@@ -113,4 +130,31 @@ fun create_amm_config_rejects_inventory_skew_bps_above_ten_thousand() {
     let _amm_config = config::new(100, 10_000, 30_000, 30, 1000, 5000, 10_001, true);
 
     abort
+}
+
+#[test]
+fun reservation_mid_handles_large_inventories_without_overflow() {
+    // base_spread * imbalance ≈ 1e17 * 1e28 = 1e45, well beyond u128's ~3.4e38 ceiling.
+    // The function still returns a valid mid shifted toward quote (base-heavy inventory).
+    let amm_config = config::new(
+        1000,
+        10_000,
+        30_000,
+        30,
+        1000,
+        5_000,
+        5_000,
+        true,
+    );
+
+    let mid_price = 1_000_000_000_000_000_000;
+    let base_balance = 10_000_000_000_000_000_000;
+    let quote_balance = 0;
+
+    let reservation_mid = amm_config.reservation_mid(mid_price, base_balance, quote_balance);
+
+    // base_spread = mid_price * 1000 / 10_000 = 1e17.
+    // imbalance / total_balance = 1, so shift = base_spread = 1e17.
+    // adjusted_shift = shift * inventory_skew_bps / 10_000 = 5e16.
+    assert_eq!(reservation_mid, mid_price - 50_000_000_000_000_000);
 }
