@@ -149,12 +149,12 @@ public fun create(market: Market, config: AMMConfig, ctx: &mut TxContext): (Exec
 }
 
 /// Replaces AMM configuration. Resets the cached Pyth freshness state (Pyth publish timestamps
-/// and last quoted mid / conf ratio) so the next `refresh_quotes_permissionless` call
-/// re-prices unconditionally even when the oracle timestamp or value has not advanced.
+/// and last quoted mid / conf ratio) so the next `refresh_quotes_permissionless` call re-prices
+/// unconditionally even when the oracle timestamp or value has not advanced.
 /// Requires the matching market maker executor capability.
 /// Returns a `RefreshTicket` that must be consumed in the same PTB by one of the `*_after_update`
-/// functions, ensuring the live ladder cannot remain on the book quoting under the
-/// replaced configuration.
+/// functions, ensuring the live ladder cannot remain on the book quoting under the replaced
+/// configuration.
 public fun update_config(self: &mut Executor, cap: &AdminCap, config: AMMConfig): RefreshTicket {
     assert!(self.id() == cap.executor_id, EInvalidCap);
     assert!(&self.config != &config, EConfigUnchanged);
