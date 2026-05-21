@@ -161,3 +161,72 @@ fun reservation_mid_handles_large_inventories_without_overflow() {
     // adjusted_shift = shift * inventory_skew_bps / 10_000 = 5e16.
     assert_eq!(reservation_mid, mid_price - 50_000_000_000_000_000);
 }
+
+#[test]
+fun is_stale_tolerant_returns_true_when_drift_is_zero() {
+    // tolerance = base_spread_bps * stale_price_tolerance_bps / 10_000 = 100 * 5_000 / 10_000 = 50 bps.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 0, conf_drift = 0, tolerance = 50 → 0 < 50 → skip.
+    assert_eq!(amm_config.is_stale_tolerant(1_000_000, 100, 1_000_000, 100), true);
+}
+
+#[test]
+fun is_stale_tolerant_returns_false_when_tolerance_is_zero() {
+    // stale_price_tolerance_bps = 0 disables the guard: tolerance = 0 and the comparison is strict.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 0, true);
+
+    // Identical inputs still fail 0 < 0, so refresh proceeds.
+    assert_eq!(amm_config.is_stale_tolerant(1_000_000, 100, 1_000_000, 100), false);
+}
+
+#[test]
+fun is_stale_tolerant_returns_true_when_mid_drift_below_tolerance() {
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 3_000 / 1_000_000 * 10_000 = 30 bps; tolerance = 50 → skip.
+    assert_eq!(amm_config.is_stale_tolerant(1_003_000, 100, 1_000_000, 100), true);
+}
+
+#[test]
+fun is_stale_tolerant_returns_false_when_mid_drift_above_tolerance() {
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 10_000 / 1_000_000 * 10_000 = 100 bps; tolerance = 50 → refresh.
+    assert_eq!(amm_config.is_stale_tolerant(1_010_000, 100, 1_000_000, 100), false);
+}
+
+#[test]
+fun is_stale_tolerant_returns_false_when_drift_equals_tolerance() {
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 5_000 / 1_000_000 * 10_000 = 50 bps; tolerance = 50 → 50 < 50 is false → refresh.
+    assert_eq!(amm_config.is_stale_tolerant(1_005_000, 100, 1_000_000, 100), false);
+}
+
+#[test]
+fun is_stale_tolerant_returns_false_when_conf_drift_above_tolerance() {
+    // outer_balance_bps = 5_000 (50/50 split) → conf weight = 5_000 * 2 / 10_000 = 1.0.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 0; conf_drift = 10_000 * 100 / 10_000 * 10_000 / 10_000 = 100 bps;
+    // tolerance = 50 → 100 < 50 is false → refresh.
+    assert_eq!(amm_config.is_stale_tolerant(1_000_000, 200, 1_000_000, 100), false);
+}
+
+#[test]
+fun is_stale_tolerant_zeros_conf_drift_when_outer_balance_is_zero() {
+    // outer_balance_bps = 0 → conf weight = 0 → conf_drift collapses to 0 regardless of value.
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 0, 0, 5_000, true);
+
+    // Huge conf change is ignored; mid_drift = 0 → 0 < 50 → skip.
+    assert_eq!(amm_config.is_stale_tolerant(1_000_000, 10_000, 1_000_000, 0), true);
+}
+
+#[test]
+fun is_stale_tolerant_sums_mid_and_conf_drift() {
+    let amm_config = config::new(100, 10_000, 30_000, 30, 1_000, 5_000, 0, 5_000, true);
+
+    // mid_drift = 30 bps; conf_drift = 25 bps; sum = 55; tolerance = 50 → refresh.
+    assert_eq!(amm_config.is_stale_tolerant(1_003_000, 125, 1_000_000, 100), false);
+}

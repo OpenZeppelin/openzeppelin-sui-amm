@@ -42,7 +42,7 @@ const HUNDRED_PERCENT_BPS_U128: u128 = 10_000;
 
 /// Market metadata: pool identity, cached asset decimals, Pyth feed identifiers, the
 /// latest observed publish timestamps used to detect replayed oracle prices, and the
-/// mid price mid confidence ratio recorded at the last quote refresh.
+/// mid price and mid confidence ratio recorded at the last quote refresh.
 public struct Market has drop, store {
     /// ID of the associated pool.
     pool_id: ID,
@@ -243,6 +243,15 @@ public(package) fun try_update_publish_times(
     update_base_price_timestamp || update_quote_price_timestamp
 }
 
+/// Sets the cached base and quote price publish timestamps to the current clock time.
+/// Subsequent `try_update_publish_times` calls require a strictly later Pyth timestamp to advance the
+/// cache.
+public(package) fun set_latest_publish_times(self: &mut Market, clock: &Clock) {
+    let timestamp_s = clock.timestamp_ms() / 1000;
+    self.base.price_publish_time = option::some(timestamp_s);
+    self.quote.price_publish_time = option::some(timestamp_s);
+}
+
 /// Records the oracle inputs (`mid_price` and combined `conf_ratio_bps`) used for the last
 /// successful quote refresh. Consumed by the permissionless-refresh skip guard on the next
 /// call.
@@ -260,15 +269,6 @@ public(package) fun reset_freshness_state(self: &mut Market) {
     self.quote.price_publish_time = option::none();
     self.mid_price = option::none();
     self.conf_ratio_bps = option::none();
-}
-
-/// Sets the cached base and quote price publish timestamps to the current clock time.
-/// Subsequent `try_update_publish_time` calls require a strictly later Pyth timestamp to advance the
-/// cache.
-public(package) fun set_latest_publish_times(self: &mut Market, clock: &Clock) {
-    let timestamp_s = clock.timestamp_ms() / 1000;
-    self.base.price_publish_time = option::some(timestamp_s);
-    self.quote.price_publish_time = option::some(timestamp_s);
 }
 
 /// Derive the DeepBook base/quote price and the combined confidence-to-price ratio (in basis
