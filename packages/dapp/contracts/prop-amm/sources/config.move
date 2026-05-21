@@ -24,6 +24,9 @@ const EPriceUnderflow: vector<u8> = "price lower than minimum or underflowed";
 #[error(code = 7)]
 const EPriceOverflow: vector<u8> = "price higher than maximum or overflowed";
 #[error(code = 8)]
+const EOrderExpirationExceedsPriceAge: vector<u8> =
+    "order expiration time must not exceed the max Pyth price age";
+#[error(code = 9)]
 const EInvalidStalePriceToleranceBps: vector<u8> =
     "stale price tolerance bps must be less than 10000";
 
@@ -37,6 +40,9 @@ const HUNDRED_PERCENT_BPS: u64 = 10_000;
 /// AMM configuration for market maker executor.
 public struct AMMConfig has drop, store {
     /// Duration in milliseconds after which a placed limit order expires.
+    /// Must not exceed `max_price_age_secs * 1000` so that any stranded orders left behind by a
+    /// staleness-induced refresh abort are guaranteed to expire by the time Pyth itself would be
+    /// considered stale.
     order_expiration_time_ms: u64,
     /// Maximum acceptable age in seconds for a Pyth price feed update.
     max_price_age_secs: u64,
@@ -127,6 +133,10 @@ public fun new(
     assert!(stale_price_tolerance_bps < HUNDRED_PERCENT_BPS, EInvalidStalePriceToleranceBps);
     assert!(order_expiration_time_ms > 0, EInvalidOrderExpirationTime);
     assert!(max_price_age_secs > 0, EInvalidMaxPriceAge);
+    assert!(
+        (order_expiration_time_ms as u128) <= (max_price_age_secs as u128) * 1000,
+        EOrderExpirationExceedsPriceAge,
+    );
 
     AMMConfig {
         base_spread_bps,
@@ -330,8 +340,8 @@ public(package) fun reservation_mid(
     let base_spread = self.base_spread(mid_price) as u128;
     let skew_bps = self.inventory_skew_bps as u128;
     let imbalance = base_balance_in_quote.diff(quote_balance);
-    let shift =
-        base_spread.checked_mul(imbalance).destroy_or!(abort EPriceOverflow) / total_balance;
+    let shift = base_spread.mul_div(imbalance, total_balance);
+    // Safe to multiply without upcast: shift <= base_spread <= u64::MAX; skew_bps <= u64::MAX
     let adjusted_shift = shift * skew_bps / HUNDRED_PERCENT_BPS_U128;
 
     // Apply shift to the mid_price.

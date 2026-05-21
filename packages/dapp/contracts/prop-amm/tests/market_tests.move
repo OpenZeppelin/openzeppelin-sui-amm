@@ -14,6 +14,8 @@ use openzeppelin_market_maker::test_helpers::{
     create_sui_currency,
     create_usdc_currency
 };
+use pyth::i64;
+use pyth::price;
 use std::unit_test::{assert_eq, destroy};
 use sui::sui::SUI;
 use sui::test_scenario;
@@ -179,4 +181,115 @@ fun create_market_rejects_identical_feed_ids() {
     );
 
     abort
+}
+
+#[test]
+fun deepbook_price_handles_small_base_mantissa_in_upward_branch() {
+    // With `base_mantissa = 1`, `quote_mantissa = 1e10`, the old code computed
+    // `base_mantissa * float_scaling / quote_mantissa = 0` and propagated zero through
+    // the subsequent decimal-adjustment multiplication, aborting with EPriceUnderflow.
+    // The fixed ordering (mul_div applies the decimal adjustment before the divide)
+    // yields a positive DeepBook price.
+    let sender = @0x10;
+    let mut scenario = test_scenario::begin(sender);
+    let pool_id = create_registry_and_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+    let market = market::new(
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        build_pyth_price_feed_id(0),
+        build_pyth_price_feed_id(1),
+    );
+
+    // base USD = 1 * 10^-1 = 0.1; quote USD = 1e10 * 10^-10 = 1.
+    // base/quote = 0.1 -> deepbook price = 0.1 * 10^(6 - 9) * 10^9 = 1e5.
+    let base_price = price::new(i64::new(1, false), 0, i64::new(1, true), 0);
+    let quote_price = price::new(i64::new(10_000_000_000, false), 0, i64::new(10, true), 0);
+    let (deepbook_price, conf_ratio_bps) = market.deepbook_price(base_price, quote_price, 1_000);
+
+    assert_eq!(deepbook_price, 100_000);
+    assert_eq!(conf_ratio_bps, 0);
+
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    scenario.end();
+}
+
+#[test]
+fun deepbook_price_handles_large_decimal_adjustment() {
+    // Exercises the extreme `quote_total - base_total` case (here, 15 powers of ten),
+    // verifying that multiplying by `decimal_adj = 1e15` before the division does not
+    // spuriously overflow the mul_div intermediate.
+    let sender = @0x11;
+    let mut scenario = test_scenario::begin(sender);
+    let pool_id = create_registry_and_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+    let market = market::new(
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        build_pyth_price_feed_id(0),
+        build_pyth_price_feed_id(1),
+    );
+
+    // base USD = 1 * 10^-1 = 0.1; quote USD = 1e9 * 10^-19 = 1e-10.
+    // base/quote = 1e9 -> deepbook price = 1e9 * 10^(6 - 9) * 10^9 = 1e15.
+    let base_price = price::new(i64::new(1, false), 0, i64::new(1, true), 0);
+    let quote_price = price::new(i64::new(1_000_000_000, false), 0, i64::new(19, true), 0);
+    let (deepbook_price, _) = market.deepbook_price(base_price, quote_price, 1_000);
+
+    assert_eq!(deepbook_price, 1_000_000_000_000_000);
+
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    scenario.end();
+}
+
+#[test]
+fun deepbook_price_handles_small_base_mantissa_in_downward_branch() {
+    // Mirror case to the upward-branch test: base price tiny, quote price modest, with
+    // `base_total > quote_total` so the function takes the downward branch (two
+    // consecutive divides). Verifies the result is a positive, correctly-floored price.
+    let sender = @0x12;
+    let mut scenario = test_scenario::begin(sender);
+    let pool_id = create_registry_and_pool(&mut scenario, sender);
+
+    scenario.next_tx(sender);
+
+    let pool: Pool<SUI, USDC> = scenario.take_shared_by_id(pool_id);
+    let sui_currency = create_sui_currency();
+    let usdc_currency = create_usdc_currency();
+    let market = market::new(
+        &pool,
+        &sui_currency,
+        &usdc_currency,
+        build_pyth_price_feed_id(0),
+        build_pyth_price_feed_id(1),
+    );
+
+    // base USD = 1 * 10^-2 = 0.01; quote USD = 1e4 * 10^-2 = 100.
+    // base/quote = 1e-4 -> deepbook price = 1e-4 * 10^(6 - 9) * 10^9 = 100.
+    let base_price = price::new(i64::new(1, false), 0, i64::new(2, true), 0);
+    let quote_price = price::new(i64::new(10_000, false), 0, i64::new(2, true), 0);
+    let (deepbook_price, _) = market.deepbook_price(base_price, quote_price, 1_000);
+
+    assert_eq!(deepbook_price, 100);
+
+    test_scenario::return_shared(pool);
+    destroy(sui_currency);
+    destroy(usdc_currency);
+    scenario.end();
 }
