@@ -128,6 +128,36 @@ const validateField = (
   }
 }
 
+// Mirrors the Move-side `EOrderExpirationExceedsPriceAge` invariant in
+// `config::new`: order TTL must not exceed the oracle freshness window, or an
+// order can stay live priced against stale Pyth data.
+const validateOrderExpirationVsPriceAge = (
+  formState: AmmConfigFormState
+): { orderExpirationTimeMs?: string; maxPriceAgeSecs?: string } => {
+  try {
+    const orderExpirationTimeMs = parsePositiveU64(
+      formState.orderExpirationTimeMs.trim(),
+      "Order expiration time ms"
+    )
+    const maxPriceAgeSecs = parsePositiveU64(
+      formState.maxPriceAgeSecs.trim(),
+      "Max price age secs"
+    )
+    if (orderExpirationTimeMs > maxPriceAgeSecs * 1000n) {
+      const message = `Order expiration (${orderExpirationTimeMs.toString()} ms) must be ≤ Max price age × 1000 (${(maxPriceAgeSecs * 1000n).toString()} ms).`
+      return {
+        orderExpirationTimeMs: message,
+        maxPriceAgeSecs: message
+      }
+    }
+    return {}
+  } catch {
+    // Per-field validators already report the parse failure; skip the
+    // cross-field check until both inputs are individually valid.
+    return {}
+  }
+}
+
 export const buildAmmConfigFieldErrors = (
   formState: AmmConfigFormState
 ): AmmConfigFieldErrors => {
@@ -136,5 +166,14 @@ export const buildAmmConfigFieldErrors = (
     const error = validateField(key, formState[key])
     if (error) errors[key] = error
   }
+
+  const crossFieldErrors = validateOrderExpirationVsPriceAge(formState)
+  if (crossFieldErrors.orderExpirationTimeMs && !errors.orderExpirationTimeMs) {
+    errors.orderExpirationTimeMs = crossFieldErrors.orderExpirationTimeMs
+  }
+  if (crossFieldErrors.maxPriceAgeSecs && !errors.maxPriceAgeSecs) {
+    errors.maxPriceAgeSecs = crossFieldErrors.maxPriceAgeSecs
+  }
+
   return errors
 }

@@ -71,22 +71,76 @@ What you do here:
 ## /config — Update AMM config
 
 Live re-tune of the AMM parameters without recreating the executor.
-Everything you set on `/setup` is editable here; the form is grouped so
-spread/volatility, inventory, and order-lifecycle params don't crowd each
-other.
+Everything you set on `/setup` is editable here; the form is grouped into
+four sections so spread/volatility, inventory, order-lifecycle, and
+safety params don't crowd each other. BPS fields render as percent
+inputs with sliders; numeric fields take raw integers.
 
-![/config — Update config form grouped into Spread / Volatility, Inventory, Order Lifecycle. BPS fields show as percent inputs with sliders.](images/config.png)
+![/config — Update config form grouped into Spread / Volatility, Inventory, Order Lifecycle, Safety. BPS fields show as percent inputs with sliders.](images/config.png)
 
-What you do here:
+### Spread / Volatility
 
-- Adjust `base_spread_bps` / `volatility_multiplier_bps` to tighten or
-  loosen the rings.
-- Move `outer_balance_bps` to change the inner-vs-outer balance split.
-- Crank `inventory_skew_bps` up to make the AMM rebalance harder when one
-  side is heavy.
-- **Reset defaults** restores the form to the values from
-  `buildAmmConfigFormState()` without writing on chain — review before
-  hitting **Update config**.
+- **Base spread** (`base_spread_bps`) — inner-order distance from the
+  oracle mid, as a fraction of the mid (must be `< 100 %`).
+- **Volatility multiplier** (`volatility_multiplier_bps`) — extra buffer
+  added on top of the base spread for the outer order, scaled by the
+  Pyth confidence ratio. No upper cap.
+- **Max confidence ratio** (`max_conf_ratio_bps`) — refuses to quote
+  when the Pyth confidence-to-price ratio exceeds this fraction.
+
+### Inventory
+
+- **Outer balance** (`outer_balance_bps`) — share of the
+  `BalanceManager` balance allocated to the outer (volatility) order;
+  the rest goes to the inner order.
+- **Inventory skew** (`inventory_skew_bps`) — mid-shift coefficient
+  applied when the base/quote inventory split is imbalanced. `0`
+  disables the skew.
+
+### Order Lifecycle
+
+- **Order expiration (ms)** (`order_expiration_time_ms`) — DeepBook
+  order time-to-live.
+- **Max Pyth price age (s)** (`max_price_age_secs`) — rejects oracle
+  reads older than this many seconds.
+
+These two fields are **cross-validated** to mirror the Move-side
+`EOrderExpirationExceedsPriceAge` check in `config::new`: order TTL
+must be `≤ max_price_age × 1000`, otherwise an order could remain live
+on the book priced against a stale oracle read. The form blocks submit
+and surfaces the violation on both inputs until the relation holds.
+
+### Safety
+
+- **Stale price tolerance** (`stale_price_tolerance_bps`) — interpreted
+  as a fraction of the base spread, this is how far the ladder is
+  allowed to drift before a permissionless refresh actually re-quotes.
+  `0` disables the guard and every Pyth tick forces a refresh; higher
+  values preserve DeepBook FIFO priority by skipping refreshes that
+  would barely move the ladder.
+- **Post-only quotes** (`post_only`) — when on, any order that would
+  cross the resting book aborts the entire refresh and the previous
+  ladder stays live. When off, the crossing portion executes as a taker
+  against external liquidity.
+
+### Buttons
+
+- **Reset defaults** — replays the values from
+  `buildAmmConfigFormState()` through the same per-field setters the
+  form uses, so dirty-tracking and validation re-run as if you typed
+  them. Does not write on chain.
+- **Update config** — submits `executor::update_config<Base, Quote>`
+  followed by `cancel_orders_after_update` in the same PTB. The hot-
+  potato `RefreshTicket` returned by `update_config` forces the live
+  ladder to be cancelled before the transaction settles, so no order
+  can remain on the book quoting under the replaced configuration.
+- **Update & refresh quotes** (localnet only) — same `update_config`
+  call, but instead of cancelling the ladder the PTB re-stamps the mock
+  Pyth `PriceInfoObject`s with their current magnitudes and an advanced
+  timestamp, then re-quotes through `refresh_quotes_pyth_after_update`.
+  Lets you see the new spread/skew settings reflected in fresh orders
+  without waiting for the maintenance bot or a real Pyth tick. Disabled
+  on non-localnet networks and when the executor is paused.
 
 ## /bot — Bot Status & manual refresh
 

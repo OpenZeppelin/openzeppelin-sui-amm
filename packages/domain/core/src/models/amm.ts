@@ -20,8 +20,8 @@ export const PROP_AMM_EXECUTOR_SUFFIX = "::executor::PropAmmApp"
 
 export const MAX_BASE_SPREAD_BPS = "10000"
 
-export const DEFAULT_ORDER_EXPIRATION_TIME_MS = "86400000"
-export const DEFAULT_MAX_PRICE_AGE_SECS = "60"
+export const DEFAULT_ORDER_EXPIRATION_TIME_MS = "300000"
+export const DEFAULT_MAX_PRICE_AGE_SECS = "300"
 export const DEFAULT_MAX_CONF_RATIO_BPS = "1000"
 export const DEFAULT_OUTER_BALANCE_BPS = "5000"
 export const DEFAULT_INVENTORY_SKEW_BPS = "0"

@@ -315,6 +315,7 @@ export const buildUpdateConfigAndLocalnetRefreshTransaction = ({
   maxConfRatioBps,
   outerBalanceBps,
   inventorySkewBps,
+  stalePriceToleranceBps,
   postOnly
 }: {
   packageId: string
@@ -335,6 +336,7 @@ export const buildUpdateConfigAndLocalnetRefreshTransaction = ({
   maxConfRatioBps: bigint | number
   outerBalanceBps: bigint | number
   inventorySkewBps: bigint | number
+  stalePriceToleranceBps: bigint | number
   /**
    * When true, `refresh_quotes` places each order with DeepBook's `post_only` flag —
    * any order that would cross the resting book aborts the whole refresh and the
@@ -363,6 +365,7 @@ export const buildUpdateConfigAndLocalnetRefreshTransaction = ({
       transaction.pure.u64(maxConfRatioBps),
       transaction.pure.u64(outerBalanceBps),
       transaction.pure.u64(inventorySkewBps),
+      transaction.pure.u64(stalePriceToleranceBps),
       transaction.pure.bool(postOnly)
     ]
   })

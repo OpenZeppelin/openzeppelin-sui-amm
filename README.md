@@ -154,13 +154,14 @@ you don't need to manually transfer SUI to it.
 ### Run the market-activity bot
 
 ```bash
-# Defaults: 2 s tick, ±$0.10 price walk per tick around $1.50, ≤ 1 SUI per
-# sell, ≤ 2 USDC per buy. Override any of them via CLI flags.
+# Defaults: 2 s tick, ±$0.05 price walk per tick around $1.50, ≤ 1.5 USDC
+# per tick (the base-side cap on sell ticks is derived each tick as
+# `max-quantity-quote / currentPriceDollars` so dollar-denominated flow
+# stays symmetric across the price walk). Override any of them via CLI flags.
 pnpm --filter dapp bot:market-activity \
   --interval-ms 2000 \
   --max-price-delta 0.10 \
-  --max-base 1 \
-  --max-quote 2
+  --max-quantity-quote 2
 ```
 
 Pass `--max-price-delta 0` to freeze the price (only random orders flow);
