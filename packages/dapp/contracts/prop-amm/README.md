@@ -1,7 +1,6 @@
 # OpenZeppelin Market Maker for Sui
 
 This package contains the OpenZeppelin Market Maker Move modules for market-making configuration and quote execution on DeepBook.
-It is experimental and unaudited.
 
 ## What this package provides
 
@@ -14,12 +13,12 @@ It is experimental and unaudited.
 
 ## Pool requirements
 
-Only **whitelisted** DeepBook pools (`pool.whitelisted() == true`) are supported. The quote-refresh ladder allocates 100% of each side's settled balance across two limit orders with no fee headroom, and orders are placed with `pay_with_deep = false`. On non-whitelisted pools DeepBook charges the maker fee in the input asset, so the second order on each side aborts the refresh with `EBalanceManagerBalanceTooLow`. `market::new` rejects non-whitelisted pools at construction time with `EPoolNotWhitelisted`.
+Only **whitelisted** DeepBook pools (`pool.whitelisted() == true`) are supported. The quote-refresh ladder allocates 100% of each side's settled balance across two limit orders per side (4 total) with no fee headroom, and orders are placed with `pay_with_deep = false`. On non-whitelisted pools DeepBook charges the maker fee in the input asset, so the second order on each side aborts the refresh with `EBalanceManagerBalanceTooLow`. `market::new` rejects non-whitelisted pools at construction time with `EPoolNotWhitelisted`.
 
 ## Modules
 
 - `market`: validates and builds `Market` values (pool ID, per-side coin type / decimals / Pyth feed ID / cached publish timestamp).
-- `config`: validates and builds `AMMConfig` values (spreads, order expiration, oracle freshness and confidence limits, inventory skew).
+- `config`: validates and builds `AMMConfig` values (spreads, order expiration, oracle freshness and confidence limits, inventory skew, stale-price tolerance, post-only flag).
 - `executor`: owns the market maker executor object, its capability, balances, and quote refresh workflow.
 - `info`: per-executor accounting snapshot (cumulative volume plus per-side balance / cumulative deposited / cumulative withdrawn).
 - `events`: emits typed events consumed by tests and off-chain indexers.
@@ -33,6 +32,8 @@ Only **whitelisted** DeepBook pools (`pool.whitelisted() == true`) are supported
     - `decimals` — cached asset decimals (read at construction time from the asset's `Currency` object).
     - `pyth_price_feed_id` — 32-byte Pyth feed identifier for this side.
     - `price_publish_time` — `Option<u64>` of the latest observed Pyth publish timestamp; used to detect replayed reads.
+  - `mid_price: Option<u64>` — mid price recorded at the last successful quote refresh; cleared by `update_config`.
+  - `conf_ratio_bps: Option<u64>` — combined confidence-to-price ratio (bps) recorded at the last successful quote refresh; cleared by `update_config`. Together with `mid_price`, feeds the permissionless stale-tolerance skip guard.
 - `AMMConfig` (embedded value):
   - `base_spread_bps` — inner-order spread around the mid, in basis points (0..10_000).
   - `volatility_multiplier_bps` — multiplier (in bps) applied to the combined Pyth confidence ratio to derive the outer (volatility) order's extra spread.
@@ -40,7 +41,9 @@ Only **whitelisted** DeepBook pools (`pool.whitelisted() == true`) are supported
   - `inventory_skew_bps` — fraction of `base_spread` (in bps, 0..10_000) by which to shift the reservation mid toward the rebalancing side at fully one-sided inventory.
   - `max_conf_ratio_bps` — maximum acceptable Pyth confidence-to-price ratio, in basis points; reads above this abort.
   - `max_price_age_secs` — maximum acceptable Pyth price age, in seconds.
-  - `order_expiration_time_ms` — limit-order expiration duration, in milliseconds.
+  - `order_expiration_time_ms` — limit-order expiration duration, in milliseconds. Capped by `max_price_age_secs * 1000`.
+  - `stale_price_tolerance_bps` — fraction of `base_spread` (in bps, 0..10_000); a permissionless refresh with open orders is skipped when worst-case ladder drift `mid_drift_bps + conf_drift_bps < base_spread_bps * stale_price_tolerance_bps / 10_000`. `0` disables the guard; admin `refresh_quotes` bypasses it.
+  - `post_only` — when `true`, every refresh order is placed `post_only` and the whole refresh aborts if any order would cross; when `false`, orders use `no_restriction` and the crossing portion executes as a taker.
 - `Executor` (owned object, the market maker executor):
   - `active` flag — `false` on creation; flip to `true` via `unpause` to allow quote refreshes.
   - DeepBook `BalanceManager`
@@ -70,17 +73,18 @@ Only **whitelisted** DeepBook pools (`pool.whitelisted() == true`) are supported
 3. Ensure the DeepBook registry balance-manager map is initialized.
 4. Create a market maker executor and admin cap with `executor::create`, passing the `Market` and `AMMConfig`. The executor is paused on creation; call `executor::unpause` to enable trading.
 5. Fund account balances with `executor::deposit`. To withdraw, first call `executor::pause` (so DeepBook settles open orders into the BalanceManager), then either `executor::withdraw` for a partial amount or `executor::withdraw_all` to drain the side's full balance.
-6. To update quoting parameters, create a new `AMMConfig` with `config::new` and pass it to `executor::update_config`.
+6. To update quoting parameters, create a new `AMMConfig` with `config::new` and pass it to `executor::update_config`. The call returns a `RefreshTicket` hot potato that must be consumed in the same PTB by exactly one of: `refresh_quotes_after_update` (re-quote with a caller-supplied mid), `refresh_quotes_pyth_after_update` (re-quote from Pyth), `cancel_orders_after_update` (cancel + settle without re-quoting), or `discard_paused_after_update` (no-op; requires the executor to be paused). This guarantees the live ladder is never left quoting under the replaced configuration.
 7. Refresh quotes through one of the two entrypoints:
     - **Permissionless (bot-driven, Pyth-based)** — `executor::refresh_quotes_permissionless`. Anyone can call it. It:
         - validates trading is enabled,
         - validates base and quote Pyth feed IDs match the configured market,
         - reads base/USD and quote/USD Pyth prices and derives the base/quote mid price,
-        - skips the refresh only when both feed publish times are stale/replayed,
+        - skips the refresh when both feed publish times are stale/replayed and there are open orders,
+        - skips the refresh when there are open orders and `(mid_price, conf_ratio_bps)` are within `stale_price_tolerance_bps` of the last placed values (FIFO-priority guard),
         - cancels stale orders and settles filled amounts,
         - places four new limit orders (2 bids + 2 asks) around the mid using base/volatility spreads,
         - emits `QuoteUpdated`.
-    - **Admin (off-chain feed)** — `executor::refresh_quotes`, gated by the matching `AdminCap`. The caller supplies the `mid_price` and combined confidence ratio (`conf_ratio_bps`, in basis points) directly, bypassing the Pyth oracle. Use this when quoting off off-chain market data (e.g. a CEX feed) is preferable. The cancel/settle, four-order ladder, and `QuoteUpdated` emission are identical to the permissionless path; the Pyth feed-id and publish-time checks do not apply.
+    - **Admin (off-chain feed)** — `executor::refresh_quotes`, gated by the matching `AdminCap`. The caller supplies the `mid_price` and combined confidence ratio (`conf_ratio_bps`, in basis points) directly, bypassing the Pyth oracle. Use this when quoting off off-chain market data (e.g. a CEX feed) is preferable. The cancel/settle, four-order ladder, and `QuoteUpdated` emission are identical to the permissionless path; the Pyth feed-id check, publish-time replay guard, and `stale_price_tolerance_bps` skip guard do not apply. The call advances the cached publish times to the current clock, so a subsequent permissionless call needs a strictly later Pyth timestamp to re-price.
 
 ## Testing
 

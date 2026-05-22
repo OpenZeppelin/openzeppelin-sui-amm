@@ -1,6 +1,3 @@
-> [!Warning]
-> This is experimental UN-AUDITED code currently under development
-
 # Sui AMM
 
 End-to-end example of a small AMM on **Sui**
@@ -9,7 +6,7 @@ A Proprietary Automated Market Maker (Prop AMM) is a new DeFi primitive where a 
 
 This repo is a pnpm workspace containing:
 
-- a Move packages,
+- Move packages,
 - a CLI/script layer for localnet + seeding + amm flows,
 - a Next.js UI
 
@@ -185,8 +182,12 @@ pnpm --filter dapp bot:maintenance \
 ```
 
 Each tick re-stamps both `PriceInfoObject`s' timestamps (without changing
-magnitude/expo) so `assert_price_age_within_limit` doesn't abort, then runs
-`refresh_quotes_permissionless<Base, Quote>` per executor. Failures are
+magnitude/expo) so `pyth::get_price_no_older_than(..., max_price_age_secs)`
+doesn't abort, then runs `refresh_quotes_permissionless<Base, Quote>` per
+executor. Note: if `stale_price_tolerance_bps > 0` and the magnitude/expo
+are unchanged between ticks, the contract's stale-tolerance guard silently
+skips the refresh — pair with `bot:market-activity` to walk the price, or
+set `stale_price_tolerance_bps = 0` to disable the guard. Failures are
 isolated per-executor — one paused or under-funded executor doesn't stop
 the loop.
 
@@ -255,3 +256,11 @@ market new` that `result.parameters[0]` references `Pool` at the AMM
   `sui client` env name (`localnet`) doesn't match any `[environments]` key
   in the package's `Move.toml`. The mock packages declare `test-publish`,
   so the tooling falls back to `sui client test-publish` automatically.
+
+## Security
+
+This project is maintained by OpenZeppelin with the goal of providing a secure and reliable started dApp for AMM onchain trading for the Sui ecosystem.
+
+Refer to [SECURITY.md](SECURITY.md) for more details.
+
+Past audits can be found in [`audits/`](./audits).
