@@ -1,6 +1,3 @@
-> [!Warning]
-> This is experimental UN-AUDITED code currently under development
-
 # Sui AMM
 
 End-to-end example of a small AMM on **Sui**

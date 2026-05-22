@@ -1,7 +1,6 @@
 # OpenZeppelin Market Maker for Sui
 
 This package contains the OpenZeppelin Market Maker Move modules for market-making configuration and quote execution on DeepBook.
-It is experimental and unaudited.
 
 ## What this package provides
 
