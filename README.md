@@ -252,3 +252,11 @@ market new` that `result.parameters[0]` references `Pool` at the AMM
   `sui client` env name (`localnet`) doesn't match any `[environments]` key
   in the package's `Move.toml`. The mock packages declare `test-publish`,
   so the tooling falls back to `sui client test-publish` automatically.
+
+## Security
+
+This project is maintained by OpenZeppelin with the goal of providing a secure and reliable started dApp for AMM onchain trading for the Sui ecosystem.
+
+Refer to [SECURITY.md](SECURITY.md) for more details.
+
+Past audits can be found in [`audits/`](./audits).
