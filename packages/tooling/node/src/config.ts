@@ -196,7 +196,8 @@ export const loadSuiConfig = async (): Promise<SuiResolvedConfig> => {
     throw new Error(
       `Failed to load Sui config from ${configPath}: ${formatErrorMessage(
         error
-      )}`
+      )}`,
+      { cause: error }
     )
   }
 }

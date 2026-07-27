@@ -139,12 +139,11 @@ const ActiveOrdersCard = () => {
   const orders = useMemo(() => {
     // The most recent QuoteUpdated cancels all prior orders, so its `orders`
     // field is the live snapshot.
-    for (let i = events.length - 1; i >= 0; i--) {
-      const event = events[i]
-      if (event.type !== "QuoteUpdated") continue
-      return parseOrders((event.data as { orders?: unknown }).orders)
-    }
-    return []
+    const latestQuote = events.findLast(
+      (event) => event.type === "QuoteUpdated"
+    )
+    if (!latestQuote) return []
+    return parseOrders((latestQuote.data as { orders?: unknown }).orders)
   }, [events])
 
   const baseSymbol = traderAccount

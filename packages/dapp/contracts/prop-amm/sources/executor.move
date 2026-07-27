@@ -7,7 +7,7 @@ use deepbook::balance_manager::{
     DepositCap,
     TradeCap,
     WithdrawCap,
-    TradeProof
+    TradeProof,
 };
 use deepbook::constants;
 use deepbook::pool::Pool;

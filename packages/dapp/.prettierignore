@@ -1,0 +1,5 @@
+# Generated `sui move build` output, including vendored dependency sources.
+contracts/**/build/
+
+# Patched copies of third-party Move packages, kept byte-identical to upstream.
+contracts/**/*-patched/
