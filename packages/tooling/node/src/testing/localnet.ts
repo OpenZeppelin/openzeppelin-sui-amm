@@ -836,7 +836,8 @@ const runSuiCommand = async (args: string[], env?: NodeJS.ProcessEnv) => {
     const message = executionError?.message?.trim()
     const details = [stdout, stderr, message].filter(Boolean).join("\n")
     throw new Error(
-      `sui ${args.join(" ")} failed${details ? `:\n${details}` : ""}`
+      `sui ${args.join(" ")} failed${details ? `:\n${details}` : ""}`,
+      { cause: error }
     )
   }
 }

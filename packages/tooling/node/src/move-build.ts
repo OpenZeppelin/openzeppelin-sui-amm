@@ -117,7 +117,8 @@ const resolveBuildArtifacts = async (
           exitCode !== undefined ? ` (exit code ${exitCode})` : ""
         const outputTail = formatBuildOutputTail(stdout, stderr)
         throw new Error(
-          `Move build did not emit bytecode output${codeSuffix} and no build artifacts were found at ${buildDir}.${outputTail}`
+          `Move build did not emit bytecode output${codeSuffix} and no build artifacts were found at ${buildDir}.${outputTail}`,
+          { cause: error }
         )
       }
       throw error

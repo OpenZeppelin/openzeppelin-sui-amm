@@ -57,7 +57,7 @@ export const waitForObjectState = async ({
   objectOptions
 }: ObjectStateWaitOptions): Promise<SuiObjectResponse> => {
   const start = Date.now()
-  let lastError = "Object not available yet."
+  let lastError: string
 
   while (true) {
     let response: SuiObjectResponse | undefined

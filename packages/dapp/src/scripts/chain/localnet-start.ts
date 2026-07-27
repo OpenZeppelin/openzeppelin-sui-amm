@@ -651,7 +651,8 @@ const deleteLocalnetDeployments = async (deploymentsPath: string) => {
     throw new Error(
       `Failed to delete localnet deployment files in ${deploymentsPath}: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
+      { cause: error }
     )
   }
 }

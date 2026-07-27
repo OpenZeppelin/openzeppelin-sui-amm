@@ -81,7 +81,8 @@ export const writeArtifact =
       return updatedArtifacts as unknown as TArtifact
     } catch (error) {
       throw new Error(
-        `Failed to write artifact at ${filePath}: ${formatErrorMessage(error)}`
+        `Failed to write artifact at ${filePath}: ${formatErrorMessage(error)}`,
+        { cause: error }
       )
     }
   }
@@ -116,7 +117,8 @@ export const rewriteUpdatedArtifacts = async <TArtifact>({
     throw new Error(
       `Failed to persist updated object artifacts at ${objectArtifactPath}: ${formatErrorMessage(
         error
-      )}`
+      )}`,
+      { cause: error }
     )
   }
 }
@@ -144,7 +146,8 @@ export const readArtifact = async <TArtifact>(
     }
 
     throw new Error(
-      `Failed to read artifact at ${filePath}: ${formatErrorMessage(error)}`
+      `Failed to read artifact at ${filePath}: ${formatErrorMessage(error)}`,
+      { cause: error }
     )
   }
 }

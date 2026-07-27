@@ -35,9 +35,13 @@ export const useExecutorEventSubscription = ({
   const events = useMoveModuleEvents({ packageId, module: "events" })
   const seenRef = useRef<Set<string>>(new Set())
   // Latest callback is captured in a ref so a parent that reidentifies
-  // `onEvent` between renders doesn't reset the seen-event cache.
+  // `onEvent` between renders doesn't reset the seen-event cache. Syncing in an
+  // effect declared before the consumer below keeps the ref fresh by the time
+  // that effect runs, without writing to a ref during render.
   const onEventRef = useRef(onEvent)
-  onEventRef.current = onEvent
+  useEffect(() => {
+    onEventRef.current = onEvent
+  }, [onEvent])
 
   useEffect(() => {
     if (!packageId || !executorId) return
