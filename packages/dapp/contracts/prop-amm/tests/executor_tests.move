@@ -15,7 +15,7 @@ use openzeppelin_market_maker::events::{
     executor_created,
     executor_paused,
     executor_unpaused,
-    withdrawn
+    withdrawn,
 };
 use openzeppelin_market_maker::executor::{Self, Executor, AdminCap};
 use openzeppelin_market_maker::market;
@@ -26,7 +26,7 @@ use openzeppelin_market_maker::test_helpers::{
     build_pyth_price_feed_id,
     create_pool,
     create_sui_currency,
-    create_usdc_currency
+    create_usdc_currency,
 };
 use std::type_name;
 use std::unit_test::{assert_eq, destroy};

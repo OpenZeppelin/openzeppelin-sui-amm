@@ -12,7 +12,7 @@ use openzeppelin_market_maker::test_helpers::{
     create_non_whitelisted_pool,
     create_pool,
     create_sui_currency,
-    create_usdc_currency
+    create_usdc_currency,
 };
 use pyth::i64;
 use pyth::price;

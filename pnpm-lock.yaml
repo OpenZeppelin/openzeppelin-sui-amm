@@ -62,8 +62,8 @@ importers:
   packages/dapp:
     dependencies:
       '@mysten/prettier-plugin-move':
-        specifier: ^0.3.5
-        version: 0.3.5
+        specifier: 0.4.0
+        version: 0.4.0
       '@mysten/sui':
         specifier: ^1.45.2
         version: 1.45.2(typescript@5.9.3)
@@ -805,8 +805,8 @@ packages:
       '@tanstack/react-query': ^5.0.0
       react: '*'
 
-  '@mysten/prettier-plugin-move@0.3.5':
-    resolution: {integrity: sha512-PkYZkaH14OAy4S10o4SLl0odGgDHiaILEADiU06gj/MzYZAYq3wh4uCZCO8haX/Xyh2p6NfVy1sihMnUmRnE1g==}
+  '@mysten/prettier-plugin-move@0.4.0':
+    resolution: {integrity: sha512-oMmjU7837nQEsbT6Ygyxur5S/T3r/MjWhNiYycRknZ7M+xg+W03sjZq/lsL9QtKBcLoz81qwuE7QXIUwFOlQbw==}
     hasBin: true
 
   '@mysten/slush-wallet@0.2.12':
@@ -4255,9 +4255,9 @@ snapshots:
       - react-dom
       - typescript
 
-  '@mysten/prettier-plugin-move@0.3.5':
+  '@mysten/prettier-plugin-move@0.4.0':
     dependencies:
-      prettier: 3.8.1
+      prettier: 3.8.3
       web-tree-sitter: 0.20.8
 
   '@mysten/slush-wallet@0.2.12(typescript@5.9.3)':
