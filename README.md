@@ -1,7 +1,7 @@
 # Sui AMM
 
 > This project has been professionally audited. See the security audit report in
-`audits/`. It is open source (MIT) and provided as a reference implementation / starter
+[`audits/`](./audits). It is open source (MIT) and provided as a reference implementation / starter
 template, not a hosted or operated service. It is no longer under active
 maintenance: no new features, bug fixes, or updates should be expected. To
 build on it, fork or clone this repository and deploy it under your own
@@ -267,7 +267,7 @@ market new` that `result.parameters[0]` references `Pool` at the AMM
 
 ## Security
 
-This project is maintained by OpenZeppelin with the goal of providing a secure and reliable started dApp for AMM onchain trading for the Sui ecosystem.
+This project was built by OpenZeppelin with the goal of providing a secure and reliable started dApp for AMM onchain trading for the Sui ecosystem.
 
 Refer to [SECURITY.md](SECURITY.md) for more details.
 
